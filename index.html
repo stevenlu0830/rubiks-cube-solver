@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Mobile setup:
+      - maximum-scale=1, user-scalable=no: stop pinch and double-tap zoom, so
+        touches reach the cube instead of zooming the page. iOS Safari ignores
+        this for accessibility, so the CSS backs it up with touch-action.
+      - viewport-fit=cover: draw under the notch; safe-area padding in
+        App.css keeps content clear of it.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta
+      name="theme-color"
+      content="#f4f4f6"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#121216"
+      media="(prefers-color-scheme: dark)"
+    />
+    <title>Rubik's Cube Solver</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

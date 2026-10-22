@@ -1,0 +1,59 @@
+:root {
+  --bg: #f4f4f6;
+  --text: #1c1c22;
+  --text-muted: #6b6b76;
+  --border: #d6d6de;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121216;
+    --text: #f2f2f5;
+    --text-muted: #9a9aa6;
+    --border: #34343e;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html,
+body {
+  /* No pull-to-refresh or rubber-band bounce: they would steal vertical swipes. */
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+
+body {
+  /* No grey tap flash, text selection or long-press menu while tapping cells. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  /* Taps on buttons never trigger double-tap zoom. */
+  touch-action: manipulation;
+}
