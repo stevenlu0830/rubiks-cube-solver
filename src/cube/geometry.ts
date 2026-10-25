@@ -3,7 +3,7 @@ import { FACES, type Face } from './state.ts'
 /**
  * Where each of the 54 cells sits in 3D space. The move engine uses this to
  * work out turns by actually rotating points, instead of hand-typed lookup
- * tables, and the 3D view (Phase 2) will use it to place stickers.
+ * tables, and the 3D view uses it to place stickers.
  *
  * Axes: x points right (towards R), y points up (towards U), z points at the
  * viewer (towards F). The cube is 3×3×3 small cubes ("cubies") whose centres
@@ -17,6 +17,8 @@ export interface Sticker {
   position: Vec3
   /** Direction the sticker faces: its face's outward normal. */
   normal: Vec3
+  /** Direction of "up" on the sticker's face, as drawn in the net. */
+  up: Vec3
 }
 
 /**
@@ -48,7 +50,8 @@ export const STICKERS: readonly Sticker[] = FACES.flatMap((face) => {
       normal[1] + col * right[1] + row * down[1],
       normal[2] + col * right[2] + row * down[2],
     ]
-    return { position, normal }
+    const up: Vec3 = [-down[0], -down[1], -down[2]]
+    return { position, normal, up }
   })
 })
 

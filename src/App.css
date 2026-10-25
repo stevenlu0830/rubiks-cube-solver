@@ -20,16 +20,31 @@
 .cube-stage {
   flex: 1;
   min-height: 0;
-  display: grid;
-  place-items: center;
-  margin: 0 16px 16px;
-  border: 2px dashed var(--border);
-  border-radius: 16px;
-  color: var(--text-muted);
   /*
    * The browser must not scroll or zoom on touches here: the app handles
-   * swipes itself. Children (the 3D canvas from Phase 2) inherit this, since
-   * the browser applies the strictest touch-action of all ancestors.
+   * swipes itself. The 3D canvas inside inherits this, since the browser
+   * applies the strictest touch-action of all ancestors.
    */
   touch-action: none;
+}
+
+.preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px 16px;
+}
+
+.preview-bar button {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.preview-bar button:active {
+  background: var(--border);
 }
