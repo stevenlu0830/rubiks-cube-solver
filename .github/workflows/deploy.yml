@@ -12,10 +12,11 @@ permissions:
   pages: write
   id-token: write
 
-# Never run two deploys at once; a newer push cancels the older one.
+# Never run two deploys at once. A run that has started always finishes;
+# runs waiting behind it are skipped in favour of the newest one.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
