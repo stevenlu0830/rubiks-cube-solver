@@ -145,9 +145,9 @@ describe('algorithms', () => {
   })
 
   it('(R U) done 105 times returns the starting state', () => {
-  const moves = Array.from({ length: 105 }, () => parseMoves('R U')).flat()
-  expect(applyMoves(NUMBERED, moves)).toEqual(NUMBERED)
-})
+    const moves = Array.from({ length: 105 }, () => parseMoves('R U')).flat()
+    expect(applyMoves(NUMBERED, moves)).toEqual(NUMBERED)
+  })
 })
 
 describe('randomScramble', () => {
