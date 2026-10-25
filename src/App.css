@@ -28,16 +28,22 @@
   touch-action: none;
 }
 
-.preview-bar {
+.hint {
+  margin: 4px 16px 0;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.toolbar {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   padding: 12px 16px 16px;
 }
 
-.preview-bar button {
-  padding: 8px 14px;
+.toolbar button {
+  padding: 10px 16px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: transparent;
@@ -45,6 +51,11 @@
   cursor: pointer;
 }
 
-.preview-bar button:active {
+.toolbar button:active:not(:disabled) {
   background: var(--border);
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

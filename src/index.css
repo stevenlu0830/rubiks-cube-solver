@@ -3,6 +3,7 @@
   --text: #1c1c22;
   --text-muted: #6b6b76;
   --border: #d6d6de;
+  --danger: #c4231a;
 
   font-family:
     system-ui,
@@ -22,6 +23,7 @@
     --text: #f2f2f5;
     --text-muted: #9a9aa6;
     --border: #34343e;
+    --danger: #ff6b5e;
   }
 }
 

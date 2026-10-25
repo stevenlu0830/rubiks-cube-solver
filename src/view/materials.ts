@@ -8,6 +8,7 @@ import {
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import type { Cell, Color } from '../cube/state.ts'
+import { STICKER_COLORS } from './colors.ts'
 import { CUBIE_SIZE, STICKER_CORNER_RADIUS, STICKER_SIZE } from './layout.ts'
 
 /**
@@ -15,16 +16,6 @@ import { CUBIE_SIZE, STICKER_CORNER_RADIUS, STICKER_SIZE } from './layout.ts'
  * every sticker shares one sticker shape and one paint per colour, so the
  * graphics card only has to know about a handful of objects.
  */
-
-/** Standard Rubik's brand colours. */
-export const STICKER_COLORS: Record<Color, string> = {
-  white: '#ffffff',
-  yellow: '#ffd500',
-  green: '#009b48',
-  blue: '#0046ad',
-  red: '#b71234',
-  orange: '#ff5800',
-}
 
 const UNPAINTED_COLOR = '#b9bdc6'
 const UNPAINTED_MARK_COLOR = '#8a8f99'

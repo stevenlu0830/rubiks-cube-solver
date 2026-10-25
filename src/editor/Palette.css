@@ -1,0 +1,53 @@
+.palette {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding: 0 16px;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.swatch-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  /* A thin outline keeps the white chip visible on a light background. */
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+  transition: transform 0.12s;
+}
+
+.swatch[aria-pressed='true'] .swatch-chip {
+  transform: scale(1.12);
+  /* Ring around the selected colour: a gap in the page colour, then a dark line. */
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.15),
+    0 0 0 3px var(--bg),
+    0 0 0 5px var(--text);
+}
+
+.swatch-count {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.swatch-count[data-status='full'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.swatch-count[data-status='over'] {
+  color: var(--danger);
+  font-weight: 600;
+}

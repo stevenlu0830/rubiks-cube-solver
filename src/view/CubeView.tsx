@@ -1,4 +1,4 @@
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect } from 'react'
 import type { PerspectiveCamera } from 'three'
 import type { CubeState } from '../cube/state.ts'
@@ -11,12 +11,31 @@ import {
   stickerMaterial,
 } from './materials.ts'
 
+/**
+ * How far (in CSS pixels) a finger may slide between press and release and
+ * still count as a tap. Anything longer is a drag, which mustn't paint.
+ */
+const TAP_SLOP = 10
+
 interface CubeViewProps {
   state: CubeState
+  /** Called with the cell index when the user taps a sticker. */
+  onCellTap?: (cell: number) => void
 }
 
-/** Draws the cube in 3D. It only displays `state`; it never changes it. */
-export function CubeView({ state }: CubeViewProps) {
+/**
+ * Draws the cube in 3D. It only displays `state` and reports taps; changing
+ * the state is up to the parent.
+ */
+export function CubeView({ state, onCellTap }: CubeViewProps) {
+  const handleClick = (event: ThreeEvent<MouseEvent>) => {
+    // Only the nearest thing under the finger counts, not stickers behind it.
+    event.stopPropagation()
+    const cell: unknown = event.object.userData.cell
+    // A tap on the black plastic between stickers has no cell, so it does nothing.
+    if (typeof cell === 'number' && event.delta <= TAP_SLOP) onCellTap?.(cell)
+  }
+
   return (
     <Canvas
       // Render at the screen's full pixel density (up to 3× on recent phones) so edges stay sharp.
@@ -30,7 +49,7 @@ export function CubeView({ state }: CubeViewProps) {
       <CameraFit />
       <ambientLight intensity={2.2} />
       <directionalLight position={[2, 4, 6]} intensity={1.6} />
-      <group>
+      <group onClick={handleClick}>
         {CUBIES.map((cubie) => (
           <Cubie key={cubie.position.join()} cubie={cubie} state={state} />
         ))}
