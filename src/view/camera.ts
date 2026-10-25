@@ -2,10 +2,20 @@ import { MathUtils, Vector3 } from 'three'
 
 /**
  * The camera looks at the cube's centre from slightly above and to the
- * right, so the front face is big enough to tap while slivers of the top and
- * right faces show the cube is 3D.
+ * right, so the front face is big enough to tap while the top and right
+ * faces show the cube is 3D. Its position is given as two angles:
+ * - azimuth: degrees round to the right of straight-on. Raising it looks the
+ *   same as turning the cube clockwise (seen from above): more right face.
+ * - elevation: degrees above the cube's middle. Raising it shows more top.
  */
-export const CAMERA_DIRECTION = new Vector3(0.36, 0.42, 1).normalize()
+const CAMERA_AZIMUTH = 25
+const CAMERA_ELEVATION = 21.5
+
+export const CAMERA_DIRECTION = new Vector3().setFromSphericalCoords(
+  1,
+  MathUtils.degToRad(90 - CAMERA_ELEVATION),
+  MathUtils.degToRad(CAMERA_AZIMUTH),
+)
 export const CAMERA_FOV = 30
 
 /** Half the cube's outer size: the cube spans -1.5 to 1.5 on each axis. */
