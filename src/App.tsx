@@ -34,7 +34,8 @@ function App() {
         onSelect={setColor}
       />
       <p className="hint">
-        Pick a colour, then tap squares to paint them. Tap again to clear.
+        Pick a colour, then tap squares to paint (tap again to clear). Swipe to
+        turn the cube.
       </p>
       <main className="cube-stage">
         <CubeView
