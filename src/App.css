@@ -39,7 +39,7 @@
   display: flex;
   justify-content: center;
   gap: 8px;
-  padding: 12px 16px 16px;
+  padding: 12px 16px 8px;
 }
 
 .toolbar button {
@@ -58,4 +58,19 @@
 .toolbar button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.solve-button {
+  margin: 0 16px 16px;
+  padding: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.solve-button:active {
+  opacity: 0.8;
 }

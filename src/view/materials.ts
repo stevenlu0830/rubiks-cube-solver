@@ -1,5 +1,7 @@
 import {
   CanvasTexture,
+  Color as ThreeColor,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Shape,
   ShapeGeometry,
@@ -19,6 +21,10 @@ import { CUBIE_SIZE, STICKER_CORNER_RADIUS, STICKER_SIZE } from './layout.ts'
 
 const UNPAINTED_COLOR = '#b9bdc6'
 const UNPAINTED_MARK_COLOR = '#8a8f99'
+/** Border round highlighted stickers: a pink no cube sticker uses. */
+const HIGHLIGHT_COLOR = '#ff2fb3'
+/** How bright the other stickers stay while some are highlighted. */
+const DIM = 0.25
 
 export const BODY_GEOMETRY = new RoundedBoxGeometry(
   CUBIE_SIZE,
@@ -37,23 +43,48 @@ export const STICKER_GEOMETRY = roundedSquare(
   STICKER_CORNER_RADIUS,
 )
 
-const PAINTS = Object.fromEntries(
-  Object.entries(STICKER_COLORS).map(([color, hex]) => [
-    color,
-    new MeshStandardMaterial({ color: hex, roughness: 0.45 }),
-  ]),
-) as Record<Color, MeshStandardMaterial>
+/** A slightly larger sticker shape behind a highlighted sticker, showing as a border. */
+export const HIGHLIGHT_GEOMETRY = roundedSquare(
+  STICKER_SIZE + 0.12,
+  STICKER_CORNER_RADIUS + 0.06,
+)
+// Unlit, so the border is equally bright on every side of the cube.
+export const HIGHLIGHT_MATERIAL = new MeshBasicMaterial({
+  color: HIGHLIGHT_COLOR,
+})
+
+const paints = (brightness: number) =>
+  Object.fromEntries(
+    Object.entries(STICKER_COLORS).map(([color, hex]) => [
+      color,
+      new MeshStandardMaterial({
+        color: new ThreeColor(hex).multiplyScalar(brightness),
+        roughness: 0.45,
+      }),
+    ]),
+  ) as Record<Color, MeshStandardMaterial>
+
+const PAINTS = paints(1)
+const DIMMED_PAINTS = paints(DIM)
 
 // Created on first use: it draws on a <canvas>, which only exists in a browser.
-let unpaintedMaterial: MeshStandardMaterial | undefined
+let unpainted: { normal: Material; dimmed: Material } | undefined
 
-export function stickerMaterial(cell: Cell): Material {
-  if (cell !== null) return PAINTS[cell]
-  unpaintedMaterial ??= new MeshStandardMaterial({
-    map: questionMarkTexture(),
-    roughness: 0.45,
-  })
-  return unpaintedMaterial
+/** The paint for a sticker; `dimmed` darkens it while other stickers are highlighted. */
+export function stickerMaterial(cell: Cell, dimmed = false): Material {
+  if (cell !== null) return (dimmed ? DIMMED_PAINTS : PAINTS)[cell]
+  if (!unpainted) {
+    const map = questionMarkTexture()
+    unpainted = {
+      normal: new MeshStandardMaterial({ map, roughness: 0.45 }),
+      dimmed: new MeshStandardMaterial({
+        map,
+        roughness: 0.45,
+        color: new ThreeColor(DIM, DIM, DIM),
+      }),
+    }
+  }
+  return dimmed ? unpainted.dimmed : unpainted.normal
 }
 
 /**

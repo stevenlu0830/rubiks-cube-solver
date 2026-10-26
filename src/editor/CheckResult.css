@@ -1,0 +1,41 @@
+.check-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 16px 0;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.check-result[data-tone='problem'] {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.check-result[data-tone='ok'] {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.check-result p {
+  flex: 1;
+  margin: 0;
+}
+
+.check-result-tip {
+  color: var(--text-muted);
+}
+
+.check-result button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}

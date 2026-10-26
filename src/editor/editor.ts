@@ -1,7 +1,6 @@
 import {
   CENTER,
   cellIndex,
-  COLORS,
   emptyState,
   FACES,
   STANDARD_SCHEME,
@@ -15,9 +14,6 @@ import {
  * returns the next state without changing the old one. Keeping old states
  * untouched is what makes Undo easy: just go back to the previous one.
  */
-
-/** How many cells of each colour a real cube has. */
-export const CELLS_PER_COLOR = 9
 
 /** Undo steps kept; older ones are dropped. */
 const HISTORY_LIMIT = 200
@@ -80,17 +76,6 @@ function change(state: EditorState, cube: CubeState): EditorState {
     cube,
     history: [...state.history, state.cube].slice(-HISTORY_LIMIT),
   }
-}
-
-/** How many cells are painted in each colour. */
-export function colorCounts(cube: CubeState): Record<Color, number> {
-  const counts = Object.fromEntries(
-    COLORS.map((color) => [color, 0]),
-  ) as Record<Color, number>
-  for (const cell of cube) {
-    if (cell !== null) counts[cell]++
-  }
-  return counts
 }
 
 /** True when the six centres already match the standard colour scheme. */

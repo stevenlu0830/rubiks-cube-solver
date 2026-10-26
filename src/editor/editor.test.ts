@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CENTER,
   cellIndex,
+  colorCounts,
   COLORS,
   emptyState,
   FACES,
@@ -11,7 +12,6 @@ import {
 } from '../cube/state.ts'
 import {
   centersFilled,
-  colorCounts,
   editorReducer,
   initialEditorState,
   type EditorAction,

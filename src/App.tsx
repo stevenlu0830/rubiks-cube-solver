@@ -1,8 +1,9 @@
 import { useEffect, useReducer, useState } from 'react'
-import type { Color } from './cube/state.ts'
+import { colorCounts, type Color, type CubeState } from './cube/state.ts'
+import { validateCube, type Validation } from './cube/validate.ts'
+import { CheckResult } from './editor/CheckResult.tsx'
 import {
   centersFilled,
-  colorCounts,
   editorReducer,
   initialEditorState,
 } from './editor/editor.ts'
@@ -18,6 +19,12 @@ function App() {
     () => initialEditorState(loadCube() ?? undefined),
   )
   const [color, setColor] = useState<Color>('white')
+  const [check, setCheck] = useState<{
+    cube: CubeState
+    result: Validation
+  } | null>(null)
+  // A check result only applies to the cube it checked: any edit hides it.
+  const result = check?.cube === cube ? check.result : null
 
   useEffect(() => {
     saveCube(cube)
@@ -33,14 +40,19 @@ function App() {
         counts={colorCounts(cube)}
         onSelect={setColor}
       />
-      <p className="hint">
-        Pick a colour, then tap squares to paint (tap again to clear). Swipe to
-        turn the cube.
-      </p>
+      {result ? (
+        <CheckResult result={result} onClose={() => setCheck(null)} />
+      ) : (
+        <p className="hint">
+          Pick a colour, then tap squares to paint (tap again to clear). Swipe
+          to turn the cube.
+        </p>
+      )}
       <main className="cube-stage">
         <CubeView
           state={cube}
           onCellTap={(cell) => dispatch({ type: 'paint', cell, color })}
+          highlight={result && !result.valid ? result.cells : undefined}
         />
       </main>
       <nav className="toolbar" aria-label="Editing">
@@ -67,6 +79,13 @@ function App() {
           Reset
         </button>
       </nav>
+      <button
+        type="button"
+        className="solve-button"
+        onClick={() => setCheck({ cube, result: validateCube(cube) })}
+      >
+        Solve
+      </button>
     </div>
   )
 }

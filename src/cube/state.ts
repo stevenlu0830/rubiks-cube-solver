@@ -50,6 +50,9 @@ export const STANDARD_SCHEME: ColorScheme = {
   B: 'blue',
 }
 
+/** How many cells of each colour a real cube has. */
+export const CELLS_PER_COLOR = 9
+
 /** Position of the centre cell within a face (0–8). */
 export const CENTER = 4
 
@@ -77,4 +80,15 @@ export function isSolved(state: CubeState): boolean {
         .every((c) => c === center)
     )
   })
+}
+
+/** How many cells are painted in each colour. */
+export function colorCounts(cube: CubeState): Record<Color, number> {
+  const counts = Object.fromEntries(
+    COLORS.map((color) => [color, 0]),
+  ) as Record<Color, number>
+  for (const cell of cube) {
+    if (cell !== null) counts[cell]++
+  }
+  return counts
 }

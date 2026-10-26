@@ -1,6 +1,5 @@
-import { COLORS, type Color } from '../cube/state.ts'
+import { CELLS_PER_COLOR, COLORS, type Color } from '../cube/state.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
-import { CELLS_PER_COLOR } from './editor.ts'
 import './Palette.css'
 
 interface PaletteProps {

@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useEffectEvent, useRef } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef } from 'react'
 import { Quaternion, Vector2, type Group, type PerspectiveCamera } from 'three'
 import type { CubeState } from '../cube/state.ts'
 import { CAMERA_DIRECTION, CAMERA_FOV, fitCameraDistance } from './camera.ts'
@@ -8,6 +8,8 @@ import { CUBIES, type CubieLayout } from './layout.ts'
 import {
   BODY_GEOMETRY,
   BODY_MATERIAL,
+  HIGHLIGHT_GEOMETRY,
+  HIGHLIGHT_MATERIAL,
   STICKER_GEOMETRY,
   stickerMaterial,
 } from './materials.ts'
@@ -20,13 +22,15 @@ interface CubeViewProps {
   state: CubeState
   /** Called with the cell index when the user taps a sticker. */
   onCellTap?: (cell: number) => void
+  /** Cells to point out (e.g. ones painted wrong); the rest are dimmed. */
+  highlight?: readonly number[]
 }
 
 /**
  * Draws the cube in 3D, turns it when the user swipes, and reports taps on
  * stickers. It never changes `state`: painting is up to the parent.
  */
-export function CubeView({ state, onCellTap }: CubeViewProps) {
+export function CubeView({ state, onCellTap, highlight }: CubeViewProps) {
   return (
     <Canvas
       // Render at the screen's full pixel density (up to 3× on recent phones) so edges stay sharp.
@@ -40,14 +44,15 @@ export function CubeView({ state, onCellTap }: CubeViewProps) {
       <CameraFit />
       <ambientLight intensity={2.2} />
       <directionalLight position={[2, 4, 6]} intensity={1.6} />
-      <TurnableCube state={state} onCellTap={onCellTap} />
+      <TurnableCube state={state} onCellTap={onCellTap} highlight={highlight} />
     </Canvas>
   )
 }
 
 /** The cube itself, plus the touch handling that turns it and paints it. */
-function TurnableCube({ state, onCellTap }: CubeViewProps) {
+function TurnableCube({ state, onCellTap, highlight }: CubeViewProps) {
   const cube = useRef<Group>(null!)
+  const highlighted = useMemo(() => new Set(highlight), [highlight])
   const canvas = useThree((s) => s.gl.domElement)
   const camera = useThree((s) => s.camera)
   const raycaster = useThree((s) => s.raycaster)
@@ -130,13 +135,24 @@ function TurnableCube({ state, onCellTap }: CubeViewProps) {
   return (
     <group ref={cube}>
       {CUBIES.map((cubie) => (
-        <Cubie key={cubie.position.join()} cubie={cubie} state={state} />
+        <Cubie
+          key={cubie.position.join()}
+          cubie={cubie}
+          state={state}
+          highlighted={highlighted}
+        />
       ))}
     </group>
   )
 }
 
-function Cubie({ cubie, state }: { cubie: CubieLayout; state: CubeState }) {
+interface CubieProps {
+  cubie: CubieLayout
+  state: CubeState
+  highlighted: ReadonlySet<number>
+}
+
+function Cubie({ cubie, state, highlighted }: CubieProps) {
   return (
     <group position={cubie.position}>
       <mesh geometry={BODY_GEOMETRY} material={BODY_MATERIAL} />
@@ -144,12 +160,25 @@ function Cubie({ cubie, state }: { cubie: CubieLayout; state: CubeState }) {
         <mesh
           key={cell}
           geometry={STICKER_GEOMETRY}
-          material={stickerMaterial(state[cell])}
+          material={stickerMaterial(
+            state[cell],
+            highlighted.size > 0 && !highlighted.has(cell),
+          )}
           position={offset}
           quaternion={quaternion}
           // Tag each sticker with its cell, so a tap can tell which cell was hit.
           userData={{ cell }}
-        />
+        >
+          {highlighted.has(cell) && (
+            // Just behind the sticker, so only its rim shows as a border.
+            <mesh
+              geometry={HIGHLIGHT_GEOMETRY}
+              material={HIGHLIGHT_MATERIAL}
+              position={[0, 0, -0.001]}
+              userData={{ cell }}
+            />
+          )}
+        </mesh>
       ))}
     </group>
   )
