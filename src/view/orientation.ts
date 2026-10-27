@@ -1,5 +1,5 @@
 import { Matrix4, Quaternion, Vector3 } from 'three'
-import { faceNormal } from '../cube/geometry.ts'
+import { faceNormal, STICKERS, stickerIndexAt } from '../cube/geometry.ts'
 import { FACES, type Face } from '../cube/state.ts'
 import type { SwipeDirection } from './gestures.ts'
 
@@ -73,4 +73,23 @@ export function frontFace(orientation: Quaternion): Face {
 /** The face on top. */
 export function topFace(orientation: Quaternion): Face {
   return faceTowards(orientation, UP_AXIS)
+}
+
+/**
+ * The cells as the user sees them on screen: cell U4 is whatever centre is
+ * on top right now, F4 whatever centre faces them, and so on. The solver is
+ * given the cube this way, so its moves (R, U, …) mean the sides the user
+ * actually sees, and the user can hold their real cube the same way.
+ */
+export function cubeAsShown<T>(
+  cube: readonly T[],
+  orientation: Quaternion,
+): T[] {
+  const turnBack = orientation.clone().invert()
+  return STICKERS.map(({ position, normal }) => {
+    // Turn this spot on the screen back to where it is on the unturned cube.
+    const from = new Vector3(...position).applyQuaternion(turnBack).round()
+    const facing = new Vector3(...normal).applyQuaternion(turnBack).round()
+    return cube[stickerIndexAt(from.toArray(), facing.toArray())]
+  })
 }

@@ -1,15 +1,25 @@
-import { useEffect, useReducer, useState } from 'react'
-import { colorCounts, type Color, type CubeState } from './cube/state.ts'
-import { validateCube, type Validation } from './cube/validate.ts'
-import { CheckResult } from './editor/CheckResult.tsx'
+import { useEffect, useReducer, useRef, useState } from 'react'
+import { Quaternion } from 'three'
+import {
+  CENTER,
+  cellIndex,
+  colorCounts,
+  type Color,
+  type CubeState,
+} from './cube/state.ts'
+import { validateCube } from './cube/validate.ts'
 import {
   centersFilled,
   editorReducer,
   initialEditorState,
 } from './editor/editor.ts'
 import { Palette } from './editor/Palette.tsx'
+import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
+import { toFaceletString } from './solver/facelets.ts'
+import { getSolver, solverErrorMessage } from './solver/solver.ts'
 import { CubeView } from './view/CubeView.tsx'
+import { cubeAsShown } from './view/orientation.ts'
 import './App.css'
 
 function App() {
@@ -19,16 +29,55 @@ function App() {
     () => initialEditorState(loadCube() ?? undefined),
   )
   const [color, setColor] = useState<Color>('white')
-  const [check, setCheck] = useState<{
+  /** Which way round the cube is shown; the solve uses it as the holding position. */
+  const orientation = useRef(new Quaternion())
+  const [solve, setSolve] = useState<{
     cube: CubeState
-    result: Validation
+    status: SolveStage
   } | null>(null)
-  // A check result only applies to the cube it checked: any edit hides it.
-  const result = check?.cube === cube ? check.result : null
+  // A solve only applies to the cube it was for: any edit hides it.
+  const status = solve?.cube === cube ? solve.status : null
+  const validation = status?.stage === 'checked' ? status.validation : null
 
   useEffect(() => {
     saveCube(cube)
   }, [cube])
+
+  // Start the solver's setup now, so it's ready by the time the cube is painted.
+  useEffect(() => {
+    getSolver()
+  }, [])
+
+  async function handleSolve() {
+    const validation = validateCube(cube)
+    if (!validation.valid || validation.solved) {
+      setSolve({ cube, status: { stage: 'checked', validation } })
+      return
+    }
+
+    // Read the cube as it's shown, so the moves match how the user holds it.
+    const shown = cubeAsShown(cube, orientation.current)
+    const solver = getSolver()
+    setSolve({
+      cube,
+      status: { stage: 'solving', starting: !solver.isReady() },
+    })
+    let result: SolveStage
+    try {
+      result = {
+        stage: 'solved',
+        moves: await solver.solve(toFaceletString(shown)),
+        front: shown[cellIndex('F', CENTER)]!,
+        top: shown[cellIndex('U', CENTER)]!,
+      }
+    } catch (error) {
+      result = { stage: 'failed', message: solverErrorMessage(error) }
+    }
+    // Ignore the answer if Solve was pressed again on another cube meanwhile.
+    setSolve((current) =>
+      current?.cube === cube ? { cube, status: result } : current,
+    )
+  }
 
   return (
     <div className="app">
@@ -40,8 +89,8 @@ function App() {
         counts={colorCounts(cube)}
         onSelect={setColor}
       />
-      {result ? (
-        <CheckResult result={result} onClose={() => setCheck(null)} />
+      {status ? (
+        <SolveStatus status={status} onClose={() => setSolve(null)} />
       ) : (
         <p className="hint">
           Pick a colour, then tap squares to paint (tap again to clear). Swipe
@@ -52,7 +101,12 @@ function App() {
         <CubeView
           state={cube}
           onCellTap={(cell) => dispatch({ type: 'paint', cell, color })}
-          highlight={result && !result.valid ? result.cells : undefined}
+          highlight={
+            validation && !validation.valid ? validation.cells : undefined
+          }
+          onOrientationChange={(turned) => {
+            orientation.current = turned
+          }}
         />
       </main>
       <nav className="toolbar" aria-label="Editing">
@@ -82,9 +136,10 @@ function App() {
       <button
         type="button"
         className="solve-button"
-        onClick={() => setCheck({ cube, result: validateCube(cube) })}
+        onClick={handleSolve}
+        disabled={status?.stage === 'solving'}
       >
-        Solve
+        {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
       </button>
     </div>
   )

@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { Quaternion } from 'three'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CORNER_CELLS } from './cube/cubies.ts'
-import { applyMoves, parseMoves } from './cube/moves.ts'
+import { applyMove, applyMoves, parseMoves, type Move } from './cube/moves.ts'
 import {
   CENTER,
   cellIndex,
@@ -10,6 +11,9 @@ import {
   type CubeState,
 } from './cube/state.ts'
 import { saveCube } from './editor/storage.ts'
+import { toFaceletString } from './solver/facelets.ts'
+import { SolverError } from './solver/solver.ts'
+import { turnBySwipe } from './view/orientation.ts'
 import App from './App.tsx'
 
 // The real 3D view needs WebGL, which the test environment doesn't have.
@@ -19,26 +23,61 @@ const view = vi.hoisted(() => ({
   state: [] as CubeState,
   highlight: undefined as readonly number[] | undefined,
   tap: (cell: number): void => void cell,
+  turn: (orientation: Quaternion): void => void orientation,
 }))
 vi.mock('./view/CubeView.tsx', () => ({
   CubeView: (props: {
     state: CubeState
     onCellTap: (cell: number) => void
     highlight?: readonly number[]
+    onOrientationChange: (orientation: Quaternion) => void
   }) => {
     view.state = props.state
     view.highlight = props.highlight
     view.tap = props.onCellTap
+    view.turn = props.onOrientationChange
     return null
   },
 }))
+
+// The real solver runs in a Web Worker, which the test environment doesn't
+// have. This stand-in lets each test decide what the solver answers.
+const solver = vi.hoisted(() => ({
+  ready: true,
+  solve: (facelets: string): Promise<Move[]> => {
+    void facelets
+    return Promise.resolve([])
+  },
+}))
+vi.mock('./solver/solver.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./solver/solver.ts')>()),
+  getSolver: () => ({
+    isReady: () => solver.ready,
+    solve: (facelets: string) => solver.solve(facelets),
+  }),
+}))
+
+/** A promise the test resolves or rejects itself, to look at the app mid-solve. */
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
 
 const tap = (cell: number) => act(() => view.tap(cell))
 const click = (name: string | RegExp) =>
   fireEvent.click(screen.getByRole('button', { name }))
 
 describe('App', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+    solver.ready = true
+    solver.solve = () => Promise.resolve(parseMoves('R U'))
+  })
 
   it('shows the app title', () => {
     render(<App />)
@@ -137,10 +176,75 @@ describe('App', () => {
       expect(view.highlight).toBeUndefined()
     })
 
-    it('accepts a correctly painted scrambled cube', () => {
-      renderWith(applyMoves(solvedState(), parseMoves("R U R' U' F2 D L'")))
+    const scrambled = applyMoves(solvedState(), parseMoves("R U R' U' F2 D L'"))
+
+    it('solves a correctly painted cube and says how to hold it', async () => {
+      const answer = deferred<Move[]>()
+      const asked: string[] = []
+      solver.solve = (facelets) => {
+        asked.push(facelets)
+        return answer.promise
+      }
+      renderWith(scrambled)
       click('Solve')
-      expect(screen.getByRole('status')).toHaveTextContent('Looks good')
+      expect(screen.getByRole('status')).toHaveTextContent('Finding a solution')
+      expect(screen.getByRole('button', { name: 'Solving…' })).toBeDisabled()
+      expect(asked).toEqual([toFaceletString(scrambled)])
+
+      await act(async () => answer.resolve(parseMoves("F2 R U'")))
+      const status = screen.getByRole('status')
+      expect(status).toHaveTextContent(
+        'Hold your cube with green facing you and white on top',
+      )
+      expect(status).toHaveTextContent("F2 R U'")
+      expect(status).toHaveTextContent('3 moves')
+      expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+    })
+
+    it('uses the way the cube is turned on screen as the holding position', async () => {
+      const asked: string[] = []
+      solver.solve = (facelets) => {
+        asked.push(facelets)
+        return Promise.resolve(parseMoves('R U'))
+      }
+      renderWith(scrambled)
+      act(() => view.turn(turnBySwipe(new Quaternion(), 'left'))) // red side now in front
+      await act(async () => click('Solve'))
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Hold your cube with red facing you and white on top',
+      )
+      // The solver sees the cube as shown: the same as a y turn of the whole cube.
+      expect(asked).toEqual([toFaceletString(applyMove(scrambled, 'y'))])
+    })
+
+    it('says when the solver is still getting ready', () => {
+      solver.ready = false
+      solver.solve = () => new Promise(() => {})
+      renderWith(scrambled)
+      click('Solve')
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Getting the solver ready',
+      )
+    })
+
+    it('explains when the solver fails', async () => {
+      solver.solve = () =>
+        Promise.reject(new SolverError('timeout', 'The solver took too long.'))
+      renderWith(scrambled)
+      await act(async () => click('Solve'))
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'The solver took too long. Please try again.',
+      )
+    })
+
+    it('drops an answer that arrives after the cube was edited', async () => {
+      const answer = deferred<Move[]>()
+      solver.solve = () => answer.promise
+      renderWith(scrambled)
+      click('Solve')
+      tap(0)
+      await act(async () => answer.resolve(parseMoves('R U')))
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
 
     it('explains a twisted corner and highlights the corners', () => {

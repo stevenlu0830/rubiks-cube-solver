@@ -20,6 +20,7 @@ npm run dev
 | `npm run dev`       | Start the dev server on this computer                                              |
 | `npm run dev:phone` | Same, but reachable from a phone on the same Wi-Fi (use the Network URL it prints) |
 | `npm test`          | Run the tests once (`npm run test:watch` to re-run on save)                        |
+| `npm run test:slow` | Run the long checks too, e.g. solving 1,000 random cubes (about 35 seconds)        |
 | `npm run lint`      | Check the code for likely bugs with ESLint                                         |
 | `npm run format`    | Auto-format all files with Prettier                                                |
 | `npm run build`     | Type-check and build the production site into `dist/`                              |

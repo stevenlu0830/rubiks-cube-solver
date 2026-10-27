@@ -74,3 +74,8 @@
 .solve-button:active {
   opacity: 0.8;
 }
+
+.solve-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

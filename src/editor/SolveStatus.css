@@ -1,0 +1,63 @@
+.solve-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 16px 0;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.solve-status[data-tone='problem'] {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.solve-status[data-tone='ok'] {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.solve-status[data-tone='info'] {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.solve-status-body {
+  flex: 1;
+  /* The message box never pushes the button out of the way. */
+  min-width: 0;
+}
+
+.solve-status-body p {
+  margin: 0;
+}
+
+.solve-status-body p + p {
+  margin-top: 4px;
+}
+
+.solve-status-moves {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  word-spacing: 0.2em;
+  color: var(--text);
+}
+
+.solve-status-tip {
+  color: var(--text-muted);
+}
+
+.solve-status button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}

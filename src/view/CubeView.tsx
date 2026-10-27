@@ -24,13 +24,15 @@ interface CubeViewProps {
   onCellTap?: (cell: number) => void
   /** Cells to point out (e.g. ones painted wrong); the rest are dimmed. */
   highlight?: readonly number[]
+  /** Called with the cube's new orientation each time a swipe turns it. */
+  onOrientationChange?: (orientation: Quaternion) => void
 }
 
 /**
  * Draws the cube in 3D, turns it when the user swipes, and reports taps on
  * stickers. It never changes `state`: painting is up to the parent.
  */
-export function CubeView({ state, onCellTap, highlight }: CubeViewProps) {
+export function CubeView(props: CubeViewProps) {
   return (
     <Canvas
       // Render at the screen's full pixel density (up to 3× on recent phones) so edges stay sharp.
@@ -44,13 +46,18 @@ export function CubeView({ state, onCellTap, highlight }: CubeViewProps) {
       <CameraFit />
       <ambientLight intensity={2.2} />
       <directionalLight position={[2, 4, 6]} intensity={1.6} />
-      <TurnableCube state={state} onCellTap={onCellTap} highlight={highlight} />
+      <TurnableCube {...props} />
     </Canvas>
   )
 }
 
 /** The cube itself, plus the touch handling that turns it and paints it. */
-function TurnableCube({ state, onCellTap, highlight }: CubeViewProps) {
+function TurnableCube({
+  state,
+  onCellTap,
+  highlight,
+  onOrientationChange,
+}: CubeViewProps) {
   const cube = useRef<Group>(null!)
   const highlighted = useMemo(() => new Set(highlight), [highlight])
   const canvas = useThree((s) => s.gl.domElement)
@@ -73,6 +80,7 @@ function TurnableCube({ state, onCellTap, highlight }: CubeViewProps) {
     orientation.current = to
     turn.current = { from, to, startedAt: performance.now() }
     invalidate()
+    onOrientationChange?.(to)
   })
 
   const handleTap = useEffectEvent((clientX: number, clientY: number) => {

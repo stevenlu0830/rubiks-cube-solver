@@ -1,6 +1,6 @@
 import { Matrix4, Quaternion } from 'three'
 import { describe, expect, it } from 'vitest'
-import { applyMoves, type Move } from '../cube/moves.ts'
+import { applyMoves, randomScramble, type Move } from '../cube/moves.ts'
 import {
   CENTER,
   cellIndex,
@@ -11,7 +11,7 @@ import {
 } from '../cube/state.ts'
 import { seededRandom } from '../test/seededRandom.ts'
 import type { SwipeDirection } from './gestures.ts'
-import { frontFace, topFace, turnBySwipe } from './orientation.ts'
+import { cubeAsShown, frontFace, topFace, turnBySwipe } from './orientation.ts'
 
 const SWIPES: SwipeDirection[] = ['left', 'right', 'up', 'down']
 
@@ -109,5 +109,35 @@ describe('turnBySwipe', () => {
     for (const value of matrixOf(orientation)) {
       expect(Math.abs(value - Math.round(value))).toBeLessThan(1e-12)
     }
+  })
+})
+
+describe('cubeAsShown', () => {
+  const NUMBERED = Array.from({ length: 54 }, (_, i) => i)
+
+  it('changes nothing before any swipe', () => {
+    expect(cubeAsShown(NUMBERED, new Quaternion())).toEqual(NUMBERED)
+  })
+
+  it('reads the cells exactly as the matching x/y moves would move them', () => {
+    const random = seededRandom(9)
+    for (let run = 0; run < 100; run++) {
+      const swipes = Array.from(
+        { length: Math.floor(random() * 8) },
+        () => SWIPES[Math.floor(random() * 4)],
+      )
+      const moves = swipes.map((direction) => SWIPE_MOVES[direction])
+      expect(cubeAsShown(NUMBERED, swipeAll(swipes))).toEqual(
+        applyMoves(NUMBERED, moves),
+      )
+    }
+  })
+
+  it('shows the colours of the face now in front at the front', () => {
+    const cube = applyMoves(solvedState(), randomScramble(25, seededRandom(10)))
+    const orientation = swipeAll(['up']) // bottom face comes to the front
+    expect(cubeAsShown(cube, orientation)[cellIndex('F', CENTER)]).toBe(
+      cube[cellIndex('D', CENTER)],
+    )
   })
 })
