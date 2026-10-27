@@ -1,16 +1,12 @@
-import { formatMoves, type Move } from '../cube/moves.ts'
-import type { Color } from '../cube/state.ts'
 import type { Validation } from '../cube/validate.ts'
 import './SolveStatus.css'
 
-/** How far pressing Solve has got. */
+/** How far pressing Solve has got, short of a solution (which opens the solve screen). */
 export type SolveStage =
   /** The cube failed a check, or is already solved, so there's nothing to solve. */
   | { stage: 'checked'; validation: Validation }
   /** Waiting for the solver; `starting` if it's still doing its one-off setup. */
   | { stage: 'solving'; starting: boolean }
-  /** The answer, for the cube held with `front` facing the user and `top` on top. */
-  | { stage: 'solved'; moves: Move[]; front: Color; top: Color }
   | { stage: 'failed'; message: string }
 
 interface SolveStatusProps {
@@ -75,17 +71,6 @@ function StageMessage({ status }: { status: SolveStage }) {
             ? 'Getting the solver ready (only needed once)…'
             : 'Finding a solution…'}
         </p>
-      )
-    case 'solved':
-      return (
-        <>
-          <p>
-            Hold your cube with <strong>{status.front}</strong> facing you and{' '}
-            <strong>{status.top}</strong> on top, then turn:
-          </p>
-          <p className="solve-status-moves">{formatMoves(status.moves)}</p>
-          <p className="solve-status-tip">{status.moves.length} moves</p>
-        </>
       )
     case 'failed':
       return <p>{status.message}</p>

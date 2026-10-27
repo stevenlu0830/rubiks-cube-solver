@@ -53,6 +53,19 @@ export const HIGHLIGHT_MATERIAL = new MeshBasicMaterial({
   color: HIGHLIGHT_COLOR,
 })
 
+/**
+ * Arrows showing which way the next turn goes: near-black with a white
+ * outline, so they stand out on every sticker colour.
+ */
+export const ARROW_GEOMETRY = arrowShape(false, 0)
+export const ARROW_OUTLINE_GEOMETRY = arrowShape(false, 0.07)
+export const DOUBLE_ARROW_GEOMETRY = arrowShape(true, 0)
+export const DOUBLE_ARROW_OUTLINE_GEOMETRY = arrowShape(true, 0.07)
+export const ARROW_MATERIAL = new MeshBasicMaterial({ color: '#141417' })
+export const ARROW_OUTLINE_MATERIAL = new MeshBasicMaterial({
+  color: '#ffffff',
+})
+
 const paints = (brightness: number) =>
   Object.fromEntries(
     Object.entries(STICKER_COLORS).map(([color, hex]) => [
@@ -130,4 +143,33 @@ function roundedSquare(size: number, radius: number): ShapeGeometry {
     uv.setXY(i, uv.getX(i) / size + 0.5, uv.getY(i) / size + 0.5)
   }
   return geometry
+}
+
+/**
+ * A flat arrow pointing along +x across a row of three stickers, with a head
+ * at both ends if `doubleHeaded`. `border` grows it, for the outline.
+ */
+function arrowShape(doubleHeaded: boolean, border: number): ShapeGeometry {
+  const halfLength = 1.25 + border
+  const halfShaft = 0.1 + border
+  const halfHead = 0.32 + border * 1.6
+  const headLength = 0.5 + border * 1.6
+  const tip = halfLength
+  const neck = halfLength - headLength
+  const tail = doubleHeaded ? -neck : -halfLength
+  const shape = new Shape()
+  shape.moveTo(tail, -halfShaft)
+  shape.lineTo(neck, -halfShaft)
+  shape.lineTo(neck, -halfHead)
+  shape.lineTo(tip, 0)
+  shape.lineTo(neck, halfHead)
+  shape.lineTo(neck, halfShaft)
+  shape.lineTo(tail, halfShaft)
+  if (doubleHeaded) {
+    shape.lineTo(tail, halfHead)
+    shape.lineTo(-tip, 0)
+    shape.lineTo(tail, -halfHead)
+  }
+  shape.closePath()
+  return new ShapeGeometry(shape)
 }

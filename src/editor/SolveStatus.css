@@ -37,14 +37,6 @@
   margin-top: 4px;
 }
 
-.solve-status-moves {
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 0.95rem;
-  font-weight: 600;
-  word-spacing: 0.2em;
-  color: var(--text);
-}
-
 .solve-status-tip {
   color: var(--text-muted);
 }

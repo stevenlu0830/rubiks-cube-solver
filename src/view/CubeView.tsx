@@ -1,22 +1,39 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useEffectEvent, useMemo, useRef } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from 'react'
 import { Quaternion, Vector2, type Group, type PerspectiveCamera } from 'three'
+import type { Move } from '../cube/moves.ts'
 import type { CubeState } from '../cube/state.ts'
+import { arrowPlacement } from './arrows.ts'
 import { CAMERA_DIRECTION, CAMERA_FOV, fitCameraDistance } from './camera.ts'
 import { createGestureTracker, type SwipeDirection } from './gestures.ts'
 import { CUBIES, type CubieLayout } from './layout.ts'
 import {
+  ARROW_GEOMETRY,
+  ARROW_MATERIAL,
+  ARROW_OUTLINE_GEOMETRY,
+  ARROW_OUTLINE_MATERIAL,
   BODY_GEOMETRY,
   BODY_MATERIAL,
+  DOUBLE_ARROW_GEOMETRY,
+  DOUBLE_ARROW_OUTLINE_GEOMETRY,
   HIGHLIGHT_GEOMETRY,
   HIGHLIGHT_MATERIAL,
   STICKER_GEOMETRY,
   stickerMaterial,
 } from './materials.ts'
 import { turnBySwipe } from './orientation.ts'
+import { isInTurningLayer, turnRotation } from './turns.ts'
 
-/** How long a swipe's quarter turn takes to animate. */
-const TURN_DURATION_MS = 250
+/** How long a swipe's quarter turn of the whole cube takes to animate. */
+const SWIPE_TURN_MS = 250
+
+const UNTURNED = new Quaternion()
 
 interface CubeViewProps {
   state: CubeState
@@ -26,11 +43,26 @@ interface CubeViewProps {
   highlight?: readonly number[]
   /** Called with the cube's new orientation each time a swipe turns it. */
   onOrientationChange?: (orientation: Quaternion) => void
+  /** Ignore swipes and taps, e.g. while the solver is working. */
+  disabled?: boolean
+  /**
+   * While solving: `state` is already in the holding position (as returned
+   * by cubeAsShown), so it's shown unturned, and swipes and taps are ignored.
+   */
+  held?: boolean
+  /** A face turn to animate on `state`. */
+  turn?: Move | null
+  turnDurationMs?: number
+  /** Called once `turn` has finished animating. */
+  onTurnDone?: () => void
+  /** A face turn to point out with an arrow. */
+  hint?: Move | null
 }
 
 /**
- * Draws the cube in 3D, turns it when the user swipes, and reports taps on
- * stickers. It never changes `state`: painting is up to the parent.
+ * Draws the cube in 3D. While painting, it turns when the user swipes and
+ * reports taps on stickers; while solving, it animates face turns. It never
+ * changes `state` itself: that's up to the parent.
  */
 export function CubeView(props: CubeViewProps) {
   return (
@@ -57,6 +89,12 @@ function TurnableCube({
   onCellTap,
   highlight,
   onOrientationChange,
+  disabled = false,
+  held = false,
+  turn = null,
+  turnDurationMs = 500,
+  onTurnDone,
+  hint = null,
 }: CubeViewProps) {
   const cube = useRef<Group>(null!)
   const highlighted = useMemo(() => new Set(highlight), [highlight])
@@ -65,26 +103,37 @@ function TurnableCube({
   const raycaster = useThree((s) => s.raycaster)
   const invalidate = useThree((s) => s.invalidate)
 
-  /** Where the cube ends up once the current turn (if any) finishes. */
+  /** Where the cube ends up once the current swipe turn (if any) finishes. */
   const orientation = useRef(new Quaternion())
-  const turn = useRef<{
+  const swipeTurn = useRef<{
     from: Quaternion
     to: Quaternion
     startedAt: number
   } | null>(null)
+  const ignoreTouches = held || disabled
+
+  // Entering or leaving the holding position. Held states are already turned
+  // the way the user sees them, so show them unturned; on leaving, go back
+  // to the painting view exactly as it was.
+  useLayoutEffect(() => {
+    swipeTurn.current = null
+    cube.current.quaternion.copy(held ? UNTURNED : orientation.current)
+    invalidate()
+  }, [held, invalidate])
 
   const handleSwipe = useEffectEvent((direction: SwipeDirection) => {
-    if (turn.current) return // ignore swipes while the cube is still turning
+    if (ignoreTouches || swipeTurn.current) return // e.g. still turning
     const from = orientation.current
     const to = turnBySwipe(from, direction)
     orientation.current = to
-    turn.current = { from, to, startedAt: performance.now() }
+    swipeTurn.current = { from, to, startedAt: performance.now() }
     invalidate()
     onOrientationChange?.(to)
   })
 
   const handleTap = useEffectEvent((clientX: number, clientY: number) => {
-    if (turn.current) return // stickers are moving; a tap now could hit the wrong one
+    // While the cube turns, stickers are moving; a tap could hit the wrong one.
+    if (ignoreTouches || swipeTurn.current) return
     // Find what's under the finger. Hits are sorted nearest first; if that's
     // the black plastic between stickers, there's no cell to paint.
     const rect = canvas.getBoundingClientRect()
@@ -121,14 +170,14 @@ function TurnableCube({
     }
   }, [canvas])
 
-  // Runs before each redraw while a turn is animating.
+  // Runs before each redraw while a swipe turn is animating.
   useFrame(() => {
-    if (!turn.current) return
-    const { from, to, startedAt } = turn.current
+    if (!swipeTurn.current) return
+    const { from, to, startedAt } = swipeTurn.current
     // Progress comes from the clock, not a frame count, so a slow phone finishes on time.
     const progress = Math.min(
       1,
-      (performance.now() - startedAt) / TURN_DURATION_MS,
+      (performance.now() - startedAt) / SWIPE_TURN_MS,
     )
     const eased = 1 - (1 - progress) ** 3 // fast start, gentle stop
     cube.current.quaternion.slerpQuaternions(from, to, eased)
@@ -136,21 +185,94 @@ function TurnableCube({
       invalidate() // ask for the next frame
     } else {
       cube.current.quaternion.copy(to)
-      turn.current = null
+      swipeTurn.current = null
     }
   })
 
   return (
     <group ref={cube}>
-      {CUBIES.map((cubie) => (
-        <Cubie
-          key={cubie.position.join()}
-          cubie={cubie}
-          state={state}
-          highlighted={highlighted}
-        />
-      ))}
+      <Cubies
+        state={state}
+        highlighted={highlighted}
+        turn={turn}
+        turnDurationMs={turnDurationMs}
+        onTurnDone={onTurnDone}
+      />
+      {hint && !turn && <TurnArrow move={hint} />}
     </group>
+  )
+}
+
+interface CubiesProps {
+  state: CubeState
+  highlighted: ReadonlySet<number>
+  turn: Move | null
+  turnDurationMs: number
+  onTurnDone?: () => void
+}
+
+/**
+ * The 26 cubies. During a face turn, the 9 in the turning layer sit in a
+ * "pivot" group that rotates about the face's centre. When it finishes, the
+ * parent swaps in the new cube state and the pivot empties: the stickers end
+ * up exactly where the rotation left them, so the swap can't be seen.
+ */
+function Cubies({
+  state,
+  highlighted,
+  turn,
+  turnDurationMs,
+  onTurnDone,
+}: CubiesProps) {
+  const pivot = useRef<Group>(null!)
+  const invalidate = useThree((s) => s.invalidate)
+  const animation = useRef<{ startedAt: number; finished: boolean } | null>(
+    null,
+  )
+
+  useLayoutEffect(() => {
+    pivot.current.quaternion.identity()
+    animation.current = turn
+      ? { startedAt: performance.now(), finished: false }
+      : null
+    invalidate()
+  }, [turn, invalidate])
+
+  useFrame(() => {
+    const current = animation.current
+    if (!turn || !current || current.finished) return
+    const progress = Math.min(
+      1,
+      (performance.now() - current.startedAt) / turnDurationMs,
+    )
+    // Gentle start and stop, like turning a real cube.
+    const eased =
+      progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2
+    const { axis, angle } = turnRotation(turn)
+    pivot.current.quaternion.setFromAxisAngle(axis, angle * eased)
+    if (progress < 1) {
+      invalidate()
+    } else {
+      current.finished = true
+      onTurnDone?.()
+    }
+  })
+
+  const inLayer = (cubie: CubieLayout) =>
+    turn !== null && isInTurningLayer(cubie.position, turn)
+  const draw = (cubie: CubieLayout) => (
+    <Cubie
+      key={cubie.position.join()}
+      cubie={cubie}
+      state={state}
+      highlighted={highlighted}
+    />
+  )
+  return (
+    <>
+      {CUBIES.filter((cubie) => !inLayer(cubie)).map(draw)}
+      <group ref={pivot}>{CUBIES.filter(inLayer).map(draw)}</group>
+    </>
   )
 }
 
@@ -188,6 +310,29 @@ function Cubie({ cubie, state, highlighted }: CubieProps) {
           )}
         </mesh>
       ))}
+    </group>
+  )
+}
+
+/** An arrow lying on the cube, showing which way the next face turn goes. */
+function TurnArrow({ move }: { move: Move }) {
+  const { position, quaternion, doubleHeaded } = useMemo(
+    () => arrowPlacement(move),
+    [move],
+  )
+  return (
+    <group position={position} quaternion={quaternion}>
+      <mesh
+        geometry={
+          doubleHeaded ? DOUBLE_ARROW_OUTLINE_GEOMETRY : ARROW_OUTLINE_GEOMETRY
+        }
+        material={ARROW_OUTLINE_MATERIAL}
+        position={[0, 0, -0.005]}
+      />
+      <mesh
+        geometry={doubleHeaded ? DOUBLE_ARROW_GEOMETRY : ARROW_GEOMETRY}
+        material={ARROW_MATERIAL}
+      />
     </group>
   )
 }

@@ -1,0 +1,219 @@
+/* The solve screen: card, map, controls and step list. */
+
+.solve-card {
+  margin: 0 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 0.95rem;
+}
+
+.solve-card p {
+  margin: 0;
+}
+
+.solve-card p + p,
+.solve-card p + button {
+  margin-top: 8px;
+}
+
+.solve-card .solve-card-step + .solve-card-move {
+  margin-top: 2px;
+}
+
+.solve-card h2 {
+  margin: 0 0 4px;
+  font-size: 1.4rem;
+}
+
+.solve-card-note,
+.solve-card-step {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.solve-card-move {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.solve-card-move .move-notation {
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.solve-card-done {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  text-align: center;
+}
+
+.solve-card-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.color-name {
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.color-chip {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.3em;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+  vertical-align: -0.05em;
+}
+
+.move-notation {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-weight: 700;
+}
+
+/* Buttons shared by the card and the controls. */
+.solve-card button,
+.playback-controls button,
+.header-button {
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.solve-card .primary-button,
+.playback-controls .primary-button {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.solve-card button:disabled,
+.playback-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* While solving, the header holds the way back to painting. */
+.app-header-solving {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-header-solving h1 {
+  font-size: 1rem;
+}
+
+.header-button {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.playback-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.playback-controls .primary-button {
+  min-width: 5.5em;
+}
+
+.step-list {
+  position: relative; /* so each step's offsetTop is measured from the list */
+  max-height: 24dvh;
+  margin: 0 16px 16px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  list-style: none;
+  /* The step list scrolls; the rest of the page stays put. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+.step-list button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-list button[data-done] {
+  color: var(--text-muted);
+}
+
+.step-list button[aria-current='step'] {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-weight: 600;
+}
+
+.step-list button:disabled {
+  cursor: default;
+}
+
+.step-number {
+  min-width: 1.6em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.step-list .move-notation {
+  min-width: 2em;
+}
+
+.solve-card-with-map {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.solve-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cube-net {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 2px;
+}
+
+.cube-net-face {
+  display: grid;
+  grid-template-columns: repeat(3, 8px);
+  grid-auto-rows: 8px;
+  gap: 1px;
+  border-radius: 2px;
+}
+
+.cube-net-face span {
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.3);
+}
+
+.cube-net-face[data-active] {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
