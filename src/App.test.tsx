@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { Quaternion } from 'three'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CORNER_CELLS } from './cube/cubies.ts'
 import {
   applyMove,
@@ -35,6 +35,7 @@ const view = vi.hoisted(() => ({
   held: false,
   turning: null as Move | null,
   hint: null as Move | null,
+  letters: false,
   tap: (cell: number): void => void cell,
   swipeTo: (orientation: Quaternion): void => void orientation,
   turnDone: (): void => {},
@@ -49,12 +50,14 @@ vi.mock('./view/CubeView.tsx', () => ({
     turn?: Move | null
     onTurnDone?: () => void
     hint?: Move | null
+    letters?: boolean
   }) => {
     view.state = props.state
     view.highlight = props.highlight
     view.held = props.held ?? false
     view.turning = props.turn ?? null
     view.hint = props.hint ?? null
+    view.letters = props.letters ?? false
     view.tap = props.onCellTap
     view.swipeTo = props.onOrientationChange
     view.turnDone = props.onTurnDone ?? (() => {})
@@ -120,18 +123,16 @@ describe('App', () => {
     tap(7)
     expect(view.state[7]).toBe('white')
     expect(
-      screen.getByRole('button', { name: 'white, 1 of 9' }),
+      screen.getByRole('button', { name: 'white, 1/9' }),
     ).toBeInTheDocument()
 
     click(/^red,/)
     tap(7)
     expect(view.state[7]).toBe('red')
     expect(
-      screen.getByRole('button', { name: 'white, 0 of 9' }),
+      screen.getByRole('button', { name: 'white, 0/9' }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'red, 1 of 9' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'red, 1/9' })).toBeInTheDocument()
   })
 
   it('clears a cell tapped again with the same colour', () => {
@@ -430,6 +431,81 @@ describe('App', () => {
       expect(view.state).toEqual(emptyState())
       click('Undo')
       expect(view.state).toEqual(scrambled)
+    })
+  })
+
+  describe('settings', () => {
+    // The test browser can't open popovers, so the switches stay hidden here
+    // (the end-to-end tests open the menu for real): reach in regardless.
+    const toggle = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('checkbox', { name, hidden: true }))
+
+    /** Pretends to be a phone that can vibrate, recording each buzz. */
+    function vibrations() {
+      const vibrate = vi.fn<(pattern: VibratePattern) => boolean>(() => true)
+      Object.defineProperty(navigator, 'vibrate', {
+        value: vibrate,
+        configurable: true,
+      })
+      return vibrate
+    }
+    afterEach(() => {
+      // @ts-expect-error: removing the stand-in added by vibrations()
+      delete navigator.vibrate
+    })
+
+    it('writes colour letters on the cube and palette, and remembers that', () => {
+      const { unmount } = render(<App />)
+      expect(view.letters).toBe(false)
+      toggle(/^Letters on stickers/)
+      expect(view.letters).toBe(true)
+      expect(screen.getByRole('button', { name: /^green,/ })).toHaveTextContent(
+        /^G/,
+      )
+      unmount()
+      render(<App />)
+      expect(view.letters).toBe(true)
+      expect(
+        screen.getByRole('checkbox', {
+          name: /^Letters on stickers/,
+          hidden: true,
+        }),
+      ).toBeChecked()
+    })
+
+    it('has no vibration switch where the phone cannot vibrate', () => {
+      render(<App />)
+      expect(
+        screen.queryByRole('checkbox', { name: /^Vibration/, hidden: true }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('buzzes on a paint tap and on a problem, until turned off', () => {
+      const vibrate = vibrations()
+      render(<App />)
+      tap(0)
+      expect(vibrate).toHaveBeenLastCalledWith(10)
+      click('Solve') // 53 blank squares
+      expect(vibrate).toHaveBeenLastCalledWith([40, 60, 40])
+      toggle(/^Vibration/)
+      tap(1)
+      click('Solve')
+      expect(vibrate).toHaveBeenCalledTimes(2)
+    })
+
+    it('buzzes when the last move is done', async () => {
+      const vibrate = vibrations()
+      solver.solve = () => Promise.resolve(parseMoves("R U'"))
+      saveCube(applyMoves(solvedState(), parseMoves("U R'")))
+      render(<App />)
+      await act(async () => click('Solve'))
+      click("I'm ready")
+      click('Next')
+      act(() => view.turnDone())
+      expect(vibrate).not.toHaveBeenCalled()
+      click('Next')
+      act(() => view.turnDone())
+      expect(vibrate).toHaveBeenCalledWith([30, 50, 30, 50, 90])
     })
   })
 })

@@ -20,7 +20,7 @@ describe('Palette', () => {
     renderPalette()
     for (const color of COLORS) {
       expect(
-        screen.getByRole('button', { name: `${color}, ${counts[color]} of 9` }),
+        screen.getByRole('button', { name: `${color}, ${counts[color]}/9` }),
       ).toBeInTheDocument()
     }
     expect(screen.getByText('3/9')).toBeInTheDocument()
@@ -32,7 +32,7 @@ describe('Palette', () => {
       .getAllByRole('button')
       .filter((button) => button.getAttribute('aria-pressed') === 'true')
     expect(pressed).toHaveLength(1)
-    expect(pressed[0]).toHaveAccessibleName('green, 9 of 9')
+    expect(pressed[0]).toHaveAccessibleName('green, 9/9')
   })
 
   it('reports which colour was picked', () => {
@@ -40,6 +40,24 @@ describe('Palette', () => {
     renderPalette(onSelect)
     fireEvent.click(screen.getByRole('button', { name: /^blue,/ }))
     expect(onSelect).toHaveBeenCalledWith('blue')
+  })
+
+  it("shows each colour's letter only when letters are turned on", () => {
+    const { rerender } = renderPalette()
+    expect(screen.queryByText('G')).not.toBeInTheDocument()
+    rerender(
+      <Palette selected="green" counts={counts} onSelect={vi.fn()} letters />,
+    )
+    expect(screen.getByRole('button', { name: /^green,/ })).toHaveTextContent(
+      /^Ggreen, 9\/9$/,
+    )
+    expect(screen.getByRole('button', { name: /^blue,/ })).toHaveTextContent(
+      /^Bblue, 1\/9$/,
+    )
+    // The letter is only for seeing: screen readers already say the colour.
+    expect(screen.getByRole('button', { name: /^blue,/ })).toHaveAccessibleName(
+      'blue, 1/9',
+    )
   })
 
   it('flags colours that are complete or over the limit', () => {

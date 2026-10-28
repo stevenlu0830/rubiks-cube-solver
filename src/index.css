@@ -1,10 +1,10 @@
 :root {
   --bg: #f4f4f6;
   --text: #1c1c22;
-  --text-muted: #6b6b76;
+  --text-muted: #5c5c66;
   --border: #d6d6de;
-  --danger: #c4231a;
-  --success: #1a7f37;
+  --danger: #b3261e;
+  --success: #116329;
 
   font-family:
     system-ui,
@@ -54,6 +54,16 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
+}
+
+/* Read out by screen readers, but not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 button {

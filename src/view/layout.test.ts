@@ -53,4 +53,22 @@ describe('CUBIES', () => {
       expectClose(new Vector3(0, 1, 0).applyQuaternion(sticker.quaternion), up)
     }
   })
+
+  it('can spin every sticker in quarter turns about its own centre', () => {
+    for (const { sticker } of allStickers) {
+      const { normal, up } = STICKERS[sticker.cell]
+      expect(sticker.spun[0]).toBe(sticker.quaternion)
+      const right = new Vector3(...up).cross(new Vector3(...normal))
+      const tops = [
+        up,
+        right.clone().negate().toArray(),
+        up.map((v) => -v),
+        right.toArray(),
+      ]
+      sticker.spun.forEach((spun, quarters) => {
+        expectClose(new Vector3(0, 0, 1).applyQuaternion(spun), normal)
+        expectClose(new Vector3(0, 1, 0).applyQuaternion(spun), tops[quarters])
+      })
+    }
+  })
 })

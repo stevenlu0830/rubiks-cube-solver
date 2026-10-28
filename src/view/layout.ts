@@ -30,6 +30,12 @@ export interface StickerLayout {
    * so it faces outwards, with its top pointing "up" as drawn in the net.
    */
   quaternion: Quaternion
+  /**
+   * The same, spun 0–3 quarter turns anticlockwise about the sticker's own
+   * centre (spun[0] is `quaternion`). Stickers are square, so spinning only
+   * shows on a letter drawn on one: see letters.ts.
+   */
+  spun: readonly Quaternion[]
 }
 
 export interface CubieLayout {
@@ -37,20 +43,37 @@ export interface CubieLayout {
   stickers: StickerLayout[]
 }
 
+/** A flat sticker's own centre line, before it's turned into place. */
+const SPIN_AXIS = new Vector3(0, 0, 1)
+
 function stickerLayout(cell: number): StickerLayout {
   const { normal, up } = STICKERS[cell]
   const n = new Vector3(...normal)
   const u = new Vector3(...up)
   const right = new Vector3().crossVectors(u, n)
+  const quaternion = new Quaternion().setFromRotationMatrix(
+    new Matrix4().makeBasis(right, u, n),
+  )
   return {
     cell,
     offset: n
       .clone()
       .multiplyScalar(CUBIE_SIZE / 2 + STICKER_LIFT)
       .toArray(),
-    quaternion: new Quaternion().setFromRotationMatrix(
-      new Matrix4().makeBasis(right, u, n),
-    ),
+    quaternion,
+    spun: [
+      quaternion,
+      ...[1, 2, 3].map((quarters) =>
+        quaternion
+          .clone()
+          .multiply(
+            new Quaternion().setFromAxisAngle(
+              SPIN_AXIS,
+              (quarters * Math.PI) / 2,
+            ),
+          ),
+      ),
+    ],
   }
 }
 

@@ -10,7 +10,7 @@ import {
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import type { Cell, Color } from '../cube/state.ts'
-import { STICKER_COLORS } from './colors.ts'
+import { COLOR_LETTERS, LETTER_INK, STICKER_COLORS } from './colors.ts'
 import { CUBIE_SIZE, STICKER_CORNER_RADIUS, STICKER_SIZE } from './layout.ts'
 
 /**
@@ -80,46 +80,61 @@ const paints = (brightness: number) =>
 const PAINTS = paints(1)
 const DIMMED_PAINTS = paints(DIM)
 
-// Created on first use: it draws on a <canvas>, which only exists in a browser.
-let unpainted: { normal: Material; dimmed: Material } | undefined
+// Created on first use: they draw on a <canvas>, which only exists in a browser.
+const markedPaints = new Map<string, Material>()
+const marks = new Map<Cell, CanvasTexture>()
 
-/** The paint for a sticker; `dimmed` darkens it while other stickers are highlighted. */
-export function stickerMaterial(cell: Cell, dimmed = false): Material {
-  if (cell !== null) return (dimmed ? DIMMED_PAINTS : PAINTS)[cell]
-  if (!unpainted) {
-    const map = questionMarkTexture()
-    unpainted = {
-      normal: new MeshStandardMaterial({ map, roughness: 0.45 }),
-      dimmed: new MeshStandardMaterial({
-        map,
-        roughness: 0.45,
-        color: new ThreeColor(DIM, DIM, DIM),
-      }),
-    }
+/**
+ * The paint for a sticker. `dimmed` darkens it while other stickers are
+ * highlighted; `lettered` writes the colour's letter on it (W, Y, G…).
+ */
+export function stickerMaterial(
+  cell: Cell,
+  dimmed = false,
+  lettered = false,
+): Material {
+  if (cell !== null && !lettered) return (dimmed ? DIMMED_PAINTS : PAINTS)[cell]
+  const key = `${cell}/${dimmed}`
+  let paint = markedPaints.get(key)
+  if (!paint) {
+    paint = new MeshStandardMaterial({
+      map: markTexture(cell),
+      roughness: 0.45,
+      color: dimmed ? new ThreeColor(DIM, DIM, DIM) : undefined,
+    })
+    markedPaints.set(key, paint)
   }
-  return dimmed ? unpainted.dimmed : unpainted.normal
+  return paint
 }
 
 /**
- * Unpainted stickers are grey with a "?" so they can't be mistaken for
- * white ones, even in shadow.
+ * A sticker-sized picture of the cell's letter on its colour. Unpainted
+ * stickers are grey with a "?" so they can't be mistaken for white ones,
+ * even in shadow.
  */
-function questionMarkTexture(): CanvasTexture {
+function markTexture(cell: Cell): CanvasTexture {
+  const cached = marks.get(cell)
+  if (cached) return cached
+  const [background, mark, ink, weight] =
+    cell === null
+      ? [UNPAINTED_COLOR, '?', UNPAINTED_MARK_COLOR, 600]
+      : [STICKER_COLORS[cell], COLOR_LETTERS[cell], LETTER_INK[cell], 700]
   const size = 256
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = UNPAINTED_COLOR
+  ctx.fillStyle = background
   ctx.fillRect(0, 0, size, size)
-  ctx.fillStyle = UNPAINTED_MARK_COLOR
-  ctx.font = `600 ${size * 0.55}px system-ui, sans-serif`
+  ctx.fillStyle = ink
+  ctx.font = `${weight} ${size * 0.55}px system-ui, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('?', size / 2, size * 0.54)
+  ctx.fillText(mark, size / 2, size * 0.54)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
   texture.anisotropy = 8
+  marks.set(cell, texture)
   return texture
 }
 
@@ -137,7 +152,7 @@ function roundedSquare(size: number, radius: number): ShapeGeometry {
   shape.quadraticCurveTo(-h, -h, -h + radius, -h)
   const geometry = new ShapeGeometry(shape, 6)
   // ShapeGeometry uses raw x/y as texture coordinates; rescale them to 0–1
-  // so the "?" texture covers the sticker exactly once.
+  // so a "?" or letter texture covers the sticker exactly once.
   const uv = geometry.attributes.uv
   for (let i = 0; i < uv.count; i++) {
     uv.setXY(i, uv.getX(i) / size + 0.5, uv.getY(i) / size + 0.5)

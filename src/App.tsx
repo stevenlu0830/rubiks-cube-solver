@@ -15,6 +15,7 @@ import {
   type CubeState,
 } from './cube/state.ts'
 import { validateCube } from './cube/validate.ts'
+import { buzz, type Buzz } from './device/haptics.ts'
 import {
   centersFilled,
   editorReducer,
@@ -23,6 +24,12 @@ import {
 import { Palette } from './editor/Palette.tsx'
 import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
+import {
+  loadSettings,
+  saveSettings,
+  type Settings,
+} from './settings/settings.ts'
+import { SettingsMenu } from './settings/SettingsMenu.tsx'
 import { CubeNet } from './solve/CubeNet.tsx'
 import { turnedFace } from './solve/moveGuide.ts'
 import {
@@ -56,6 +63,7 @@ function App() {
     () => initialEditorState(loadCube() ?? undefined),
   )
   const [color, setColor] = useState<Color>('white')
+  const [settings, setSettings] = useState(loadSettings)
   /** Which way round the cube is shown; the solve uses it as the holding position. */
   const orientation = useRef(new Quaternion())
   const [solve, setSolve] = useState<{ cube: CubeState; status: Solve } | null>(
@@ -85,6 +93,16 @@ function App() {
   useEffect(() => {
     saveCube(cube)
   }, [cube])
+
+  function changeSettings(changed: Settings) {
+    setSettings(changed)
+    saveSettings(changed)
+  }
+
+  /** A buzz the user can feel, unless they've turned vibration off. */
+  function feel(kind: Buzz) {
+    if (settings.haptics) buzz(kind)
+  }
 
   // Start the solver's setup now, so it's ready by the time the cube is painted.
   useEffect(() => {
@@ -120,6 +138,7 @@ function App() {
     const validation = validateCube(cube)
     if (!validation.valid || validation.solved) {
       setSolve({ cube, status: { stage: 'checked', validation } })
+      if (!validation.valid) feel('problem')
       return
     }
 
@@ -156,16 +175,21 @@ function App() {
       <header
         className={playback ? 'app-header app-header-solving' : 'app-header'}
       >
-        {playback && (
-          <button
-            type="button"
-            className="header-button"
-            onClick={() => setSolve(null)}
-          >
-            ‹ Edit cube
-          </button>
-        )}
+        <div className="header-side">
+          {playback && (
+            <button
+              type="button"
+              className="header-button"
+              onClick={() => setSolve(null)}
+            >
+              ‹ Edit cube
+            </button>
+          )}
+        </div>
         <h1>Rubik's Cube Solver</h1>
+        <div className="header-side header-side-end">
+          <SettingsMenu settings={settings} onChange={changeSettings} />
+        </div>
       </header>
 
       {playback ? (
@@ -190,6 +214,7 @@ function App() {
             selected={color}
             counts={colorCounts(cube)}
             onSelect={setColor}
+            letters={settings.letters}
           />
           {message ? (
             <SolveStatus status={message} onClose={() => setSolve(null)} />
@@ -206,7 +231,10 @@ function App() {
       <main className="cube-stage">
         <CubeView
           state={shownCube}
-          onCellTap={(cell) => dispatch({ type: 'paint', cell, color })}
+          onCellTap={(cell) => {
+            dispatch({ type: 'paint', cell, color })
+            feel('tap')
+          }}
           highlight={
             validation && !validation.valid ? validation.cells : undefined
           }
@@ -217,8 +245,15 @@ function App() {
           held={playback !== null}
           turn={playback?.turning?.move ?? null}
           turnDurationMs={turnDurationMs(speed)}
-          onTurnDone={() => dispatchPlayback({ type: 'turnDone' })}
+          onTurnDone={() => {
+            dispatchPlayback({ type: 'turnDone' })
+            const done = playback?.turning?.to
+            if (done !== undefined && done === playback?.moves.length) {
+              feel('solved')
+            }
+          }}
           hint={nextMove}
+          letters={settings.letters}
         />
       </main>
 

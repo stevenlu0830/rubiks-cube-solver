@@ -1,0 +1,52 @@
+.settings-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.settings-panel {
+  /* Popovers open centred on the screen; pin this one under the gear. */
+  inset: auto;
+  top: calc(env(safe-area-inset-top) + 56px);
+  right: calc(env(safe-area-inset-right) + 12px);
+  margin: 0;
+  width: min(300px, calc(100vw - 24px));
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.2);
+  /* It sits inside the header, whose text is centred. */
+  text-align: left;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Big enough to hit with a thumb. */
+  min-height: 52px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.setting + .setting {
+  border-top: 1px solid var(--border);
+}
+
+.setting input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--text);
+}
+
+.setting small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

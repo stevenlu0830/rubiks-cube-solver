@@ -3,17 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Installing to the home screen: name, icons and colours (and offline, see src/device/offline.ts). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta
+      name="description"
+      content="Paint your scrambled Rubik's cube, then follow the solution step by step."
+    />
     <!--
       Mobile setup:
-      - maximum-scale=1, user-scalable=no: stop pinch and double-tap zoom, so
-        touches reach the cube instead of zooming the page. iOS Safari ignores
-        this for accessibility, so the CSS backs it up with touch-action.
+      - Pinch zoom stays allowed, so anyone can enlarge the text. Touches on
+        the cube never zoom (touch-action: none in App.css), and buttons
+        never double-tap zoom (touch-action: manipulation in index.css).
       - viewport-fit=cover: draw under the notch; safe-area padding in
         App.css keeps content clear of it.
     -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta
       name="theme-color"

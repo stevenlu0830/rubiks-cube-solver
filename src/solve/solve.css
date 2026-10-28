@@ -101,14 +101,7 @@
   cursor: default;
 }
 
-/* While solving, the header holds the way back to painting. */
-.app-header-solving {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
+/* While solving, the header also holds the way back to painting. */
 .app-header-solving h1 {
   font-size: 1rem;
 }
@@ -116,6 +109,7 @@
 .header-button {
   padding: 6px 12px;
   font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .playback-controls {

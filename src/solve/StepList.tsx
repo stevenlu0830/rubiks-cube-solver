@@ -30,7 +30,13 @@ export function StepList({ playback, onJump }: StepListProps) {
   }, [step])
 
   return (
-    <ol className="step-list" aria-label="Steps" ref={list}>
+    <ol
+      className="step-list"
+      aria-label="Steps"
+      ref={list}
+      // Lets keyboard users scroll the list even while its steps are disabled.
+      tabIndex={0}
+    >
       {moves.map((move, i) => (
         <li key={i}>
           <button

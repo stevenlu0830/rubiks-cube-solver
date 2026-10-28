@@ -5,14 +5,17 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 import { Quaternion, Vector2, type Group, type PerspectiveCamera } from 'three'
 import type { Move } from '../cube/moves.ts'
 import type { CubeState } from '../cube/state.ts'
+import { canDraw3D } from '../device/webgl.ts'
 import { arrowPlacement } from './arrows.ts'
 import { CAMERA_DIRECTION, CAMERA_FOV, fitCameraDistance } from './camera.ts'
 import { createGestureTracker, type SwipeDirection } from './gestures.ts'
 import { CUBIES, type CubieLayout } from './layout.ts'
+import { letterSpins } from './letters.ts'
 import {
   ARROW_GEOMETRY,
   ARROW_MATERIAL,
@@ -57,6 +60,8 @@ interface CubeViewProps {
   onTurnDone?: () => void
   /** A face turn to point out with an arrow. */
   hint?: Move | null
+  /** Write each sticker's colour letter on it (W, Y, G…), for colour-blind users. */
+  letters?: boolean
 }
 
 /**
@@ -65,6 +70,14 @@ interface CubeViewProps {
  * changes `state` itself: that's up to the parent.
  */
 export function CubeView(props: CubeViewProps) {
+  if (!canDraw3D()) {
+    return (
+      <p className="no-3d" role="alert">
+        This browser can't draw the 3D cube (it needs WebGL 2, which is off or
+        not supported here). Try updating the browser, or another one.
+      </p>
+    )
+  }
   return (
     <Canvas
       // Render at the screen's full pixel density (up to 3× on recent phones) so edges stay sharp.
@@ -95,6 +108,7 @@ function TurnableCube({
   turnDurationMs = 500,
   onTurnDone,
   hint = null,
+  letters = false,
 }: CubeViewProps) {
   const cube = useRef<Group>(null!)
   const highlighted = useMemo(() => new Set(highlight), [highlight])
@@ -105,12 +119,18 @@ function TurnableCube({
 
   /** Where the cube ends up once the current swipe turn (if any) finishes. */
   const orientation = useRef(new Quaternion())
+  /** Where it was when it last stood still: letters are turned upright for this. */
+  const [restingOrientation, setRestingOrientation] = useState(UNTURNED)
   const swipeTurn = useRef<{
     from: Quaternion
     to: Quaternion
     startedAt: number
   } | null>(null)
   const ignoreTouches = held || disabled
+  const spins = useMemo(
+    () => (letters ? letterSpins(held ? UNTURNED : restingOrientation) : null),
+    [letters, held, restingOrientation],
+  )
 
   // Entering or leaving the holding position. Held states are already turned
   // the way the user sees them, so show them unturned; on leaving, go back
@@ -186,6 +206,7 @@ function TurnableCube({
     } else {
       cube.current.quaternion.copy(to)
       swipeTurn.current = null
+      setRestingOrientation(to)
     }
   })
 
@@ -194,6 +215,7 @@ function TurnableCube({
       <Cubies
         state={state}
         highlighted={highlighted}
+        spins={spins}
         turn={turn}
         turnDurationMs={turnDurationMs}
         onTurnDone={onTurnDone}
@@ -206,6 +228,8 @@ function TurnableCube({
 interface CubiesProps {
   state: CubeState
   highlighted: ReadonlySet<number>
+  /** With letters on: how far to spin each cell's sticker so its letter is upright. */
+  spins: readonly number[] | null
   turn: Move | null
   turnDurationMs: number
   onTurnDone?: () => void
@@ -220,6 +244,7 @@ interface CubiesProps {
 function Cubies({
   state,
   highlighted,
+  spins,
   turn,
   turnDurationMs,
   onTurnDone,
@@ -229,6 +254,8 @@ function Cubies({
   const animation = useRef<{ startedAt: number; finished: boolean } | null>(
     null,
   )
+
+  const rotation = useMemo(() => turn && turnRotation(turn), [turn])
 
   useLayoutEffect(() => {
     pivot.current.quaternion.identity()
@@ -240,7 +267,7 @@ function Cubies({
 
   useFrame(() => {
     const current = animation.current
-    if (!turn || !current || current.finished) return
+    if (!rotation || !current || current.finished) return
     const progress = Math.min(
       1,
       (performance.now() - current.startedAt) / turnDurationMs,
@@ -248,8 +275,10 @@ function Cubies({
     // Gentle start and stop, like turning a real cube.
     const eased =
       progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2
-    const { axis, angle } = turnRotation(turn)
-    pivot.current.quaternion.setFromAxisAngle(axis, angle * eased)
+    pivot.current.quaternion.setFromAxisAngle(
+      rotation.axis,
+      rotation.angle * eased,
+    )
     if (progress < 1) {
       invalidate()
     } else {
@@ -266,6 +295,7 @@ function Cubies({
       cubie={cubie}
       state={state}
       highlighted={highlighted}
+      spins={spins}
     />
   )
   return (
@@ -280,22 +310,24 @@ interface CubieProps {
   cubie: CubieLayout
   state: CubeState
   highlighted: ReadonlySet<number>
+  spins: readonly number[] | null
 }
 
-function Cubie({ cubie, state, highlighted }: CubieProps) {
+function Cubie({ cubie, state, highlighted, spins }: CubieProps) {
   return (
     <group position={cubie.position}>
       <mesh geometry={BODY_GEOMETRY} material={BODY_MATERIAL} />
-      {cubie.stickers.map(({ cell, offset, quaternion }) => (
+      {cubie.stickers.map(({ cell, offset, spun }) => (
         <mesh
           key={cell}
           geometry={STICKER_GEOMETRY}
           material={stickerMaterial(
             state[cell],
             highlighted.size > 0 && !highlighted.has(cell),
+            spins !== null,
           )}
           position={offset}
-          quaternion={quaternion}
+          quaternion={spun[spins?.[cell] ?? 0]}
           // Tag each sticker with its cell, so a tap can tell which cell was hit.
           userData={{ cell }}
         >

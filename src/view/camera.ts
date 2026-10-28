@@ -18,6 +18,12 @@ export const CAMERA_DIRECTION = new Vector3().setFromSphericalCoords(
 )
 export const CAMERA_FOV = 30
 
+/** The 3D direction that points straight up the screen. */
+export const SCREEN_UP = (() => {
+  const right = new Vector3(0, 1, 0).cross(CAMERA_DIRECTION).normalize()
+  return CAMERA_DIRECTION.clone().cross(right)
+})()
+
 /** Half the cube's outer size: the cube spans -1.5 to 1.5 on each axis. */
 const CUBE_HALF_SIZE = 1.5
 

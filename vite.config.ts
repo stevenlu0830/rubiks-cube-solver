@@ -1,4 +1,8 @@
 import react from '@vitejs/plugin-react'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import type { Plugin } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 
 /**
@@ -19,9 +23,51 @@ const fixCubejs = {
   },
 }
 
+/**
+ * Tells the service worker (public/sw.js) which files to save for offline
+ * use. Their names change with every build (index-3f2a1b.js), so once the
+ * build has written them all, list them in the built sw.js, along with a
+ * version that changes whenever any file's contents do.
+ */
+function offlineFiles(): Plugin {
+  let outDir = ''
+  return {
+    name: 'offline-files',
+    apply: 'build',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir)
+    },
+    closeBundle() {
+      const workerPath = join(outDir, 'sw.js')
+      const files = readdirSync(outDir, { recursive: true, encoding: 'utf8' })
+        .map((file) => file.replaceAll('\\', '/'))
+        .filter((file) => file !== 'sw.js')
+        .filter((file) => statSync(join(outDir, file)).isFile())
+        .sort()
+      const hash = createHash('sha256')
+      for (const file of files) {
+        hash.update(file).update(readFileSync(join(outDir, file)))
+      }
+      const version = hash.digest('hex').slice(0, 12)
+
+      const placeholders = ["const VERSION = 'dev'", 'const FILES = []']
+      const worker = readFileSync(workerPath, 'utf8')
+      if (!placeholders.every((line) => worker.includes(line))) {
+        throw new Error('offline-files: public/sw.js has changed; check this')
+      }
+      writeFileSync(
+        workerPath,
+        worker
+          .replace(placeholders[0], `const VERSION = '${version}'`)
+          .replace(placeholders[1], `const FILES = ${JSON.stringify(files)}`),
+      )
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), offlineFiles()],
   // Relative asset paths, so the build works at any URL path
   // (e.g. GitHub Pages serves it under /rubiks-cube-solver/).
   base: './',
@@ -38,7 +84,11 @@ export default defineConfig({
           name: 'unit',
           environment: 'jsdom',
           setupFiles: ['./src/test/setup.ts'],
-          exclude: [...configDefaults.exclude, '**/*.slow.test.ts'],
+          exclude: [
+            ...configDefaults.exclude,
+            '**/*.slow.test.ts',
+            'e2e/**', // Playwright's, run by `npm run test:e2e`
+          ],
         },
       },
       {
