@@ -1,3 +1,4 @@
+import basicSsl from '@vitejs/plugin-basic-ssl'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -66,8 +67,15 @@ function offlineFiles(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), offlineFiles()],
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    react(),
+    offlineFiles(),
+    // `npm run dev:phone`: phones only let https:// pages use the camera, so
+    // serve over https with a home-made certificate. The phone warns about it
+    // once; that's expected (see README).
+    mode === 'phone' && basicSsl(),
+  ],
   // Relative asset paths, so the build works at any URL path
   // (e.g. GitHub Pages serves it under /rubiks-cube-solver/).
   base: './',
@@ -102,4 +110,4 @@ export default defineConfig({
       },
     ],
   },
-})
+}))

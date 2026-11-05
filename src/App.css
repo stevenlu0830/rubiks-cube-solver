@@ -31,6 +31,11 @@
   font-size: 1.25rem;
 }
 
+/* While solving or scanning, the header also holds the way back to painting. */
+.app-header-compact h1 {
+  font-size: 1rem;
+}
+
 .cube-stage {
   position: relative;
   flex: 1;
@@ -82,8 +87,37 @@
   cursor: default;
 }
 
-.solve-button {
+/* Scan (where there's a camera) and Solve, side by side. */
+.main-actions {
+  display: flex;
+  gap: 8px;
   margin: 0 16px 16px;
+}
+
+.scan-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scan-button:active:not(:disabled) {
+  background: var(--border);
+}
+
+.scan-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.solve-button {
+  flex: 1;
   padding: 14px;
   border: none;
   border-radius: 999px;

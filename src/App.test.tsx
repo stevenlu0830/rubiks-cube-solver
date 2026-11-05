@@ -22,6 +22,7 @@ import { saveCube } from './editor/storage.ts'
 import { pauseMs } from './solve/playback.ts'
 import { toFaceletString } from './solver/facelets.ts'
 import { SolverError } from './solver/solver.ts'
+import { fakeCamera, removeFakeCamera } from './test/fakeCamera.ts'
 import { turnBySwipe } from './view/orientation.ts'
 import App from './App.tsx'
 
@@ -431,6 +432,50 @@ describe('App', () => {
       expect(view.state).toEqual(emptyState())
       click('Undo')
       expect(view.state).toEqual(scrambled)
+    })
+  })
+
+  describe('scanning', () => {
+    afterEach(() => removeFakeCamera())
+
+    const scanner = () =>
+      screen.queryByRole('region', { name: 'Scan your cube' })
+
+    it('has no Scan button where the browser cannot use a camera', () => {
+      render(<App />)
+      expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
+    })
+
+    it('shows the camera instead of the painting tools, until Done', async () => {
+      const camera = fakeCamera()
+      render(<App />)
+      click('Solve') // a message about blank squares, with them highlighted
+      await act(async () => click('Scan'))
+
+      expect(scanner()).toBeInTheDocument()
+      expect(camera.getUserMedia).toHaveBeenCalled()
+      expect(screen.queryByRole('group', { name: 'Paint colour' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
+      expect(view.highlight).toBeUndefined()
+      expect(view.tap).toBeUndefined() // tapping the cube doesn't paint
+
+      click('‹ Done')
+      expect(scanner()).toBeNull()
+      expect(camera.opened[0].track.stop).toHaveBeenCalled()
+      expect(
+        screen.getByRole('group', { name: 'Paint colour' }),
+      ).toBeInTheDocument()
+      tap(0)
+      expect(view.state[0]).toBe('white')
+    })
+
+    it("can't start while solving", () => {
+      fakeCamera()
+      solver.solve = () => new Promise(() => {}) // never answers
+      saveCube(applyMoves(solvedState(), parseMoves('R U')))
+      render(<App />)
+      click('Solve')
+      expect(screen.getByRole('button', { name: 'Scan' })).toBeDisabled()
     })
   })
 

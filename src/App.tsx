@@ -24,6 +24,8 @@ import {
 import { Palette } from './editor/Palette.tsx'
 import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
+import { canOfferCamera } from './scan/camera.ts'
+import { CameraIcon, Scanner } from './scan/Scanner.tsx'
 import {
   loadSettings,
   saveSettings,
@@ -64,6 +66,8 @@ function App() {
   )
   const [color, setColor] = useState<Color>('white')
   const [settings, setSettings] = useState(loadSettings)
+  /** True while reading the cube with the camera, instead of painting it. */
+  const [scanning, setScanning] = useState(false)
   /** Which way round the cube is shown; the solve uses it as the holding position. */
   const orientation = useRef(new Quaternion())
   const [solve, setSolve] = useState<{ cube: CubeState; status: Solve } | null>(
@@ -173,7 +177,9 @@ function App() {
   return (
     <div className="app">
       <header
-        className={playback ? 'app-header app-header-solving' : 'app-header'}
+        className={
+          playback || scanning ? 'app-header app-header-compact' : 'app-header'
+        }
       >
         <div className="header-side">
           {playback && (
@@ -183,6 +189,15 @@ function App() {
               onClick={() => setSolve(null)}
             >
               ‹ Edit cube
+            </button>
+          )}
+          {scanning && (
+            <button
+              type="button"
+              className="header-button"
+              onClick={() => setScanning(false)}
+            >
+              ‹ Done
             </button>
           )}
         </div>
@@ -208,6 +223,8 @@ function App() {
             />
           }
         />
+      ) : scanning ? (
+        <Scanner />
       ) : (
         <>
           <Palette
@@ -231,10 +248,15 @@ function App() {
       <main className="cube-stage">
         <CubeView
           state={shownCube}
-          onCellTap={(cell) => {
-            dispatch({ type: 'paint', cell, color })
-            feel('tap')
-          }}
+          // No painting while scanning: there's no palette to pick a colour from.
+          onCellTap={
+            scanning
+              ? undefined
+              : (cell) => {
+                  dispatch({ type: 'paint', cell, color })
+                  feel('tap')
+                }
+          }
           highlight={
             validation && !validation.valid ? validation.cells : undefined
           }
@@ -265,7 +287,7 @@ function App() {
             onJump={(step) => dispatchPlayback({ type: 'jump', step })}
           />
         </>
-      ) : (
+      ) : scanning ? null : (
         <>
           <nav className="toolbar" aria-label="Editing">
             <button
@@ -291,14 +313,30 @@ function App() {
               Reset
             </button>
           </nav>
-          <button
-            type="button"
-            className="solve-button"
-            onClick={handleSolve}
-            disabled={status?.stage === 'solving'}
-          >
-            {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
-          </button>
+          <div className="main-actions">
+            {canOfferCamera() && (
+              <button
+                type="button"
+                className="scan-button"
+                onClick={() => {
+                  setSolve(null)
+                  setScanning(true)
+                }}
+                disabled={status?.stage === 'solving'}
+              >
+                <CameraIcon />
+                Scan
+              </button>
+            )}
+            <button
+              type="button"
+              className="solve-button"
+              onClick={handleSolve}
+              disabled={status?.stage === 'solving'}
+            >
+              {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
+            </button>
+          </div>
         </>
       )}
     </div>

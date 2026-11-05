@@ -101,11 +101,6 @@
   cursor: default;
 }
 
-/* While solving, the header also holds the way back to painting. */
-.app-header-solving h1 {
-  font-size: 1rem;
-}
-
 .header-button {
   padding: 6px 12px;
   font-size: 0.85rem;

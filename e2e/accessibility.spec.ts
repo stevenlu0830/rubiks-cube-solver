@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { solvedState } from '../src/cube/state.ts'
 import { savedCube, SCRAMBLED } from './cubes.ts'
+import { fakeCamera } from './fakeCamera.ts'
 
 /**
  * Automatic accessibility checks (axe), including text contrast, on every
@@ -36,6 +37,20 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Solve' }).click() // a problem: all blank
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Settings' }).click()
+      await expectNoProblems(page)
+    })
+
+    test('the scan screen, and its message when the camera is blocked', async ({
+      page,
+    }) => {
+      await page.addInitScript(fakeCamera, { refuseFirst: true })
+      await page.goto('./')
+      await page.getByRole('button', { name: 'Scan' }).click()
+      await expect(page.getByRole('alert')).toBeVisible()
+      await expectNoProblems(page)
+
+      await page.getByRole('button', { name: 'Try again' }).click()
+      await expect(page.locator('.scan-guide')).toBeVisible()
       await expectNoProblems(page)
     })
 

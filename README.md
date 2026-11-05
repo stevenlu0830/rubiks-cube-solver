@@ -18,7 +18,7 @@ npm run dev
 | Command             | What it does                                                                                         |
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
 | `npm run dev`       | Start the dev server on this computer                                                                |
-| `npm run dev:phone` | Same, but reachable from a phone on the same Wi-Fi (use the Network URL it prints)                   |
+| `npm run dev:phone` | Same, but reachable from a phone on the same Wi-Fi, over https:// so the camera works (see below)    |
 | `npm test`          | Run the tests once (`npm run test:watch` to re-run on save)                                          |
 | `npm run test:slow` | Run the long checks too, e.g. solving 1,000 random cubes (about 35 seconds)                          |
 | `npm run test:e2e`  | Build, then test the whole app in real browsers posing as an iPhone and an Android phone (see below) |
@@ -39,9 +39,11 @@ These are copies of the browsers' engines, not real phones, so also try the app 
 
 ## Trying it on a real phone
 
-1. `npm run dev:phone`, then open the Network URL it prints on your phone (same Wi-Fi).
+1. `npm run dev:phone`, then open the Network URL it prints (`https://192.168…`) on your phone (same Wi-Fi). Phones only let https:// pages use the camera, so this serves the app with a home-made security certificate, and the phone warns about it the first time. That's expected for your own computer: on iPhone tap **Show Details → visit this website**; on Android tap **Advanced → Proceed**.
 2. Add `?fps` to the end of the address to show the frame rate in the corner. Turns should stay near 60 fps (or 120 on some phones), and "slowest" should stay under about 20 ms.
 3. On the published site, **Add to Home Screen** (iPhone, from the Share menu) or **Install app** (Android Chrome) to use it like an app. After the first visit it also works with no internet.
+
+**Scan** (next to Solve) opens the back camera, with a grid to line one side of the cube up in. The camera switches off when you tap **Done** or switch to another app.
 
 The ⚙ menu has **Letters on stickers** (W, Y, G, B, R, O, for telling colours apart) and, on phones that can vibrate, **Vibration**.
 
