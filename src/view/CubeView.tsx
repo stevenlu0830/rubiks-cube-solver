@@ -33,8 +33,8 @@ import {
 import { turnBySwipe } from './orientation.ts'
 import { isInTurningLayer, turnRotation } from './turns.ts'
 
-/** How long a swipe's quarter turn of the whole cube takes to animate. */
-const SWIPE_TURN_MS = 250
+/** How long a quarter turn of the whole cube takes to animate. */
+const CUBE_TURN_MS = 250
 
 const UNTURNED = new Quaternion()
 
@@ -44,7 +44,15 @@ interface CubeViewProps {
   onCellTap?: (cell: number) => void
   /** Cells to point out (e.g. ones painted wrong); the rest are dimmed. */
   highlight?: readonly number[]
-  /** Called with the cube's new orientation each time a swipe turns it. */
+  /**
+   * Which way round to show the cube. When it changes, the cube turns there
+   * with the same animation as a swipe, so the app can turn it too.
+   */
+  orientation?: Quaternion
+  /**
+   * Called when a swipe asks to turn the cube, with where it would end up.
+   * It turns once the app passes that back in as `orientation`.
+   */
   onOrientationChange?: (orientation: Quaternion) => void
   /** Ignore swipes and taps, e.g. while the solver is working. */
   disabled?: boolean
@@ -65,9 +73,9 @@ interface CubeViewProps {
 }
 
 /**
- * Draws the cube in 3D. While painting, it turns when the user swipes and
- * reports taps on stickers; while solving, it animates face turns. It never
- * changes `state` itself: that's up to the parent.
+ * Draws the cube in 3D. While painting, it reports swipes (to turn it) and
+ * taps on stickers; while solving, it animates face turns. It never changes
+ * `state` or `orientation` itself: that's up to the parent.
  */
 export function CubeView(props: CubeViewProps) {
   if (!canDraw3D()) {
@@ -101,6 +109,7 @@ function TurnableCube({
   state,
   onCellTap,
   highlight,
+  orientation = UNTURNED,
   onOrientationChange,
   disabled = false,
   held = false,
@@ -117,43 +126,57 @@ function TurnableCube({
   const raycaster = useThree((s) => s.raycaster)
   const invalidate = useThree((s) => s.invalidate)
 
-  /** Where the cube ends up once the current swipe turn (if any) finishes. */
-  const orientation = useRef(new Quaternion())
   /** Where it was when it last stood still: letters are turned upright for this. */
-  const [restingOrientation, setRestingOrientation] = useState(UNTURNED)
-  const swipeTurn = useRef<{
+  const [restingOrientation, setRestingOrientation] = useState(orientation)
+  /** The whole cube turning, by a swipe or by the app; null when still. */
+  const cubeTurn = useRef<{
     from: Quaternion
     to: Quaternion
     startedAt: number
+    durationMs: number
   } | null>(null)
+  /** What was last shown, to tell a turn from entering or leaving the holding position. */
+  const shown = useRef<{ orientation: Quaternion; held: boolean } | null>(null)
   const ignoreTouches = held || disabled
   const spins = useMemo(
     () => (letters ? letterSpins(held ? UNTURNED : restingOrientation) : null),
     [letters, held, restingOrientation],
   )
 
-  // Entering or leaving the holding position. Held states are already turned
-  // the way the user sees them, so show them unturned; on leaving, go back
-  // to the painting view exactly as it was.
   useLayoutEffect(() => {
-    swipeTurn.current = null
-    cube.current.quaternion.copy(held ? UNTURNED : orientation.current)
+    const before = shown.current
+    shown.current = { orientation, held }
+    if (before?.held === held) {
+      // A new orientation: turn there from wherever the cube is now, even
+      // part way through another turn. A half turn takes twice as long.
+      if (held || before.orientation.equals(orientation)) return
+      const from = cube.current.quaternion.clone()
+      cubeTurn.current = {
+        from,
+        to: orientation,
+        startedAt: performance.now(),
+        durationMs:
+          CUBE_TURN_MS * Math.max(1, from.angleTo(orientation) / (Math.PI / 2)),
+      }
+    } else {
+      // First shown, or entering or leaving the holding position: jump
+      // straight there. Held states are already turned the way the user sees
+      // them, so they're shown unturned; on leaving, the painting view comes
+      // back exactly as it was.
+      cubeTurn.current = null
+      cube.current.quaternion.copy(held ? UNTURNED : orientation)
+    }
     invalidate()
-  }, [held, invalidate])
+  }, [orientation, held, invalidate])
 
   const handleSwipe = useEffectEvent((direction: SwipeDirection) => {
-    if (ignoreTouches || swipeTurn.current) return // e.g. still turning
-    const from = orientation.current
-    const to = turnBySwipe(from, direction)
-    orientation.current = to
-    swipeTurn.current = { from, to, startedAt: performance.now() }
-    invalidate()
-    onOrientationChange?.(to)
+    if (ignoreTouches || cubeTurn.current) return // e.g. still turning
+    onOrientationChange?.(turnBySwipe(orientation, direction))
   })
 
   const handleTap = useEffectEvent((clientX: number, clientY: number) => {
     // While the cube turns, stickers are moving; a tap could hit the wrong one.
-    if (ignoreTouches || swipeTurn.current) return
+    if (ignoreTouches || cubeTurn.current) return
     // Find what's under the finger. Hits are sorted nearest first; if that's
     // the black plastic between stickers, there's no cell to paint.
     const rect = canvas.getBoundingClientRect()
@@ -190,22 +213,19 @@ function TurnableCube({
     }
   }, [canvas])
 
-  // Runs before each redraw while a swipe turn is animating.
+  // Runs before each redraw while the whole cube is turning.
   useFrame(() => {
-    if (!swipeTurn.current) return
-    const { from, to, startedAt } = swipeTurn.current
+    if (!cubeTurn.current) return
+    const { from, to, startedAt, durationMs } = cubeTurn.current
     // Progress comes from the clock, not a frame count, so a slow phone finishes on time.
-    const progress = Math.min(
-      1,
-      (performance.now() - startedAt) / SWIPE_TURN_MS,
-    )
+    const progress = Math.min(1, (performance.now() - startedAt) / durationMs)
     const eased = 1 - (1 - progress) ** 3 // fast start, gentle stop
     cube.current.quaternion.slerpQuaternions(from, to, eased)
     if (progress < 1) {
       invalidate() // ask for the next frame
     } else {
       cube.current.quaternion.copy(to)
-      swipeTurn.current = null
+      cubeTurn.current = null
       setRestingOrientation(to)
     }
   })

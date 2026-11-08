@@ -58,6 +58,44 @@ describe('painting', () => {
   })
 })
 
+describe('paintCells', () => {
+  const side: EditorAction = {
+    type: 'paintCells',
+    paints: [
+      [18, 'green'],
+      [19, 'red'],
+      [22, 'green'],
+    ],
+  }
+
+  it('paints every cell given, and nothing else', () => {
+    const { cube } = run([side])
+    expect(cube[18]).toBe('green')
+    expect(cube[19]).toBe('red')
+    expect(cube[22]).toBe('green')
+    expect(cube.filter((cell) => cell !== null)).toHaveLength(3)
+  })
+
+  it('is undone in one step', () => {
+    const state = run([paint(0, 'white'), side])
+    expect(state.history).toHaveLength(2)
+    expect(run([{ type: 'undo' }], state).cube).toEqual(
+      run([paint(0, 'white')]).cube,
+    )
+  })
+
+  it('replaces colours, and leaves a cell already that colour as it is', () => {
+    const { cube } = run([paint(18, 'green'), paint(19, 'blue'), side])
+    expect(cube[18]).toBe('green') // not cleared, unlike tapping it again
+    expect(cube[19]).toBe('red')
+  })
+
+  it('adds no undo step when nothing changes', () => {
+    const state = run([side])
+    expect(editorReducer(state, side)).toBe(state)
+  })
+})
+
 describe('colorCounts', () => {
   it('counts nothing on a blank cube', () => {
     expect(colorCounts(emptyState())).toEqual(allCounts(0))

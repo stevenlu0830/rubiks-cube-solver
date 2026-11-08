@@ -23,7 +23,7 @@ import { pauseMs } from './solve/playback.ts'
 import { toFaceletString } from './solver/facelets.ts'
 import { SolverError } from './solver/solver.ts'
 import { fakeCamera, removeFakeCamera } from './test/fakeCamera.ts'
-import { turnBySwipe } from './view/orientation.ts'
+import { frontCells, turnBySwipe } from './view/orientation.ts'
 import App from './App.tsx'
 
 // The real 3D view needs WebGL, which the test environment doesn't have.
@@ -33,6 +33,7 @@ import App from './App.tsx'
 const view = vi.hoisted(() => ({
   state: [] as CubeState,
   highlight: undefined as readonly number[] | undefined,
+  orientation: undefined as Quaternion | undefined,
   held: false,
   turning: null as Move | null,
   hint: null as Move | null,
@@ -46,6 +47,7 @@ vi.mock('./view/CubeView.tsx', () => ({
     state: CubeState
     onCellTap: (cell: number) => void
     highlight?: readonly number[]
+    orientation?: Quaternion
     onOrientationChange: (orientation: Quaternion) => void
     held?: boolean
     turn?: Move | null
@@ -55,6 +57,7 @@ vi.mock('./view/CubeView.tsx', () => ({
   }) => {
     view.state = props.state
     view.highlight = props.highlight
+    view.orientation = props.orientation
     view.held = props.held ?? false
     view.turning = props.turn ?? null
     view.hint = props.hint ?? null
@@ -237,7 +240,9 @@ describe('App', () => {
         return Promise.resolve(parseMoves('R U'))
       }
       renderWith(scrambled)
-      act(() => view.swipeTo(turnBySwipe(new Quaternion(), 'left'))) // red side now in front
+      const turned = turnBySwipe(new Quaternion(), 'left') // red side now in front
+      act(() => view.swipeTo(turned))
+      expect(view.orientation).toBe(turned) // so the 3D cube turns there
       await act(async () => click('Solve'))
       expect(screen.getByLabelText('How to hold your cube')).toHaveTextContent(
         'Hold your cube with red facing you and white on top',
@@ -456,17 +461,30 @@ describe('App', () => {
       expect(camera.getUserMedia).toHaveBeenCalled()
       expect(screen.queryByRole('group', { name: 'Paint colour' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
-      expect(view.highlight).toBeUndefined()
       expect(view.tap).toBeUndefined() // tapping the cube doesn't paint
 
       click('‹ Done')
       expect(scanner()).toBeNull()
+      expect(view.highlight).toBeUndefined()
       expect(camera.opened[0].track.stop).toHaveBeenCalled()
       expect(
         screen.getByRole('group', { name: 'Paint colour' }),
       ).toBeInTheDocument()
       tap(0)
       expect(view.state[0]).toBe('white')
+    })
+
+    it('outlines the side facing you, and follows it as the cube turns', async () => {
+      fakeCamera()
+      render(<App />)
+      await act(async () => click('Scan'))
+      expect(view.highlight).toEqual(frontCells(new Quaternion()))
+
+      const turned = turnBySwipe(new Quaternion(), 'down') // top side now in front
+      act(() => view.swipeTo(turned))
+      expect(view.orientation).toBe(turned)
+      expect(view.highlight).toEqual(frontCells(turned))
+      expect(view.highlight).toContain(cellIndex('U', CENTER))
     })
 
     it("can't start while solving", () => {

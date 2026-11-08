@@ -1,6 +1,6 @@
 import { Matrix4, Quaternion, Vector3 } from 'three'
 import { faceNormal, STICKERS, stickerIndexAt } from '../cube/geometry.ts'
-import { FACES, type Face } from '../cube/state.ts'
+import { cellIndex, FACES, type Face } from '../cube/state.ts'
 import type { SwipeDirection } from './gestures.ts'
 
 /**
@@ -92,4 +92,18 @@ export function cubeAsShown<T>(
     const facing = new Vector3(...normal).applyQuaternion(turnBack).round()
     return cube[stickerIndexAt(from.toArray(), facing.toArray())]
   })
+}
+
+/** Each cell's own number: cubeAsShown on these says which cell shows where. */
+const CELL_NUMBERS = Array.from({ length: 54 }, (_, cell) => cell)
+
+/**
+ * The 9 cells on the side facing the viewer, in the order a photo of that
+ * side reads them: row by row from the top left, as seen on screen.
+ */
+export function frontCells(orientation: Quaternion): number[] {
+  return cubeAsShown(CELL_NUMBERS, orientation).slice(
+    cellIndex('F', 0),
+    cellIndex('F', 9),
+  )
 }

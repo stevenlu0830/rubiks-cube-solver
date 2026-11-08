@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Quaternion } from 'three'
 import {
   CENTER,
@@ -51,7 +44,7 @@ import { StepList } from './solve/StepList.tsx'
 import { toFaceletString } from './solver/facelets.ts'
 import { getSolver, solverErrorMessage } from './solver/solver.ts'
 import { CubeView } from './view/CubeView.tsx'
-import { cubeAsShown } from './view/orientation.ts'
+import { cubeAsShown, frontCells } from './view/orientation.ts'
 import './App.css'
 import './solve/solve.css'
 
@@ -69,7 +62,7 @@ function App() {
   /** True while reading the cube with the camera, instead of painting it. */
   const [scanning, setScanning] = useState(false)
   /** Which way round the cube is shown; the solve uses it as the holding position. */
-  const orientation = useRef(new Quaternion())
+  const [orientation, setOrientation] = useState(() => new Quaternion())
   const [solve, setSolve] = useState<{ cube: CubeState; status: Solve } | null>(
     null,
   )
@@ -133,6 +126,11 @@ function App() {
     () => (playback ? cubeAt(playback) : cube),
     [playback, cube],
   )
+  /** While scanning: the side facing the user, which the next photo will fill. */
+  const scanSide = useMemo(
+    () => (scanning ? frontCells(orientation) : undefined),
+    [scanning, orientation],
+  )
   const nextMove =
     playback && playback.ready && !isFinished(playback)
       ? playback.moves[currentStep(playback)]
@@ -147,7 +145,7 @@ function App() {
     }
 
     // Read the cube as it's shown, so the moves match how the user holds it.
-    const shown = cubeAsShown(cube, orientation.current)
+    const shown = cubeAsShown(cube, orientation)
     const solver = getSolver()
     setSolve({
       cube,
@@ -258,11 +256,10 @@ function App() {
                 }
           }
           highlight={
-            validation && !validation.valid ? validation.cells : undefined
+            validation && !validation.valid ? validation.cells : scanSide
           }
-          onOrientationChange={(turned) => {
-            orientation.current = turned
-          }}
+          orientation={orientation}
+          onOrientationChange={setOrientation}
           disabled={status?.stage === 'solving'}
           held={playback !== null}
           turn={playback?.turning?.move ?? null}

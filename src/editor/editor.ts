@@ -27,6 +27,14 @@ export interface EditorState {
 export type EditorAction =
   /** Paint a cell; painting a cell the colour it already has clears it. */
   | { type: 'paint'; cell: number; color: Color }
+  /**
+   * Paint several cells at once, e.g. a whole side read by the camera, as a
+   * single Undo step. Unlike `paint`, a cell already that colour stays so.
+   */
+  | {
+      type: 'paintCells'
+      paints: readonly (readonly [cell: number, color: Color])[]
+    }
   /** Set the six centres to the standard colour scheme. */
   | { type: 'fillCenters' }
   /** Clear every cell. */
@@ -48,6 +56,11 @@ export function editorReducer(
       const cube = [...state.cube]
       cube[action.cell] =
         cube[action.cell] === action.color ? null : action.color
+      return change(state, cube)
+    }
+    case 'paintCells': {
+      const cube = [...state.cube]
+      for (const [cell, color] of action.paints) cube[cell] = color
       return change(state, cube)
     }
     case 'fillCenters': {
