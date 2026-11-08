@@ -23,7 +23,7 @@ import { pauseMs } from './solve/playback.ts'
 import { toFaceletString } from './solver/facelets.ts'
 import { SolverError } from './solver/solver.ts'
 import { fakeCamera, removeFakeCamera } from './test/fakeCamera.ts'
-import { frontCells, turnBySwipe } from './view/orientation.ts'
+import { cubeAsShown, frontCells, turnBySwipe } from './view/orientation.ts'
 import App from './App.tsx'
 
 // The real 3D view needs WebGL, which the test environment doesn't have.
@@ -485,6 +485,46 @@ describe('App', () => {
       expect(view.orientation).toBe(turned)
       expect(view.highlight).toEqual(frontCells(turned))
       expect(view.highlight).toContain(cellIndex('U', CENTER))
+    })
+
+    it('reads all six sides with the camera, ready to solve', async () => {
+      const camera = fakeCamera()
+      const asked: string[] = []
+      solver.solve = (facelets) => {
+        asked.push(facelets)
+        return Promise.resolve(parseMoves('R U'))
+      }
+      const scrambled = applyMoves(solvedState(), parseMoves("R U2 F' L D B2"))
+      render(<App />)
+      await act(async () => click('Scan'))
+      for (let side = 0; side < 6; side++) {
+        // The real cube, turned the way the 3D cube shows, in front of the camera.
+        camera.show(
+          frontCells(view.orientation!).map((cell) => scrambled[cell]!),
+        )
+        click('Take photo')
+        click(side < 5 ? 'Next side ›' : 'Done')
+      }
+
+      expect(scanner()).toBeNull()
+      expect(view.state).toEqual(scrambled)
+      await act(async () => click('Solve'))
+      expect(asked).toEqual([
+        toFaceletString(cubeAsShown(scrambled, view.orientation!)),
+      ])
+      expect(screen.getByLabelText('How to hold your cube')).toBeInTheDocument()
+    })
+
+    it('takes each photo back with a single Undo', async () => {
+      const camera = fakeCamera()
+      render(<App />)
+      await act(async () => click('Scan'))
+      camera.show(Array(9).fill('blue'))
+      click('Take photo')
+      click('‹ Done')
+      expect(view.state.filter((cell) => cell === 'blue')).toHaveLength(9)
+      click('Undo')
+      expect(view.state).toEqual(emptyState())
     })
 
     it("can't start while solving", () => {

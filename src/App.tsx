@@ -222,7 +222,16 @@ function App() {
           }
         />
       ) : scanning ? (
-        <Scanner />
+        <Scanner
+          cube={cube}
+          orientation={orientation}
+          onTurn={setOrientation}
+          onPaint={(paints) => {
+            dispatch({ type: 'paintCells', paints })
+            feel('tap')
+          }}
+          onDone={() => setScanning(false)}
+        />
       ) : (
         <>
           <Palette

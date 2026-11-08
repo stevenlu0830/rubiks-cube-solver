@@ -43,7 +43,13 @@ These are copies of the browsers' engines, not real phones, so also try the app 
 2. Add `?fps` to the end of the address to show the frame rate in the corner. Turns should stay near 60 fps (or 120 on some phones), and "slowest" should stay under about 20 ms.
 3. On the published site, **Add to Home Screen** (iPhone, from the Share menu) or **Install app** (Android Chrome) to use it like an app. After the first visit it also works with no internet.
 
-**Scan** (next to Solve) opens the back camera, with a grid to line one side of the cube up in. The camera switches off when you tap **Done** or switch to another app.
+**Scan** (next to Solve) reads the cube with the back camera instead of tapping in every square:
+
+1. Line one side of your cube up in the grid and tap **Take photo**. The colours it read appear on the photo and on the 3D cube. If one is wrong, tap **Retake**.
+2. Tap **Next side**. The 3D cube turns to the next side, and the app says how to turn yours to match, e.g. "Turn your cube to the left, so its right side faces you". All six sides take five turns. You can also swipe the 3D cube to any side yourself.
+3. After the sixth side, tap **Done**, check the cube, fix any square by tapping it, and tap **Solve**.
+
+The camera switches off when you tap **Done** or switch to another app.
 
 The ⚙ menu has **Letters on stickers** (W, Y, G, B, R, O, for telling colours apart) and, on phones that can vibrate, **Vibration**.
 

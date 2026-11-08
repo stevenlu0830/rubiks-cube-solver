@@ -38,6 +38,11 @@
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.4);
 }
 
+.scan-guide span {
+  display: grid;
+  place-items: center;
+}
+
 /* Lines between the nine squares. */
 .scan-guide span:not(:nth-child(3n)) {
   border-right: 1px solid rgb(255 255 255 / 0.6);
@@ -78,4 +83,76 @@
 
 .viewfinder-message button:active {
   background: rgb(255 255 255 / 0.2);
+}
+
+/* The colour read from each square of a photo, shown on top of it. */
+.scan-dot {
+  width: 42%;
+  aspect-ratio: 1;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+}
+
+.scan-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 16px 0;
+}
+
+.scan-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scan-actions button:active:not(:disabled) {
+  background: var(--border);
+}
+
+/* The main step: fills the rest of the row. */
+.scan-actions .scan-primary {
+  flex: 1;
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.scan-actions .scan-primary:active:not(:disabled) {
+  background: var(--text);
+  opacity: 0.8;
+}
+
+.scan-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* How many sides are done, the map of them all, and what to do next. */
+.scan-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 16px 0;
+}
+
+.scan-progress p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.scan-count {
+  font-weight: 600;
+}
+
+.scan-instruction {
+  color: var(--text-muted);
 }

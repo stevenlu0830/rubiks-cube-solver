@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { shownPart, type Rect } from '../src/scan/viewfinder.ts'
 
 /**
  * Runs in the page before it loads: swaps the camera for a drawing, so
@@ -11,11 +12,30 @@ export function fakeCamera({ refuseFirst = false } = {}) {
   canvas.width = 640
   canvas.height = 480
   const context = canvas.getContext('2d')!
+  /** A side of a cube to show, if any: where in the picture, and its 9 colours. */
+  let side: { area: Rect; colors: string[] } | null = null
   const draw = () => {
     context.fillStyle = '#333'
     context.fillRect(0, 0, 640, 480)
-    context.fillStyle = '#009b48'
-    context.fillRect(200, 120, 240, 240)
+    if (!side) {
+      context.fillStyle = '#009b48'
+      context.fillRect(200, 120, 240, 240)
+      return
+    }
+    // Black plastic, with a sticker in each square.
+    const { area, colors } = side
+    const size = area.width / 3
+    context.fillStyle = '#111'
+    context.fillRect(area.x, area.y, area.width, area.height)
+    colors.forEach((color, n) => {
+      context.fillStyle = color
+      context.fillRect(
+        area.x + (n % 3) * size + size * 0.08,
+        area.y + Math.floor(n / 3) * size + size * 0.08,
+        size * 0.84,
+        size * 0.84,
+      )
+    })
   }
   draw()
   // A canvas only sends a new picture when it's drawn on, so keep drawing.
@@ -23,7 +43,13 @@ export function fakeCamera({ refuseFirst = false } = {}) {
 
   let refusals = refuseFirst ? 1 : 0
   const streams: MediaStream[] = []
-  Object.assign(window, { fakeCameraStreams: streams })
+  Object.assign(window, {
+    fakeCameraStreams: streams,
+    showFakeSide: (area: Rect, colors: string[]) => {
+      side = { area, colors }
+      draw()
+    },
+  })
   // On the prototype, not navigator.mediaDevices itself: WebKit swaps that
   // object for a new one after this script has run.
   MediaDevices.prototype.getUserMedia = async () => {
@@ -50,4 +76,48 @@ export function pictureWidth(page: Page) {
   return page
     .locator('video')
     .evaluate((video: HTMLVideoElement) => video.videoWidth)
+}
+
+/**
+ * Holds a side of a cube in these colours (CSS colours, row by row from the
+ * top left) up to the fake camera, lined up with the guide on screen.
+ */
+export async function showSide(page: Page, colors: string[]) {
+  const [video, guide] = await Promise.all([
+    page.locator('video').boundingBox(),
+    page.locator('.scan-guide').boundingBox(),
+  ])
+  if (!video || !guide) throw new Error('The camera is not on screen')
+  const area = shownPart(
+    {
+      x: guide.x - video.x,
+      y: guide.y - video.y,
+      width: guide.width,
+      height: guide.height,
+    },
+    video,
+    { width: 640, height: 480 },
+  )
+  await page.evaluate(
+    ([area, colors]) =>
+      (
+        window as unknown as {
+          showFakeSide: (area: Rect, colors: string[]) => void
+        }
+      ).showFakeSide(area, colors),
+    [area, colors] as const,
+  )
+  // Wait for the camera's picture to catch up: its middle shows the centre.
+  await page.waitForFunction((centre) => {
+    const video = document.querySelector('video')!
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const context = canvas.getContext('2d')!
+    context.drawImage(video, 320, 240, 1, 1, 0, 0, 1, 1)
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+    context.fillStyle = centre
+    context.fillRect(0, 0, 1, 1)
+    const [er, eg, eb] = context.getImageData(0, 0, 1, 1).data
+    return Math.abs(r - er) + Math.abs(g - eg) + Math.abs(b - eb) < 30
+  }, colors[4])
 }

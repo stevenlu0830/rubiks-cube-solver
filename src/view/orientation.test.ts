@@ -10,6 +10,7 @@ import {
   STANDARD_SCHEME,
   type Face,
 } from '../cube/state.ts'
+import { allOrientations } from '../test/orientations.ts'
 import { seededRandom } from '../test/seededRandom.ts'
 import type { SwipeDirection } from './gestures.ts'
 import {
@@ -47,24 +48,6 @@ const sameRotation = (a: Quaternion, b: Quaternion) => {
 const faceShownAfterMoves = (moves: Move[], position: Face): Face => {
   const color = applyMoves(solvedState(), moves)[cellIndex(position, CENTER)]
   return FACES.find((face) => STANDARD_SCHEME[face] === color)!
-}
-
-/** Every orientation swipes can reach, found by trying every swipe from each. */
-function allOrientations(): Quaternion[] {
-  const key = (q: Quaternion) => matrixOf(q).map(Math.round).join()
-  const seen = new Map([[key(new Quaternion()), new Quaternion()]])
-  const queue = [new Quaternion()]
-  while (queue.length > 0) {
-    const current = queue.shift()!
-    for (const direction of SWIPES) {
-      const next = turnBySwipe(current, direction)
-      if (!seen.has(key(next))) {
-        seen.set(key(next), next)
-        queue.push(next)
-      }
-    }
-  }
-  return [...seen.values()]
 }
 
 describe('turnBySwipe', () => {
