@@ -24,6 +24,20 @@
 
 .header-side-end {
   justify-content: flex-end;
+  gap: 4px;
+}
+
+/*
+ * A round button holding just an icon: About (ⓘ) and Settings (⚙). Two
+ * classes, so it wins over .header-button's padding in solve.css, which loads later.
+ */
+.app-header .header-icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
 }
 
 .app-header h1 {

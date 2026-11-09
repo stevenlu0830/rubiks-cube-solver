@@ -43,6 +43,8 @@ These are copies of the browsers' engines, not real phones, so also try the app 
 2. Add `?fps` to the end of the address to show the frame rate in the corner. Turns should stay near 60 fps (or 120 on some phones), and "slowest" should stay under about 20 ms.
 3. On the published site, **Add to Home Screen** (iPhone, from the Share menu) or **Install app** (Android Chrome) to use it like an app. After the first visit it also works with no internet.
 
+The ⓘ button opens a short **About** window: what the app does, what it's built with, and contact links. Fill those in, in [src/info/contacts.ts](src/info/contacts.ts); until then each shows "[placeholder]".
+
 The ⚙ menu has **Letters on stickers** (W, Y, G, B, R, O, for telling colours apart), on phones that can vibrate **Vibration**, and where there's a camera **Auto photo** (see below).
 
 ## Scanning your cube

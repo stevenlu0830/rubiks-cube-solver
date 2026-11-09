@@ -19,7 +19,7 @@ export function SettingsMenu({ settings, onChange }: SettingsMenuProps) {
     <>
       <button
         type="button"
-        className="header-button settings-button"
+        className="header-button header-icon-button"
         popoverTarget={PANEL_ID}
         aria-label="Settings"
       >

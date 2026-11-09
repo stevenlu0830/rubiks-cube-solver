@@ -17,6 +17,7 @@ import {
 import { Palette } from './editor/Palette.tsx'
 import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
+import { InfoButton } from './info/InfoButton.tsx'
 import { canOfferCamera } from './scan/camera.ts'
 import { CameraIcon, Scanner } from './scan/Scanner.tsx'
 import {
@@ -201,6 +202,7 @@ function App() {
         </div>
         <h1>Rubik's Cube Solver</h1>
         <div className="header-side header-side-end">
+          <InfoButton />
           <SettingsMenu settings={settings} onChange={changeSettings} />
         </div>
       </header>

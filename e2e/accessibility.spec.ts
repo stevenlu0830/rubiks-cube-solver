@@ -29,7 +29,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`${colorScheme} mode`, () => {
     test.use({ colorScheme })
 
-    test('the painting screen, its messages and the settings menu', async ({
+    test('the painting screen, its messages, the settings menu and the About window', async ({
       page,
     }) => {
       await page.goto('./')
@@ -37,6 +37,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Solve' }).click() // a problem: all blank
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Settings' }).click()
+      await expectNoProblems(page)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: 'About this app' }).click()
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
       await expectNoProblems(page)
     })
 
