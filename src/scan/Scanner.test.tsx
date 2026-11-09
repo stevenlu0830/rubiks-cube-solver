@@ -278,6 +278,36 @@ describe('Scanner', () => {
       expect(button('Next side ›')).toBeInTheDocument()
     })
 
+    it('turns the cube around when only the side at the back is left', async () => {
+      render(<Harness />)
+      await cameraAnswers()
+      const photograph = () => {
+        camera.show(frontColors())
+        click('Take photo')
+      }
+      // Front, right, left, top and bottom, swiping between them by hand…
+      photograph()
+      for (const swipes of [
+        ['left'],
+        ['right', 'right'],
+        ['left', 'down'],
+        ['up', 'up'],
+      ] as SwipeDirection[][]) {
+        for (const direction of swipes) app.swipe(direction)
+        photograph()
+      }
+      app.swipe('down') // …then back to the front, which is done.
+      expect(screen.getByText('5 of 6 sides')).toBeInTheDocument()
+
+      click('Next side ›')
+      expect(frontFace(app.orientation)).toBe('B')
+      expect(instruction()).toBe(
+        'Turn your cube around, so its back side faces you, then take a photo.',
+      )
+      photograph()
+      expect(app.cube).toEqual(SOLVED)
+    })
+
     it('shows a map of all six sides, with the one in front marked', async () => {
       render(<Harness />)
       expect(

@@ -4,6 +4,7 @@ import { COLORS } from '../src/cube/state.ts'
 import { STICKER_COLORS } from '../src/view/colors.ts'
 import type { SwipeDirection } from '../src/view/gestures.ts'
 import { frontCells, turnBySwipe } from '../src/view/orientation.ts'
+import { CubePainter } from './cubePainter.ts'
 import { SCRAMBLED } from './cubes.ts'
 import {
   cameraIsOff,
@@ -99,4 +100,52 @@ test('scans all six sides of a scrambled cube by following the instructions, the
   await expect(page.getByLabel('How to hold your cube')).toBeVisible({
     timeout: 30_000, // the solver's one-off setup can take a while
   })
+})
+
+test('lets you swipe to the sides yourself, and turns the cube around for the last one', async ({
+  page,
+}) => {
+  await page.addInitScript(fakeCamera)
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Scan' }).click()
+  await expect.poll(() => pictureWidth(page)).toBe(640)
+
+  // Swipes the 3D cube like a finger, keeping track of how it's turned;
+  // the real cube in front of the camera is turned the same way.
+  const cube = new CubePainter(page)
+  const photograph = async (count: number) => {
+    await showSide(
+      page,
+      frontCells(cube.orientation).map(
+        (cell) => STICKER_COLORS[SCRAMBLED[cell]!],
+      ),
+    )
+    await page.getByRole('button', { name: 'Take photo' }).click()
+    await expect(page.getByText(`${count} of 6 sides`)).toBeVisible()
+  }
+  await photograph(1) // front
+  const swipes: SwipeDirection[][] = [
+    ['left'], // right
+    ['right', 'right'], // left
+    ['left', 'down'], // top
+    ['up', 'up'], // bottom
+  ]
+  for (const [i, turns] of swipes.entries()) {
+    for (const direction of turns) await cube.swipe(direction)
+    await photograph(i + 2)
+  }
+  await cube.swipe('down') // back to the front: only the back is left
+
+  await page.getByRole('button', { name: 'Next side ›' }).click()
+  await expect(page.locator('.scan-instruction')).toHaveText(
+    'Turn your cube around, so its back side faces you, then take a photo.',
+  )
+  cube.orientation = turnBySwipe(turnBySwipe(cube.orientation, 'left'), 'left')
+  await photograph(6)
+
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  const saved = await page.evaluate(() =>
+    localStorage.getItem('rubiks-cube-solver/cube'),
+  )
+  expect(JSON.parse(saved!)).toEqual(SCRAMBLED)
 })
