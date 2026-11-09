@@ -8,22 +8,92 @@
  */
 
 import { Vector3, type Quaternion } from 'three'
-import { FACES, type Color, type Face } from '../cube/state.ts'
+import { CENTER, COLORS, FACES, type Color, type Face } from '../cube/state.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
 import { faceTowards, frontFace } from '../view/orientation.ts'
-import { classifySides } from './classify.ts'
-import type { Lab } from './colorSpace.ts'
+import {
+  classifySides,
+  colorDistance,
+  matchCenters,
+  PHOTO_COLORS,
+  type Classified,
+} from './classify.ts'
+import type { Lab, Rgb } from './colorSpace.ts'
 
-/** What the camera read from each side photographed so far, by the face it went on. */
-export type ScannedSides = Partial<Record<Face, readonly Lab[]>>
+/** One side's photo: what the camera read, and where on the cube it goes. */
+export interface ScannedSide {
+  /** The cells the photo filled, in photo order (row by row from its top left). */
+  cells: readonly number[]
+  /** The camera's colour for each square, in the same order. */
+  rgb: readonly Rgb[]
+  /** The same, in Lab: what the colours are named from. */
+  readings: readonly Lab[]
+}
+
+/** The sides photographed so far, by the face each went on. */
+export type ScannedSides = Partial<Record<Face, ScannedSide>>
+
+/** Colours the user picked by hand, by cell. */
+export type Fixes = Readonly<Partial<Record<number, Color>>>
 
 /**
- * The colours of one scanned side, in photo order. Every scanned side's
- * centre helps name them (see classifySides).
+ * Names every scanned square at once, by cell: the centres of all the
+ * sides, and the "9 of each colour" rule, help with each (see
+ * classifySides). So a new photo can change squares on earlier sides too,
+ * but never the ones in `fixes`.
  */
-export function sideColors(sides: ScannedSides, face: Face): Color[] {
-  const faces = FACES.filter((f) => sides[f])
-  return classifySides(faces.map((f) => sides[f]!))[faces.indexOf(face)]
+export function readScannedCube(
+  sides: ScannedSides,
+  fixes: Fixes = {},
+): Map<number, Classified> {
+  const faces = FACES.filter((face) => sides[face])
+  const named = classifySides(
+    faces.map((face) => sides[face]!.readings),
+    {
+      fixed: faces.map((face) =>
+        sides[face]!.cells.map((cell) => fixes[cell] ?? null),
+      ),
+    },
+  )
+  const cube = new Map<number, Classified>()
+  faces.forEach((face, i) =>
+    sides[face]!.cells.forEach((cell, n) => cube.set(cell, named[i][n])),
+  )
+  return cube
+}
+
+/**
+ * Two photos of the same sticker in the same light read within about this
+ * far apart; different colours, even red and orange, are much further.
+ */
+const SAME_STICKER = 12
+
+/**
+ * The side already scanned that this photo looks like a second photo of,
+ * if any: its centre reads almost the same as that side's centre, and
+ * closer than to any colour no other side has. That usually means the real
+ * cube was turned differently from the 3D one.
+ */
+export function repeatedSide(sides: ScannedSides, face: Face): Face | null {
+  const center = sides[face]?.readings[CENTER]
+  if (!center) return null
+  const others = FACES.filter((other) => other !== face && sides[other])
+  if (others.length === 0) return null
+  const otherCenters = others.map((other) => sides[other]!.readings[CENTER])
+  const distances = otherCenters.map((other) => colorDistance(center, other))
+  const closest = Math.min(...distances)
+  if (closest > SAME_STICKER) return null
+  // Could it be one of the colours nobody has yet, instead?
+  const claimed = matchCenters(otherCenters)
+  const unclaimed = COLORS.filter((color) => !claimed.includes(color))
+  if (
+    unclaimed.some(
+      (color) => colorDistance(center, PHOTO_COLORS[color]) <= closest,
+    )
+  ) {
+    return null
+  }
+  return others[distances.indexOf(closest)]
 }
 
 const OPPOSITE: Record<Face, Face> = {

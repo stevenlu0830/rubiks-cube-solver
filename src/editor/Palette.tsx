@@ -8,6 +8,8 @@ interface PaletteProps {
   onSelect: (color: Color) => void
   /** Show each colour's letter, as on the stickers. */
   letters?: boolean
+  /** What the group of colours is for, for screen readers. */
+  label?: string
 }
 
 /** The six paint colours, each showing how many cells use it out of the 9 a real cube has. */
@@ -16,9 +18,10 @@ export function Palette({
   counts,
   onSelect,
   letters = false,
+  label = 'Paint colour',
 }: PaletteProps) {
   return (
-    <div className="palette" role="group" aria-label="Paint colour">
+    <div className="palette" role="group" aria-label={label}>
       {COLORS.map((color) => {
         const count = counts[color]
         const status =

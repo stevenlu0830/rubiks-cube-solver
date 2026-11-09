@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { seededRandom } from '../test/seededRandom.ts'
 import type { Rgb } from './colorSpace.ts'
-import { grabFrame, GRAB_SIZE, readSquares, type Pixels } from './sample.ts'
+import {
+  grabFrame,
+  GRAB_SIZE,
+  inspectSquares,
+  readSquares,
+  type Pixels,
+} from './sample.ts'
 
 /** A made-up picture, coloured pixel by pixel. */
 function picture(
@@ -81,11 +87,20 @@ describe('readSquares', () => {
     expect(readSquares(pixels).slice(0, 3)).toEqual([red, red, red])
   })
 
+  it('says how much of each square was glare', () => {
+    const pixels = picture(120, 120, (_, y) =>
+      y < 22 ? [250, 248, 245] : [200, 30, 40],
+    )
+    const glare = inspectSquares(pixels).map((square) => square.glare)
+    expect(glare).toEqual([0.6, 0.6, 0.6, 0, 0, 0, 0, 0, 0])
+  })
+
   it('keeps a brightly lit white square that looks like glare all over', () => {
     const pixels = picture(120, 120, (x) =>
       x % 10 === 0 ? [225, 225, 225] : [245, 245, 245],
     )
     expect(readSquares(pixels)[4]).toEqual([245, 245, 245])
+    expect(inspectSquares(pixels)[4].glare).toBe(0) // not glare: it's white
   })
 })
 

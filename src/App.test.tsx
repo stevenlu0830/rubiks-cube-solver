@@ -441,7 +441,14 @@ describe('App', () => {
   })
 
   describe('scanning', () => {
-    afterEach(() => removeFakeCamera())
+    // The scanner's live look through the camera runs on a timer, left still here.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+      removeFakeCamera()
+    })
 
     const scanner = () =>
       screen.queryByRole('region', { name: 'Scan your cube' })

@@ -1,5 +1,6 @@
 import { vi, type Mock } from 'vitest'
 import type { Color } from '../cube/state.ts'
+import type { Rgb } from '../scan/colorSpace.ts'
 import { GRAB_SIZE, type Pixels } from '../scan/sample.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
 
@@ -17,7 +18,9 @@ export interface FakeStream {
  * `getUserMedia.mockRejectedValueOnce(new DOMException('', 'NotAllowedError'))`.
  *
  * The test environment can't play video or draw it on a canvas either, so
- * those are faked too: `show` sets the 9 colours a photo will read.
+ * those are faked too: `show` sets the 9 colours a photo will read (sticker
+ * colour names, or exact [red, green, blue] colours), optionally with a
+ * patch of glare covering part of the middle of every square.
  */
 export function fakeCamera() {
   const opened: FakeStream[] = []
@@ -59,8 +62,11 @@ export function fakeCamera() {
   )
 
   /** Puts a side with these colours (row by row from the top left) in front of the camera. */
-  const show = (colors: readonly Color[]) => {
-    picture = sidePicture(colors)
+  const show = (
+    colors: readonly (Color | Rgb)[],
+    { glare = 0 }: { glare?: number } = {},
+  ) => {
+    picture = sidePicture(colors, glare)
   }
   return { getUserMedia, opened, play, pause, show }
 }
@@ -74,18 +80,28 @@ export function removeFakeCamera() {
   for (const spy of spies.splice(0)) spy.mockRestore()
 }
 
-/** What the guide would grab from a side in these colours: each square flat. */
-function sidePicture(colors: readonly Color[]): Pixels {
+/**
+ * What the guide would grab from a side in these colours: each square flat,
+ * with glare over this share of the middle of each (the part that's read).
+ */
+function sidePicture(colors: readonly (Color | Rgb)[], glare = 0): Pixels {
   const data = new Uint8ClampedArray(GRAB_SIZE * GRAB_SIZE * 4)
   const square = GRAB_SIZE / 3
+  const rgbOf = (color: Color | Rgb) =>
+    typeof color === 'string'
+      ? [1, 3, 5].map((i) =>
+          parseInt(STICKER_COLORS[color].slice(i, i + 2), 16),
+        )
+      : color
   for (let y = 0; y < GRAB_SIZE; y++) {
     for (let x = 0; x < GRAB_SIZE; x++) {
-      const hex =
-        STICKER_COLORS[
-          colors[Math.floor(y / square) * 3 + Math.floor(x / square)]
-        ]
-      const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
-      data.set([...rgb, 255], (y * GRAB_SIZE + x) * 4)
+      const down = (y % square) / square // 0 to 1 within the square
+      const shine = down >= 0.25 && down < 0.25 + glare / 2
+      const color = colors[Math.floor(y / square) * 3 + Math.floor(x / square)]
+      data.set(
+        [...(shine ? [252, 252, 250] : rgbOf(color)), 255],
+        (y * GRAB_SIZE + x) * 4,
+      )
     }
   }
   return { data, width: GRAB_SIZE, height: GRAB_SIZE }

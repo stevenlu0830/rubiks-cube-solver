@@ -231,6 +231,7 @@ function App() {
             feel('tap')
           }}
           onDone={() => setScanning(false)}
+          letters={settings.letters}
         />
       ) : (
         <>

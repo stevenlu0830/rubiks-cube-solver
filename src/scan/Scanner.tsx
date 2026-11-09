@@ -2,13 +2,21 @@ import {
   useEffect,
   useEffectEvent,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type Ref,
 } from 'react'
 import type { Quaternion } from 'three'
-import { FACES, type Color, type CubeState } from '../cube/state.ts'
+import {
+  CENTER,
+  colorCounts,
+  FACES,
+  type Color,
+  type CubeState,
+} from '../cube/state.ts'
+import { Palette } from '../editor/Palette.tsx'
 import { CubeNet } from '../solve/CubeNet.tsx'
 import { STICKER_COLORS } from '../view/colors.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
@@ -24,15 +32,46 @@ import {
   openCamera,
   stopCamera,
 } from './camera.ts'
-import { rgbToLab, type Rgb } from './colorSpace.ts'
-import { grabFrame, readSquares } from './sample.ts'
+import type { Classified } from './classify.ts'
+import { rgbToLab, type Lab } from './colorSpace.ts'
+import {
+  pictureProblem,
+  PROBLEM_MESSAGES,
+  type PictureProblem,
+} from './problems.ts'
+import { grabFrame, inspectSquares, type Square } from './sample.ts'
+import { ScanDebugPanel } from './ScanDebugPanel.tsx'
+import {
+  isScanDebug,
+  recordScan,
+  saveRecordedScan,
+  type Light,
+} from './scanDebug.ts'
 import {
   nextSideTurns,
-  sideColors,
+  readScannedCube,
+  repeatedSide,
   turnInstruction,
+  type Fixes,
   type ScannedSides,
 } from './sides.ts'
 import './scan.css'
+
+/** How often the live dots and warnings update while lining a side up. */
+const LOOK_EVERY_MS = 250
+
+/** The 9 squares of a side, by name, for screen readers. */
+const SQUARE_NAMES = [
+  'top left',
+  'top',
+  'top right',
+  'left',
+  'centre',
+  'right',
+  'bottom left',
+  'bottom',
+  'bottom right',
+]
 
 interface ScannerProps {
   /** The painted cube, for the map of all six sides. */
@@ -41,10 +80,12 @@ interface ScannerProps {
   orientation: Quaternion
   /** Turns the 3D cube, for Next side. */
   onTurn: (orientation: Quaternion) => void
-  /** Paints a side read from a photo, as [cell, colour] pairs. */
+  /** Paints every scanned square, as [cell, colour] pairs. */
   onPaint: (paints: [number, Color][]) => void
   /** Back to painting, once all six sides are in. */
   onDone: () => void
+  /** Show each colour's letter in the colour picker, as on the stickers. */
+  letters?: boolean
 }
 
 /**
@@ -58,6 +99,7 @@ export function Scanner({
   onTurn,
   onPaint,
   onDone,
+  letters = false,
 }: ScannerProps) {
   const visible = usePageVisible()
   // Try again bumps this: a new key starts a new CameraView, so a fresh camera.
@@ -65,34 +107,82 @@ export function Scanner({
   const camera = useRef<CameraHandle>(null)
   const [live, setLive] = useState(false)
   const [sides, setSides] = useState<ScannedSides>({})
-  /** The last photo's colours, while it's shown. Turning the cube moves on from it. */
-  const [photo, setPhoto] = useState<{
-    colors: Color[]
-    orientation: Quaternion
-  } | null>(null)
+  const [fixes, setFixes] = useState<Fixes>({})
+  /** Which way the cube was turned for the last photo: it shows while the cube stays so. */
+  const [photoAt, setPhotoAt] = useState<Quaternion | null>(null)
+  /** The photo's square being fixed by hand, by cell. */
+  const [picking, setPicking] = useState<number | null>(null)
   /** The last time Next side turned the cube, to say how to turn the real one. */
   const [turn, setTurn] = useState<{
     to: Quaternion
     swipes: SwipeDirection[]
   } | null>(null)
+  /** The latest look through the camera before a photo: live dots, and any problem. */
+  const [lastLook, setLastLook] = useState<{
+    orientation: Quaternion
+    colors: Color[]
+    problem: PictureProblem | null
+  } | null>(null)
+  // ?scan-debug: record each scan, to keep as test data.
+  const [debug] = useState(() => isScanDebug())
+  const [scanId] = useState(() => new Date().toISOString())
+  const [light, setLight] = useState<Light>('daylight')
 
   const front = frontFace(orientation)
+  const frozen = photoAt === orientation && sides[front] !== undefined
+  const named = useMemo(() => readScannedCube(sides, fixes), [sides, fixes])
   const scanned = new Set(FACES.filter((face) => sides[face]))
   const allScanned = scanned.size === FACES.length
-  const shownPhoto = photo?.orientation === orientation ? photo.colors : null
+  const photo = frozen
+    ? sides[front]!.cells.map((cell) => ({ cell, ...named.get(cell)! }))
+    : null
+  const unsure = photo?.filter((square) => square.unsure).length ?? 0
+  const repeat = frozen ? repeatedSide(sides, front) : null
+  const repeatColor = repeat && named.get(sides[repeat]!.cells[CENTER])!.color
+  const liveColors =
+    live && !frozen && lastLook?.orientation === orientation ? lastLook : null
+
+  /** Paints every scanned square (a new photo can change earlier sides), as one Undo step. */
+  function paint(nextSides: ScannedSides, nextFixes: Fixes, nextLight = light) {
+    const nextNamed = readScannedCube(nextSides, nextFixes)
+    onPaint([...nextNamed].map(([cell, { color }]) => [cell, color]))
+    if (debug) {
+      saveRecordedScan(recordScan(scanId, nextLight, nextSides, nextNamed))
+    }
+  }
 
   function takePhoto() {
-    const squares = camera.current?.read()
+    const squares = camera.current?.look()
     if (!squares) return // no picture yet
-    const read = { ...sides, [front]: squares.map(rgbToLab) }
-    const colors = sideColors(read, front)
-    setSides(read)
-    setPhoto({ colors, orientation })
-    onPaint(frontCells(orientation).map((cell, n) => [cell, colors[n]]))
+    const cells = frontCells(orientation)
+    const rgb = squares.map((square) => square.color)
+    const nextSides = {
+      ...sides,
+      [front]: { cells, rgb, readings: rgb.map(rgbToLab) },
+    }
+    // A new photo of a side starts it afresh, without the last one's fixes.
+    const nextFixes = withoutCells(fixes, cells)
+    setSides(nextSides)
+    setFixes(nextFixes)
+    setPhotoAt(orientation)
+    setPicking(null)
+    paint(nextSides, nextFixes)
+  }
+
+  function fix(cell: number, color: Color) {
+    const nextFixes = { ...fixes, [cell]: color }
+    setFixes(nextFixes)
+    setPicking(null)
+    paint(sides, nextFixes)
+  }
+
+  function retake() {
+    setPhotoAt(null)
+    setPicking(null)
   }
 
   function nextSide() {
-    setPhoto(null)
+    retake()
     const swipes = nextSideTurns(orientation, scanned)
     if (!swipes || swipes.length === 0) return
     const to = swipes.reduce(turnBySwipe, orientation)
@@ -100,11 +190,45 @@ export function Scanner({
     onTurn(to)
   }
 
+  // Before a photo, look through the camera a few times a second: the dots
+  // show what a photo would read, and any problem with the picture.
+  const lookAgain = useEffectEvent((before: Lab[] | null) => {
+    const squares = camera.current?.look()
+    if (!squares) return null
+    const readings = squares.map(({ color }) => rgbToLab(color))
+    const cells = frontCells(orientation)
+    const preview = readScannedCube(
+      { ...sides, [front]: { cells, rgb: [], readings } },
+      withoutCells(fixes, cells),
+    )
+    const colors = cells.map((cell) => preview.get(cell)!.color)
+    setLastLook({
+      orientation,
+      colors,
+      problem: pictureProblem(squares, readings, colors, before),
+    })
+    return readings
+  })
+  useEffect(() => {
+    if (!live || frozen) return
+    let before: Lab[] | null = null
+    const timer = setInterval(() => {
+      before = lookAgain(before)
+    }, LOOK_EVERY_MS)
+    return () => clearInterval(timer)
+  }, [live, frozen])
+
   function instruction(): string {
-    if (shownPhoto) {
+    if (photo) {
+      if (repeatColor) {
+        return `You've already scanned the ${repeatColor} side. Turn your cube to match the one below, then retake.`
+      }
+      if (unsure > 0) {
+        return `${unsure === 1 ? '1 square' : `${unsure} squares`} might be wrong (outlined). Tap one to pick its colour.`
+      }
       return allScanned
         ? 'All six sides are in. Tap Done, then check the cube and tap Solve.'
-        : 'Check the colours on the cube below. If one is wrong, retake the photo.'
+        : 'Check the colours. If one is wrong, tap it to pick the right colour, or retake the photo.'
     }
     if (scanned.size === 0) {
       return 'Hold any side of your cube up to the camera so it fills the grid, then take a photo.'
@@ -129,6 +253,7 @@ export function Scanner({
       Next side ›
     </button>
   )
+  const pickingSquare = photo?.findIndex(({ cell }) => cell === picking) ?? -1
 
   return (
     <section className="scanner" aria-label="Scan your cube">
@@ -138,52 +263,149 @@ export function Scanner({
           <CameraView
             key={attempt}
             ref={camera}
-            photo={shownPhoto}
+            frozen={frozen}
             onLive={setLive}
             onRetry={() => setAttempt((n) => n + 1)}
           />
         )}
-      </div>
-      <div className="scan-actions">
-        {shownPhoto ? (
-          <>
-            <button type="button" onClick={() => setPhoto(null)}>
-              Retake
-            </button>
-            {goOn}
-          </>
-        ) : (
-          <>
-            {/* Back on a side already scanned: move on without a new photo. */}
-            {scanned.has(front) && (
-              <button type="button" onClick={allScanned ? onDone : nextSide}>
-                {allScanned ? 'Done' : 'Next side ›'}
-              </button>
-            )}
-            <button
-              type="button"
-              className="scan-primary"
-              onClick={takePhoto}
-              disabled={!live}
-            >
-              <CameraIcon />
-              Take photo
-            </button>
-          </>
+        {live && photo && (
+          <PhotoSquares
+            squares={photo}
+            picking={picking}
+            onPick={(cell) => setPicking(cell === picking ? null : cell)}
+          />
+        )}
+        {liveColors && (
+          <div className="scan-dots scan-dots-live" aria-hidden="true">
+            {liveColors.colors.map((color, n) => (
+              <span key={n}>
+                <i
+                  className="scan-dot"
+                  style={{ background: STICKER_COLORS[color] }}
+                />
+              </span>
+            ))}
+          </div>
+        )}
+        {liveColors?.problem && (
+          <p className="scan-warning" role="status">
+            {PROBLEM_MESSAGES[liveColors.problem]}
+          </p>
         )}
       </div>
+      {picking !== null && pickingSquare >= 0 ? (
+        <div className="scan-picker">
+          <p>Pick the colour of the {SQUARE_NAMES[pickingSquare]} square:</p>
+          <Palette
+            label="Colour for this square"
+            selected={named.get(picking)!.color}
+            counts={colorCounts(cube)}
+            onSelect={(color) => fix(picking, color)}
+            letters={letters}
+          />
+          <button type="button" onClick={() => setPicking(null)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="scan-actions">
+          {photo ? (
+            <>
+              <button type="button" onClick={retake}>
+                Retake
+              </button>
+              {goOn}
+            </>
+          ) : (
+            <>
+              {/* Back on a side already scanned: move on without a new photo. */}
+              {scanned.has(front) && (
+                <button type="button" onClick={allScanned ? onDone : nextSide}>
+                  {allScanned ? 'Done' : 'Next side ›'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="scan-primary"
+                onClick={takePhoto}
+                disabled={!live}
+              >
+                <CameraIcon />
+                Take photo
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <div className="scan-progress">
         <CubeNet state={cubeAsShown(cube, orientation)} activeFace="F" />
         <div>
           <p className="scan-count">
             {scanned.size} of {FACES.length} sides
           </p>
-          <p className="scan-instruction" aria-live="polite">
+          <p
+            className="scan-instruction"
+            data-warning={repeatColor ? true : undefined}
+            aria-live="polite"
+          >
             {instruction()}
           </p>
         </div>
       </div>
+      {debug && (
+        <ScanDebugPanel
+          light={light}
+          onLight={(choice) => {
+            setLight(choice)
+            if (scanned.size > 0) paint(sides, fixes, choice)
+          }}
+        />
+      )}
     </section>
+  )
+}
+
+/** Fixes, except for these cells. */
+function withoutCells(fixes: Fixes, cells: readonly number[]): Fixes {
+  const kept = { ...fixes }
+  for (const cell of cells) delete kept[cell]
+  return kept
+}
+
+interface PhotoSquaresProps {
+  squares: (Classified & { cell: number })[]
+  picking: number | null
+  onPick: (cell: number) => void
+}
+
+/**
+ * The colours read from a photo, a dot on each square. Tapping a square
+ * picks its colour by hand; ones the app is unsure of are outlined.
+ */
+function PhotoSquares({ squares, picking, onPick }: PhotoSquaresProps) {
+  return (
+    <div
+      className="scan-dots"
+      role="group"
+      aria-label="Colours read: tap a square to change it"
+    >
+      {squares.map(({ cell, color, unsure }, n) => (
+        <button
+          key={cell}
+          type="button"
+          className="scan-square"
+          aria-pressed={cell === picking}
+          aria-label={`${SQUARE_NAMES[n]}: ${color}${unsure ? ', not sure' : ''}`}
+          onClick={() => onPick(cell)}
+        >
+          <i
+            className="scan-dot"
+            data-unsure={unsure || undefined}
+            style={{ background: STICKER_COLORS[color] }}
+          />
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -193,34 +415,33 @@ type CameraState =
   | { status: 'failed'; message: string }
 
 interface CameraHandle {
-  /** The colour of each of the 9 squares in the guide right now, or null with no picture yet. */
-  read: () => Rgb[] | null
+  /** Each of the 9 squares in the guide right now, or null with no picture yet. */
+  look: () => Square[] | null
 }
 
 interface CameraViewProps {
   ref: Ref<CameraHandle>
-  /** The colours read from a photo: the picture holds still, with them on top. */
-  photo: readonly Color[] | null
+  /** Hold the picture still, for a photo. */
+  frozen: boolean
   /** Told true once the camera's picture is showing, and false when it stops. */
   onLive: (live: boolean) => void
   onRetry: () => void
 }
 
 /** Starts the camera when shown and stops it when removed, whatever happens in between. */
-function CameraView({ ref, photo, onLive, onRetry }: CameraViewProps) {
+function CameraView({ ref, frozen, onLive, onRetry }: CameraViewProps) {
   const video = useRef<HTMLVideoElement>(null)
   const guide = useRef<HTMLDivElement>(null)
   const [camera, setCamera] = useState<CameraState>({ status: 'starting' })
-  const frozen = photo !== null
   const reportLive = useEffectEvent((isLive: boolean) => onLive(isLive))
 
   useImperativeHandle(ref, () => ({
-    read() {
+    look() {
       const pixels =
         video.current && guide.current
           ? grabFrame(video.current, guide.current)
           : null
-      return pixels && readSquares(pixels)
+      return pixels && inspectSquares(pixels)
     },
   }))
 
@@ -275,14 +496,7 @@ function CameraView({ ref, photo, onLive, onRetry }: CameraViewProps) {
       {camera.status === 'on' && (
         <div className="scan-guide" ref={guide} aria-hidden="true">
           {Array.from({ length: 9 }, (_, n) => (
-            <span key={n}>
-              {photo && (
-                <i
-                  className="scan-dot"
-                  style={{ background: STICKER_COLORS[photo[n]] }}
-                />
-              )}
-            </span>
+            <span key={n} />
           ))}
         </div>
       )}

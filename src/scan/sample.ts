@@ -65,18 +65,30 @@ export function grabFrame(
   return context.getImageData(0, 0, GRAB_SIZE, GRAB_SIZE)
 }
 
+/** One square of a picture: its colour, and how much of it was glare. */
+export interface Square {
+  color: Rgb
+  /** The share of its pixels left out as glare, 0 to 1. */
+  glare: number
+}
+
 /**
- * The colour of each of the 9 squares in a picture of one side, row by row
- * from the top left (so the centre is number 4).
+ * Each of the 9 squares in a picture of one side, row by row from the top
+ * left (so the centre is number 4).
  */
-export function readSquares(pixels: Pixels): Rgb[] {
-  const squares: Rgb[] = []
+export function inspectSquares(pixels: Pixels): Square[] {
+  const squares: Square[] = []
   for (let row = 0; row < 3; row++) {
     for (let column = 0; column < 3; column++) {
       squares.push(readSquare(pixels, column, row))
     }
   }
   return squares
+}
+
+/** Just the colour of each of the 9 squares, as inspectSquares. */
+export function readSquares(pixels: Pixels): Rgb[] {
+  return inspectSquares(pixels).map(({ color }) => color)
 }
 
 /**
@@ -90,7 +102,7 @@ function readSquare(
   { data, width, height }: Pixels,
   column: number,
   row: number,
-): Rgb {
+): Square {
   const edge = (1 - MIDDLE) / 2
   const left = Math.round(((column + edge) * width) / 3)
   const right = Math.round(((column + 1 - edge) * width) / 3)
@@ -103,7 +115,11 @@ function readSquare(
       colors.push([data[i], data[i + 1], data[i + 2]])
     }
   }
-  return median(withoutGlare(colors))
+  const kept = withoutGlare(colors)
+  return {
+    color: median(kept),
+    glare: (colors.length - kept.length) / colors.length,
+  }
 }
 
 /**

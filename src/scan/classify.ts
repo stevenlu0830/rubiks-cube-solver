@@ -8,7 +8,8 @@
  * is the best guide to what its colours look like.
  */
 
-import { CENTER, COLORS, type Color } from '../cube/state.ts'
+import { CELLS_PER_COLOR, CENTER, COLORS, type Color } from '../cube/state.ts'
+import { cheapestAssignment } from './assign.ts'
 import { chroma, rgbToLab, type Lab } from './colorSpace.ts'
 
 /** What each colour looks like: the readings to compare with. */
@@ -69,14 +70,19 @@ export function nearestColor(
  * That gets past centres that are hard to read on their own, like the white
  * one with a logo printed on it: once the other five colours are taken,
  * white is the only one left.
+ *
+ * `pinned` gives the colour of any centre the user has picked by hand: it
+ * keeps that colour, and no other centre gets it.
  */
 export function matchCenters(
   centers: readonly Lab[],
   references: References = PHOTO_COLORS,
+  pinned: readonly (Color | null)[] = [],
 ): Color[] {
   if (centers.length > COLORS.length) {
     throw new RangeError('A cube only has six sides')
   }
+  const taken = new Set(pinned.filter((color) => color !== null))
   let best: Color[] = []
   let bestTotal = Infinity
   const tryAll = (chosen: Color[], total: number) => {
@@ -87,8 +93,13 @@ export function matchCenters(
       return
     }
     const center = centers[chosen.length]
+    const pin = pinned[chosen.length]
+    if (pin) {
+      tryAll([...chosen, pin], total)
+      return
+    }
     for (const color of COLORS) {
-      if (chosen.includes(color)) continue
+      if (chosen.includes(color) || taken.has(color)) continue
       tryAll(
         [...chosen, color],
         total + colorDistance(center, references[color]),
@@ -99,22 +110,56 @@ export function matchCenters(
   return best
 }
 
+/** A square's colour as read, and whether the reading was a close call. */
+export interface Classified {
+  color: Color
+  /**
+   * True when it might well be another colour: another one was nearly as
+   * close, or the "9 of each" rule moved it off the colour it looked most
+   * like. The app outlines these for the user to check.
+   */
+  unsure: boolean
+}
+
+/**
+ * A square is a close call when the next nearest colour is less than this
+ * much further away than the nearest (0.7: within about 40%).
+ */
+const SURE_RATIO = 0.7
+
 /**
  * Names the colours of every side scanned so far. Each side is the 9
  * readings from one photo, row by row from the top left, so the centre is
- * reading 4.
+ * reading 4. `fixed` gives the colours the user picked by hand for some
+ * squares (null for the rest); those always stay as picked.
  *
  * 1. The centres are named by matchCenters.
  * 2. Each centre becomes the reference for its colour (unless it looks
  *    nothing like it, see below).
- * 3. Every other square takes the colour of its nearest reference.
+ * 3. The other squares are shared out among the colours so that no colour
+ *    gets more than 9 squares, as on a real cube, while each square stays as
+ *    close to its colour as possible overall. Squares that look like
+ *    nothing else keep their nearest colour; when, say, 11 squares look
+ *    red, the 2 least red of them go to the colour that's short, often
+ *    orange. With all six sides in, every colour ends up with exactly 9.
  */
 export function classifySides(
   sides: readonly (readonly Lab[])[],
-  start: References = PHOTO_COLORS,
-): Color[][] {
+  {
+    fixed = [],
+    start = PHOTO_COLORS,
+  }: {
+    fixed?: readonly (readonly (Color | null)[])[]
+    start?: References
+  } = {},
+): Classified[][] {
+  const pickedFor = (side: number, n: number) => fixed[side]?.[n] ?? null
   const centers = sides.map((side) => side[CENTER])
-  const centerColors = matchCenters(centers, start)
+  const centerColors = matchCenters(
+    centers,
+    start,
+    sides.map((_, i) => pickedFor(i, CENTER)),
+  )
   const references: Record<Color, Lab> = { ...start }
   centers.forEach((center, i) => {
     const color = centerColors[i]
@@ -126,13 +171,45 @@ export function classifySides(
       references[color] = center
     }
   })
-  return sides.map((side, i) =>
-    side.map((square, n) =>
-      n === CENTER ? centerColors[i] : nearestColor(square, references),
+
+  // How many of the 9 squares of each colour are already accounted for.
+  const used = Object.fromEntries(COLORS.map((color) => [color, 0])) as Record<
+    Color,
+    number
+  >
+  const result: (Classified | null)[][] = sides.map((side, i) =>
+    side.map((square, n) => {
+      const color = n === CENTER ? centerColors[i] : pickedFor(i, n)
+      if (color === null) return null // shared out below
+      used[color]++
+      const unsure =
+        pickedFor(i, n) === null && nearestColor(square, references) !== color
+      return { color, unsure }
+    }),
+  )
+
+  // The rest: a row for each square, a column for each colour's spare slots.
+  const squares = sides.flatMap((side, i) =>
+    side.flatMap((reading, n) => (result[i][n] ? [] : [{ i, n, reading }])),
+  )
+  const slots = COLORS.flatMap((color) =>
+    Array<Color>(Math.max(0, CELLS_PER_COLOR - used[color])).fill(color),
+  )
+  const assignment = cheapestAssignment(
+    squares.map(({ reading }) =>
+      slots.map((color) => colorDistance(reading, references[color])),
     ),
   )
+  squares.forEach(({ i, n, reading }, row) => {
+    const color = slots[assignment[row]]
+    const [nearest, next] = byDistance(reading, references)
+    const closeCall =
+      colorDistance(reading, references[nearest]) >
+      SURE_RATIO * colorDistance(reading, references[next])
+    result[i][n] = { color, unsure: color !== nearest || closeCall }
+  })
+  return result as Classified[][] // every square has its colour now
 }
-
 /** All six colours, nearest first. */
 function byDistance(reading: Lab, references: References): Color[] {
   const distance = (color: Color) => colorDistance(reading, references[color])

@@ -40,7 +40,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the scan screen, its message when the camera is blocked, and a photo', async ({
+    test('the scan screen, its message when the camera is blocked, a photo, and fixing a square', async ({
       page,
     }) => {
       await page.addInitScript(fakeCamera, { refuseFirst: true })
@@ -55,6 +55,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
       await page.getByRole('button', { name: 'Take photo' }).click()
       await expect(page.locator('.scan-dot')).toHaveCount(9)
+      await expectNoProblems(page)
+
+      await page.getByRole('button', { name: /^centre:/ }).click()
+      await expect(
+        page.getByRole('group', { name: 'Colour for this square' }),
+      ).toBeVisible()
       await expectNoProblems(page)
     })
 

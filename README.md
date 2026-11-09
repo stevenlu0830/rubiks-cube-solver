@@ -45,9 +45,13 @@ These are copies of the browsers' engines, not real phones, so also try the app 
 
 **Scan** (next to Solve) reads the cube with the back camera instead of tapping in every square:
 
-1. Line one side of your cube up in the grid and tap **Take photo**. The colours it read appear on the photo and on the 3D cube. If one is wrong, tap **Retake**.
+1. Line one side of your cube up in the grid. Dots show the colours it reads, live, with a warning if it's too dark, there's shine on the stickers, or the phone is moving. Tap **Take photo**: the colours appear on the photo and on the 3D cube. Squares it's unsure of get a dashed yellow ring; tap any square to pick its colour yourself, or tap **Retake**.
 2. Tap **Next side**. The 3D cube turns to the next side, and the app says how to turn yours to match, e.g. "Turn your cube to the left, so its right side faces you". All six sides take five turns. You can also swipe the 3D cube to any side yourself.
 3. After the sixth side, tap **Done**, check the cube, fix any square by tapping it, and tap **Solve**.
+
+After each photo the app shares the colours out over every side scanned so far, so no colour gets more than 9 squares (a real cube has 9 of each). That sorts out most red/orange and white/yellow mix-ups, and can change squares on earlier sides, but never ones you picked yourself. If a photo looks like a side you've already scanned, it says so: your real cube was probably turned differently from the 3D one.
+
+To collect test data from real photos, add `?scan-debug` to the address: see [src/scan/test-photos/README.md](src/scan/test-photos/README.md).
 
 The camera switches off when you tap **Done** or switch to another app.
 

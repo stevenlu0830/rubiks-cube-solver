@@ -38,11 +38,6 @@
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.4);
 }
 
-.scan-guide span {
-  display: grid;
-  place-items: center;
-}
-
 /* Lines between the nine squares. */
 .scan-guide span:not(:nth-child(3n)) {
   border-right: 1px solid rgb(255 255 255 / 0.6);
@@ -85,13 +80,75 @@
   background: rgb(255 255 255 / 0.2);
 }
 
-/* The colour read from each square of a photo, shown on top of it. */
+/*
+ * The colours read, a dot on each square: live while lining a side up, then
+ * from the photo. Laid over the guide, the same size and place.
+ */
+.scan-dots {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 78cqmin;
+  height: 78cqmin;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+}
+
+.scan-dots > * {
+  display: grid;
+  place-items: center;
+}
+
+.scan-dots-live {
+  pointer-events: none;
+}
+
 .scan-dot {
   width: 42%;
   aspect-ratio: 1;
   border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+}
+
+/* Live dots are smaller: a guide to what a photo would read, not the photo. */
+.scan-dots-live .scan-dot {
+  width: 30%;
+}
+
+/* Each square of a photo is a button covering the whole square, easy to hit. */
+.scan-square {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Ones the app is unsure of: a dashed ring to check. */
+.scan-dot[data-unsure] {
+  outline: 3px dashed #ffc400;
+  outline-offset: 3px;
+}
+
+/* The one being fixed. */
+.scan-square[aria-pressed='true'] .scan-dot {
+  width: 56%;
+  border-width: 3px;
+}
+
+/* Too dark, glare, or moving: across the top of the camera's view. */
+.scan-warning {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  color: #fff;
+  background: rgb(0 0 0 / 0.75);
 }
 
 .scan-actions {
@@ -155,4 +212,43 @@
 
 .scan-instruction {
   color: var(--text-muted);
+}
+
+.scan-instruction[data-warning] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Picking a square's colour by hand, in place of the buttons. */
+.scan-picker {
+  margin: 8px 0 0;
+  text-align: center;
+}
+
+.scan-picker p {
+  margin: 0 16px 4px;
+  font-size: 0.85rem;
+}
+
+.scan-picker > button {
+  margin-top: 4px;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* ?scan-debug only. */
+.scan-debug {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 8px 16px 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 0.8rem;
 }

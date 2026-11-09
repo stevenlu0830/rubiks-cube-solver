@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { COLORS, type Color } from '../cube/state.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
 import {
-  classifySides,
+  classifySides as classifyWithDoubts,
   colorDistance,
   matchCenters,
   nearestColor,
@@ -34,6 +34,12 @@ const warm = ([r, g, b]: Rgb): Rgb => [
 ]
 
 const lab = (rgb: Rgb) => rgbToLab(rgb)
+
+/** Just the colours classifySides names, without whether it was sure. */
+const classifySides = (
+  ...args: Parameters<typeof classifyWithDoubts>
+): Color[][] =>
+  classifyWithDoubts(...args).map((side) => side.map(({ color }) => color))
 
 /** Six sides in the standard colour scheme, centre in the middle. */
 const SCHEME: Color[] = ['white', 'red', 'green', 'yellow', 'orange', 'blue']
@@ -158,5 +164,78 @@ describe('classifySides', () => {
     const named = classifySides(readings)
     expect(named[0][4]).toBe('white')
     expect(named).toEqual(colors)
+  })
+
+  /** Two orange squares that, on their own, look more red than orange. */
+  function twoRedLookingOranges() {
+    const { colors, readings } = photographSides()
+    const oranges = colors
+      .flatMap((side, s) => side.map((color, n) => ({ color, s, n })))
+      .filter(({ color, n }) => color === 'orange' && n !== 4)
+      .slice(0, 2)
+    for (const { s, n } of oranges) readings[s][n] = lab([205, 45, 45])
+    return { colors, readings, oranges }
+  }
+
+  it('gives no colour more than 9 squares: the least red of 11 "reds" are orange', () => {
+    const { colors, readings, oranges } = twoRedLookingOranges()
+    // Even compared with the centres, which are in the same light, each of
+    // the two is nearer the red centre than the orange one.
+    for (const { s, n } of oranges) {
+      const references = {
+        ...PHOTO_COLORS,
+        red: readings[1][4],
+        orange: readings[4][4],
+      }
+      expect(nearestColor(readings[s][n], references)).toBe('red')
+    }
+    const read = classifyWithDoubts(readings)
+    expect(read.map((side) => side.map(({ color }) => color))).toEqual(colors)
+    for (const { s, n } of oranges) expect(read[s][n].unsure).toBe(true)
+  })
+
+  it('keeps to 9 of a colour with only some sides scanned', () => {
+    // Two sides where every square looks red: only 9 can be.
+    const red = lab(BRAND.red)
+    const named = classifySides([Array(9).fill(red), Array(9).fill(red)])
+    expect(named.flat().filter((color) => color === 'red')).toHaveLength(9)
+  })
+
+  it('keeps colours picked by hand, and counts them towards the 9', () => {
+    const { colors, readings, oranges } = twoRedLookingOranges()
+    // The user says the first one is red after all (a white square, say,
+    // that they've picked red): it stays red, so one fewer red is left
+    // for the rest.
+    const [first, second] = oranges
+    const fixed = colors.map((side) => side.map(() => null as Color | null))
+    fixed[first.s][first.n] = 'red'
+    const read = classifyWithDoubts(readings, { fixed })
+    expect(read[first.s][first.n]).toEqual({ color: 'red', unsure: false })
+    expect(read[second.s][second.n].color).toBe('orange')
+    const reds = read.flat().filter(({ color }) => color === 'red')
+    expect(reds).toHaveLength(9)
+  })
+
+  it('keeps a centre picked by hand, and gives its colour to no other centre', () => {
+    const { readings } = photographSides()
+    const fixed = readings.map(() => Array<Color | null>(9).fill(null))
+    fixed[1][4] = 'orange' // the red side's centre, picked orange by mistake
+    const read = classifyWithDoubts(readings, { fixed })
+    expect(read[1][4].color).toBe('orange')
+    expect(read[4][4].color).not.toBe('orange') // the real orange centre
+  })
+
+  it('is sure of clear colours, and unsure of close calls', () => {
+    const between = lab([220, 65, 35]) // about as red as it is orange
+    const read = classifyWithDoubts([
+      [
+        ...Array(4).fill(lab(BRAND.green)),
+        lab(BRAND.green),
+        between,
+        ...Array(3).fill(lab(BRAND.green)),
+      ],
+    ])
+    expect(read[0][0]).toEqual({ color: 'green', unsure: false })
+    expect(read[0][5].unsure).toBe(true)
   })
 })

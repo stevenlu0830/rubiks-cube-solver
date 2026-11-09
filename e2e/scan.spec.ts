@@ -72,6 +72,8 @@ test('scans all six sides of a scrambled cube by following the instructions, the
       page,
       frontCells(holding).map((cell) => STICKER_COLORS[SCRAMBLED[cell]!]),
     )
+    // Live dots show what a photo would read, before taking it.
+    await expect(page.locator('.scan-dots-live .scan-dot')).toHaveCount(9)
     await page.getByRole('button', { name: 'Take photo' }).click()
     await expect(page.getByText(`${side} of 6 sides`)).toBeVisible()
     await expect(page.locator('.scan-dot')).toHaveCount(9)
@@ -148,4 +150,31 @@ test('lets you swipe to the sides yourself, and turns the cube around for the la
     localStorage.getItem('rubiks-cube-solver/cube'),
   )
   expect(JSON.parse(saved!)).toEqual(SCRAMBLED)
+})
+
+test('fixes a square by tapping it on the photo', async ({ page }) => {
+  await page.addInitScript(fakeCamera)
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Scan' }).click()
+  await expect.poll(() => pictureWidth(page)).toBe(640)
+  const cells = frontCells(new Quaternion())
+  await showSide(
+    page,
+    cells.map((cell) => STICKER_COLORS[SCRAMBLED[cell]!]),
+  )
+  await page.getByRole('button', { name: 'Take photo' }).click()
+
+  const topLeft = page.getByRole('button', { name: /^top left:/ })
+  await expect(topLeft).toHaveAccessibleName(`top left: ${SCRAMBLED[cells[0]]}`)
+  await topLeft.click()
+  const picker = page.getByRole('group', { name: 'Colour for this square' })
+  const other = COLORS.find((color) => color !== SCRAMBLED[cells[0]])!
+  await picker.getByRole('button', { name: new RegExp(`^${other},`) }).click()
+
+  await expect(topLeft).toHaveAccessibleName(`top left: ${other}`)
+  await expect(picker).toBeHidden()
+  const saved = await page.evaluate(() =>
+    localStorage.getItem('rubiks-cube-solver/cube'),
+  )
+  expect(JSON.parse(saved!)[cells[0]]).toBe(other)
 })

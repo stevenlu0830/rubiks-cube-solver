@@ -1,31 +1,112 @@
 import { Quaternion } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FACES, type Face } from '../cube/state.ts'
+import { CENTER, cellIndex, FACES, type Face } from '../cube/state.ts'
 import { allOrientations } from '../test/orientations.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
 import { frontFace, turnBySwipe } from '../view/orientation.ts'
 import { rgbToLab, type Rgb } from './colorSpace.ts'
-import { nextSideTurns, sideColors, turnInstruction } from './sides.ts'
+import {
+  nextSideTurns,
+  readScannedCube,
+  repeatedSide,
+  turnInstruction,
+  type ScannedSide,
+} from './sides.ts'
 
 const START = new Quaternion()
 const turn = (orientation: Quaternion, swipes: SwipeDirection[]) =>
   swipes.reduce(turnBySwipe, orientation)
 
-describe('sideColors', () => {
-  const side = (rgb: Rgb) => Array(9).fill(rgbToLab(rgb))
+/**
+ * A side photographed onto `face`, in its usual order: the first squares in
+ * these colours, and the rest in the last one.
+ */
+function photo(face: Face, ...colors: Rgb[]): ScannedSide {
+  const rgb = Array.from({ length: 9 }, (_, n) => colors[n] ?? colors.at(-1)!)
+  return {
+    cells: Array.from({ length: 9 }, (_, n) => cellIndex(face, n)),
+    rgb,
+    readings: rgb.map(rgbToLab),
+  }
+}
 
-  it('names the colours of the side asked for', () => {
-    const sides = { F: side([0, 155, 72]), U: side([255, 255, 255]) }
-    expect(sideColors(sides, 'U')).toEqual(Array(9).fill('white'))
-    expect(sideColors(sides, 'F')).toEqual(Array(9).fill('green'))
+const GREEN: Rgb = [0, 155, 72]
+const WHITE: Rgb = [255, 255, 255]
+const RED: Rgb = [183, 18, 52]
+const ORANGE: Rgb = [255, 88, 0]
+const REDDISH_ORANGE: Rgb = [215, 60, 45] // an orange that looks red on its own
+
+describe('readScannedCube', () => {
+  it('names every scanned square, by cell', () => {
+    const read = readScannedCube({ F: photo('F', GREEN), U: photo('U', WHITE) })
+    expect(read.size).toBe(18)
+    expect(read.get(cellIndex('U', 0))).toEqual({
+      color: 'white',
+      unsure: false,
+    })
+    expect(read.get(cellIndex('F', 8))?.color).toBe('green')
   })
 
-  it('uses the other sides: two centres are never the same colour', () => {
-    const redOrange = side([230, 80, 30])
-    expect(sideColors({ U: redOrange }, 'U')[4]).toBe('orange')
-    expect(sideColors({ F: side([240, 105, 25]), U: redOrange }, 'U')[4]).toBe(
-      'red',
+  it('never names two centres the same colour', () => {
+    const redOrange: Rgb = [230, 80, 30]
+    const read = readScannedCube({
+      F: photo('F', [240, 105, 25]),
+      U: photo('U', redOrange),
+    })
+    expect(read.get(cellIndex('U', CENTER))?.color).toBe('red')
+  })
+
+  it('can change an earlier side when a new one comes in', () => {
+    // The front has two reddish oranges; with only it scanned, they're red.
+    const front = photo(
+      'F',
+      REDDISH_ORANGE,
+      REDDISH_ORANGE,
+      GREEN,
+      GREEN,
+      GREEN,
     )
+    const before = readScannedCube({ F: front })
+    expect(before.get(cellIndex('F', 0))?.color).toBe('red')
+    // Then the red side: 9 clear reds. Red is full, so those two are orange.
+    const after = readScannedCube({ F: front, R: photo('R', RED) })
+    expect(after.get(cellIndex('F', 0))?.color).toBe('orange')
+    expect(after.get(cellIndex('F', 1))?.color).toBe('orange')
+  })
+
+  it('never changes a square fixed by hand', () => {
+    const front = photo(
+      'F',
+      REDDISH_ORANGE,
+      REDDISH_ORANGE,
+      GREEN,
+      GREEN,
+      GREEN,
+    )
+    const fixes = { [cellIndex('F', 0)]: 'yellow' as const }
+    const read = readScannedCube({ F: front, R: photo('R', RED) }, fixes)
+    expect(read.get(cellIndex('F', 0))).toEqual({
+      color: 'yellow',
+      unsure: false,
+    })
+  })
+})
+
+describe('repeatedSide', () => {
+  it('spots a second photo of a side already scanned', () => {
+    const sides = { F: photo('F', GREEN), R: photo('R', GREEN) }
+    expect(repeatedSide(sides, 'R')).toBe('F')
+  })
+
+  it('finds nothing for different sides, or the first side', () => {
+    expect(repeatedSide({ F: photo('F', GREEN) }, 'F')).toBeNull()
+    const sides = { F: photo('F', GREEN), R: photo('R', RED) }
+    expect(repeatedSide(sides, 'R')).toBeNull()
+  })
+
+  it("doesn't mistake orange for the red side", () => {
+    const sides = { F: photo('F', RED), R: photo('R', ORANGE) }
+    expect(repeatedSide(sides, 'R')).toBeNull()
   })
 })
 

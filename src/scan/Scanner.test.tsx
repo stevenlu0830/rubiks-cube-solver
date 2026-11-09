@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { Quaternion } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +12,7 @@ import { fakeCamera, removeFakeCamera } from '../test/fakeCamera.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
 import { frontCells, frontFace, turnBySwipe } from '../view/orientation.ts'
+import type { Rgb } from './colorSpace.ts'
 import { Scanner } from './Scanner.tsx'
 
 /**
@@ -77,8 +78,11 @@ describe('Scanner', () => {
   let camera: ReturnType<typeof fakeCamera>
   beforeEach(() => {
     camera = fakeCamera()
+    // The live look through the camera runs on a timer: tests move it on.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
   })
   afterEach(() => {
+    vi.useRealTimers()
     removeFakeCamera()
     delete (document as { hidden?: boolean }).hidden
   })
@@ -159,10 +163,13 @@ describe('Scanner', () => {
       fireEvent.click(screen.getByRole('button', { name }))
     const instruction = () =>
       document.querySelector('.scan-instruction')!.textContent
-    const dots = () =>
-      [...document.querySelectorAll<HTMLElement>('.scan-dot')].map(
+    /** The colours shown on the photo, as CSS. */
+    const dots = (where = '.scan-dots:not(.scan-dots-live)') =>
+      [...document.querySelectorAll<HTMLElement>(`${where} .scan-dot`)].map(
         (dot) => dot.style.background,
       )
+    /** Lets the scanner take its next live look through the camera. */
+    const lookThrough = () => act(() => vi.advanceTimersByTime(250))
     const asCss = (colors: Color[]) =>
       colors.map((color) => {
         const probe = document.createElement('i')
@@ -316,6 +323,216 @@ describe('Scanner', () => {
       expect(
         document.querySelector('.cube-net-face[data-active]'),
       ).not.toBeNull()
+    })
+
+    describe('accuracy', () => {
+      const RED_ORANGE: Rgb = [220, 65, 35] // about as red as it is orange
+      const REDDISH: Rgb = [215, 60, 45] // an orange that looks red on its own
+      const square = (name: string) =>
+        screen.getByRole('button', { name: new RegExp(`^${name}:`) })
+
+      it('shows live dots of what a photo would read, before taking it', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        const side: Color[] = [
+          'red',
+          'white',
+          'blue',
+          'green',
+          'green',
+          'yellow',
+          'orange',
+          'red',
+          'white',
+        ]
+        camera.show(side)
+        lookThrough()
+        expect(dots('.scan-dots-live')).toEqual(asCss(side))
+        expect(dots()).toEqual([]) // no photo yet
+      })
+
+      it.each([
+        ['too dark', [[20, 15, 15]], {}, 'Too dark'],
+        [
+          'shine on a red sticker',
+          [[183, 18, 52]],
+          { glare: 0.4 },
+          'Shine on the stickers',
+        ],
+      ] as [string, Rgb[], { glare?: number }, string][])(
+        'warns before the photo: %s',
+        async (_, colors, options, warning) => {
+          render(<Harness />)
+          await cameraAnswers()
+          camera.show(Array(9).fill(colors[0]), options)
+          lookThrough()
+          expect(screen.getByRole('status')).toHaveTextContent(warning)
+        },
+      )
+
+      it('says to hold still while the picture keeps changing', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        camera.show(Array(9).fill('green'))
+        lookThrough()
+        expect(screen.queryByRole('status')).toBeNull()
+        camera.show(Array(9).fill('blue'))
+        lookThrough()
+        expect(screen.getByRole('status')).toHaveTextContent('Hold still')
+        lookThrough() // and when it settles, the warning goes
+        expect(screen.queryByRole('status')).toBeNull()
+      })
+
+      it('outlines a square it is unsure of, and lets the user pick its colour', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        camera.show([
+          'green',
+          RED_ORANGE,
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+        ])
+        click('Take photo')
+        expect(square('top')).toHaveAccessibleName(/, not sure$/)
+        expect(square('top').querySelector('[data-unsure]')).not.toBeNull()
+        expect(instruction()).toMatch(/^1 square might be wrong/)
+
+        fireEvent.click(square('top'))
+        const picker = screen.getByRole('group', {
+          name: 'Colour for this square',
+        })
+        fireEvent.click(
+          within(picker).getByRole('button', { name: /^yellow,/ }),
+        )
+        const cell = frontCells(new Quaternion())[1]
+        expect(app.cube[cell]).toBe('yellow')
+        expect(square('top')).toHaveAccessibleName('top: yellow')
+        expect(
+          screen.queryByRole('group', { name: 'Colour for this square' }),
+        ).toBeNull()
+
+        // A new photo of the side starts afresh.
+        click('Retake')
+        click('Take photo')
+        expect(app.cube[cell]).not.toBe('yellow')
+      })
+
+      it('shares colours out over every side: a later photo can change an earlier one', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        const first = frontCells(new Quaternion())
+        camera.show([
+          REDDISH,
+          REDDISH,
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+        ])
+        click('Take photo')
+        expect([app.cube[first[0]], app.cube[first[1]]]).toEqual(['red', 'red'])
+
+        click('Next side ›')
+        camera.show(Array(9).fill('red'))
+        click('Take photo')
+        // Ten reds can't all be red, so the two least red ones are orange.
+        expect([app.cube[first[0]], app.cube[first[1]]]).toEqual([
+          'orange',
+          'orange',
+        ])
+      })
+
+      it('keeps colours picked by hand when later photos come in', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        const first = frontCells(new Quaternion())
+        camera.show([
+          REDDISH,
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+          'green',
+        ])
+        click('Take photo')
+        fireEvent.click(square('top left'))
+        fireEvent.click(
+          within(
+            screen.getByRole('group', { name: 'Colour for this square' }),
+          ).getByRole('button', { name: /^red,/ }),
+        )
+        click('Next side ›')
+        camera.show(Array(9).fill('red'))
+        click('Take photo')
+        expect(app.cube[first[0]]).toBe('red')
+      })
+
+      it('says when a photo looks like a side already scanned', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        camera.show(Array(9).fill('green'))
+        click('Take photo')
+        click('Next side ›')
+        click('Take photo') // the green side again: the real cube wasn't turned
+        expect(instruction()).toBe(
+          "You've already scanned the green side. Turn your cube to match the one below, then retake.",
+        )
+        camera.show(Array(9).fill('red'))
+        click('Retake')
+        click('Take photo')
+        expect(instruction()).not.toMatch(/already scanned/)
+      })
+    })
+
+    describe('?scan-debug', () => {
+      beforeEach(() => {
+        localStorage.clear()
+        window.history.replaceState(null, '', '/?scan-debug')
+      })
+      afterEach(() => window.history.replaceState(null, '', '/'))
+
+      it('records what each photo read, with the colours as fixed, and the light', async () => {
+        render(<Harness />)
+        await cameraAnswers()
+        expect(screen.getByText('0 scans saved')).toBeInTheDocument()
+        camera.show(Array(9).fill('blue'))
+        click('Take photo')
+        fireEvent.change(screen.getByLabelText('Light'), {
+          target: { value: 'warm bulb' },
+        })
+
+        const [scan] = JSON.parse(
+          localStorage.getItem('rubiks-cube-solver/scan-debug')!,
+        )
+        expect(scan.light).toBe('warm bulb')
+        expect(scan.sides.F.colors).toEqual(Array(9).fill('blue'))
+        expect(scan.sides.F.rgb[0]).toEqual([0, 70, 173])
+        expect(screen.getByText('1 scan saved')).toBeInTheDocument()
+
+        click('Clear')
+        expect(localStorage.getItem('rubiks-cube-solver/scan-debug')).toBeNull()
+      })
+
+      it('is hidden without ?scan-debug', async () => {
+        window.history.replaceState(null, '', '/')
+        render(<Harness />)
+        await cameraAnswers()
+        expect(screen.queryByRole('region', { name: 'Scan debug' })).toBeNull()
+        camera.show(Array(9).fill('blue'))
+        click('Take photo')
+        expect(localStorage.getItem('rubiks-cube-solver/scan-debug')).toBeNull()
+      })
     })
   })
 })

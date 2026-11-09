@@ -84,6 +84,10 @@ export default defineConfig(({ mode }) => ({
   // Build the solver's Web Worker as a modern JavaScript module.
   worker: { format: 'es', plugins: () => [fixCubejs] },
   test: {
+    // Don't keep compiled test files between runs: a cached one would miss
+    // real-photo data files added later (src/scan/test-photos/). Compiling
+    // afresh costs no noticeable time here.
+    fsModuleCache: false,
     projects: [
       {
         // The everyday tests: `npm test`.
