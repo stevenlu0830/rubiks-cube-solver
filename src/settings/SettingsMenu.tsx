@@ -1,4 +1,5 @@
 import { canVibrate } from '../device/haptics.ts'
+import { canOfferCamera } from '../scan/camera.ts'
 import type { Settings } from './settings.ts'
 import './settings.css'
 
@@ -56,6 +57,21 @@ export function SettingsMenu({ settings, onChange }: SettingsMenuProps) {
             <span>
               Vibration
               <small>A buzz when you paint, and when it's solved</small>
+            </span>
+          </label>
+        )}
+        {canOfferCamera() && (
+          <label className="setting">
+            <input
+              type="checkbox"
+              checked={settings.autoPhoto}
+              onChange={(event) =>
+                onChange({ ...settings, autoPhoto: event.target.checked })
+              }
+            />
+            <span>
+              Auto photo
+              <small>When scanning, takes the photo once you hold still</small>
             </span>
           </label>
         )}

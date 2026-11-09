@@ -232,6 +232,7 @@ function App() {
           }}
           onDone={() => setScanning(false)}
           letters={settings.letters}
+          autoPhoto={settings.autoPhoto}
         />
       ) : (
         <>

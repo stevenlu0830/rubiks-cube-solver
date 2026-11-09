@@ -15,23 +15,32 @@ const brokenStorage = {
 describe('saving and loading settings', () => {
   beforeEach(() => localStorage.clear())
 
-  it('starts with letters off and vibration on', () => {
-    expect(loadSettings()).toEqual({ letters: false, haptics: true })
+  it('starts with letters off, and vibration and auto photos on', () => {
+    expect(loadSettings()).toEqual({
+      letters: false,
+      haptics: true,
+      autoPhoto: true,
+    })
   })
 
   it('gets back exactly what was saved', () => {
-    saveSettings({ letters: true, haptics: false })
-    expect(loadSettings()).toEqual({ letters: true, haptics: false })
+    const settings = { letters: true, haptics: false, autoPhoto: false }
+    saveSettings(settings)
+    expect(loadSettings()).toEqual(settings)
   })
 
   it.each([
     ['not JSON', '{oops', DEFAULT_SETTINGS],
     ['not an object', '[true]', DEFAULT_SETTINGS],
-    ['partly missing', '{"letters":true}', { letters: true, haptics: true }],
+    [
+      'partly missing',
+      '{"letters":true}',
+      { ...DEFAULT_SETTINGS, letters: true },
+    ],
     [
       'the wrong type',
       '{"letters":"yes","haptics":false}',
-      { letters: false, haptics: false },
+      { ...DEFAULT_SETTINGS, haptics: false },
     ],
   ])('uses the defaults for saved data that is %s', (_, raw, expected) => {
     localStorage.setItem(KEY, raw)

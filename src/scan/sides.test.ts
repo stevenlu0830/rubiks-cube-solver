@@ -1,9 +1,9 @@
-import { Quaternion } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { CENTER, cellIndex, FACES, type Face } from '../cube/state.ts'
 import { allOrientations } from '../test/orientations.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
-import { frontFace, turnBySwipe } from '../view/orientation.ts'
+import { faceTowards, frontFace, turnBySwipe } from '../view/orientation.ts'
 import { rgbToLab, type Rgb } from './colorSpace.ts'
 import {
   nextSideTurns,
@@ -177,6 +177,97 @@ describe('turnInstruction', () => {
     ],
   ])('%j: %s', (swipes, text) => {
     expect(turnInstruction(swipes)).toBe(text)
+  })
+
+  it.each<[SwipeDirection[], string]>([
+    [
+      ['left'],
+      'Turn your cube to the left, so the side on your left faces the camera',
+    ],
+    [
+      ['right'],
+      'Turn your cube to the right, so the side on your right faces the camera',
+    ],
+    [
+      ['up'],
+      'Tip the top of your cube towards you, so its bottom side faces the camera',
+    ],
+    [
+      ['down'],
+      'Tip the top of your cube away from you, so its top side faces the camera',
+    ],
+    [
+      ['left', 'left'],
+      'Turn your cube around, so the side facing you faces the camera',
+    ],
+    [
+      ['left', 'down'],
+      'Turn your cube to the left, then tip the top of your cube away from you',
+    ],
+  ])('with a camera facing you, %j: %s', (swipes, text) => {
+    expect(turnInstruction(swipes, { facingYou: true })).toBe(text)
+  })
+
+  describe('with a camera facing you, like a laptop', () => {
+    /**
+     * The real cube is the 3D one seen from behind: turned half round, so
+     * the 3D cube's front faces the camera, away from the user.
+     */
+    const HALF_ROUND = new Quaternion().setFromAxisAngle(
+      new Vector3(0, 1, 0),
+      Math.PI,
+    )
+    const realCube = (shown: Quaternion) => HALF_ROUND.clone().multiply(shown)
+    const TOWARDS_CAMERA = new Vector3(0, 0, -1)
+    /** What each instruction asks the user to do with their hands, as swipes. */
+    const MOVES: [RegExp, SwipeDirection[]][] = [
+      [/turn your cube to the left/i, ['left']],
+      [/turn your cube to the right/i, ['right']],
+      [/tip the top of your cube away from you/i, ['up']],
+      [/tip the top of your cube towards you/i, ['down']],
+      [/turn your cube around/i, ['left', 'left']],
+    ]
+    const SEQUENCES: SwipeDirection[][] = [
+      ['left'],
+      ['right'],
+      ['up'],
+      ['down'],
+      ['left', 'left'],
+      ['right', 'up'],
+    ]
+
+    it('keeps the real cube matching the 3D one, from any start', () => {
+      for (const shown of allOrientations()) {
+        for (const swipes of SEQUENCES) {
+          const text = turnInstruction(swipes, { facingYou: true })
+          const hands = text
+            .split(', then ')
+            .flatMap((step) => MOVES.find(([words]) => words.test(step))![1])
+          const real = hands.reduce(turnBySwipe, realCube(shown))
+          const expected = realCube(turn(shown, swipes))
+          expect(real.angleTo(expected), text).toBeLessThan(1e-6)
+        }
+      }
+    })
+
+    it('names the side that comes round to the camera', () => {
+      const where: Record<string, Vector3> = {
+        'the side on your left': new Vector3(-1, 0, 0),
+        'the side on your right': new Vector3(1, 0, 0),
+        'its bottom side': new Vector3(0, -1, 0),
+        'its top side': new Vector3(0, 1, 0),
+        'the side facing you': new Vector3(0, 0, 1),
+      }
+      for (const swipes of SEQUENCES.slice(0, 5)) {
+        const text = turnInstruction(swipes, { facingYou: true })
+        const side = text.match(/so (.+) faces the camera/)![1]
+        const before = realCube(START)
+        const after = realCube(turn(START, swipes))
+        expect(faceTowards(after, TOWARDS_CAMERA), text).toBe(
+          faceTowards(before, where[side]),
+        )
+      }
+    })
   })
 
   it('matches the side the swipes bring to the front', () => {

@@ -27,17 +27,24 @@ export const GRAB_SIZE = 120
 /**
  * Copies the part of the camera's picture under the guide, at GRAB_SIZE
  * pixels square. Null while the camera has no picture yet.
+ *
+ * `mirrored`: the picture is shown flipped left to right, as a laptop's
+ * camera usually is. The pixels are still copied the camera's own way
+ * round, which is how the side really looks; only which part of the
+ * picture is under the guide changes.
  */
 export function grabFrame(
   video: HTMLVideoElement,
   guide: Element,
+  { mirrored = false }: { mirrored?: boolean } = {},
 ): Pixels | null {
   if (video.videoWidth === 0 || video.videoHeight === 0) return null
   const shown = video.getBoundingClientRect()
   const box = guide.getBoundingClientRect()
+  const fromLeft = box.left - shown.left
   const area = shownPart(
     {
-      x: box.left - shown.left,
+      x: mirrored ? shown.width - fromLeft - box.width : fromLeft,
       y: box.top - shown.top,
       width: box.width,
       height: box.height,
@@ -65,11 +72,17 @@ export function grabFrame(
   return context.getImageData(0, 0, GRAB_SIZE, GRAB_SIZE)
 }
 
-/** One square of a picture: its colour, and how much of it was glare. */
+/** One square of a picture: its colour, how much of it was glare, and how dark its edge is. */
 export interface Square {
   color: Rgb
   /** The share of its pixels left out as glare, 0 to 1. */
   glare: number
+  /**
+   * How much darker the darkest part of its edge is than its middle, 0 to
+   * 1. On a cube that's the black plastic (or the gap between pieces)
+   * round each sticker, so it's high; on a wall or a table it's near 0.
+   */
+  edge: number
 }
 
 /**
@@ -103,23 +116,42 @@ function readSquare(
   column: number,
   row: number,
 ): Square {
-  const edge = (1 - MIDDLE) / 2
-  const left = Math.round(((column + edge) * width) / 3)
-  const right = Math.round(((column + 1 - edge) * width) / 3)
-  const top = Math.round(((row + edge) * height) / 3)
-  const bottom = Math.round(((row + 1 - edge) * height) / 3)
+  const margin = (1 - MIDDLE) / 2
+  const across = (n: number) => Math.round((n * width) / 3)
+  const down = (n: number) => Math.round((n * height) / 3)
+  const [left, right] = [across(column + margin), across(column + 1 - margin)]
+  const [top, bottom] = [down(row + margin), down(row + 1 - margin)]
   const colors: Rgb[] = []
-  for (let y = top; y < bottom; y++) {
-    for (let x = left; x < right; x++) {
+  /** How bright each pixel round the middle is: its brightest channel. */
+  const edges: number[] = []
+  for (let y = down(row); y < down(row + 1); y++) {
+    for (let x = across(column); x < across(column + 1); x++) {
       const i = (y * width + x) * 4
-      colors.push([data[i], data[i + 1], data[i + 2]])
+      if (x >= left && x < right && y >= top && y < bottom) {
+        colors.push([data[i], data[i + 1], data[i + 2]])
+      } else {
+        edges.push(Math.max(data[i], data[i + 1], data[i + 2]))
+      }
     }
   }
   const kept = withoutGlare(colors)
+  const color = median(kept)
+  const middle = Math.max(...color)
   return {
-    color: median(kept),
+    color,
     glare: (colors.length - kept.length) / colors.length,
+    edge: middle > 0 ? Math.max(0, 1 - darkest(edges) / middle) : 0,
   }
+}
+
+/**
+ * About how bright the darkest part of the edge is: a tenth of it is
+ * darker. A few dark specks don't count, but a thin black line all round
+ * does.
+ */
+function darkest(brightness: number[]): number {
+  const sorted = [...brightness].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 10)] ?? 0
 }
 
 /**

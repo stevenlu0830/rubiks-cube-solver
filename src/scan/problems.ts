@@ -51,6 +51,25 @@ export function pictureProblem(
   return null
 }
 
+/**
+ * A square looks like a sticker when its edge is at least this much darker
+ * than its middle (see Square.edge): black plastic round a sticker reads
+ * 0.7 or more, even round a dark one in dim light; a wall or a table, about 0.
+ */
+const FRAMED = 0.35
+
+/** Most of the 9 squares must look like stickers: a cube not quite lined up can miss a couple. */
+const FRAMED_SQUARES = 7
+
+/**
+ * Whether the picture in the guide looks like a side of a cube, rather
+ * than a wall or a table: before taking a photo by itself, the app should
+ * be sure there's a cube to photograph.
+ */
+export function looksLikeSide(squares: readonly Square[]): boolean {
+  return squares.filter(({ edge }) => edge >= FRAMED).length >= FRAMED_SQUARES
+}
+
 function averageChange(before: readonly Lab[], now: readonly Lab[]): number {
   const total = now.reduce(
     (sum, { l, a, b }, n) =>

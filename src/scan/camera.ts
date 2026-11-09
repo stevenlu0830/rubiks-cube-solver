@@ -78,6 +78,37 @@ export async function openCamera(): Promise<MediaStream> {
   }
 }
 
+/**
+ * Whether a camera faces the user, like a laptop's or a phone's front one:
+ * its picture is then shown mirrored, as a mirror would show it. Phones say
+ * which way each camera faces; laptops often don't, but theirs face you.
+ */
+export function facesUser(track: MediaStreamTrack): boolean {
+  return track.getSettings?.().facingMode !== 'environment'
+}
+
+/**
+ * Whether the camera has a light (a torch) the page can switch on: the
+ * back camera of many Android phones, in Chrome. Some only say so once
+ * the picture has started, so it's worth asking again then.
+ */
+export function hasTorch(track: MediaStreamTrack): boolean {
+  const capabilities = track.getCapabilities?.() as
+    { torch?: boolean } | undefined
+  return capabilities?.torch === true
+}
+
+/** Switches the camera's torch on or off. Rejects if it can't. */
+export function switchTorch(
+  track: MediaStreamTrack,
+  on: boolean,
+): Promise<void> {
+  // Browsers' type definitions don't know about the torch yet.
+  return track.applyConstraints({
+    advanced: [{ torch: on } as MediaTrackConstraintSet],
+  })
+}
+
 /** Switches the camera off, so the phone's camera light goes out. */
 export function stopCamera(stream: MediaStream): void {
   for (const track of stream.getTracks()) track.stop()

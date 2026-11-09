@@ -36,6 +36,23 @@
   border-radius: 12px;
   /* Darkens everything outside the guide. */
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.4);
+  transition: border-color 0.15s;
+}
+
+/* Auto photo: about to take it, if the cube stays still. */
+.viewfinder[data-ready] .scan-guide {
+  border-color: #34c759;
+}
+
+/*
+ * A camera facing you (a laptop's) is shown like a mirror, so moving the
+ * cube left moves it left on screen. The dots are flipped with it, to stay
+ * on their stickers; the letters on them are flipped back to read right.
+ */
+.viewfinder[data-mirrored] video,
+.viewfinder[data-mirrored] .scan-dots,
+.viewfinder[data-mirrored] .scan-dot {
+  scale: -1 1;
 }
 
 /* Lines between the nine squares. */
@@ -104,16 +121,24 @@
 }
 
 .scan-dot {
+  display: grid;
+  place-items: center;
   width: 42%;
   aspect-ratio: 1;
   border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+  /* The colour's letter, when Letters on stickers is on. */
+  font-size: 5.5cqmin;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
 }
 
 /* Live dots are smaller: a guide to what a photo would read, not the photo. */
 .scan-dots-live .scan-dot {
   width: 30%;
+  font-size: 4cqmin;
 }
 
 /* Each square of a photo is a button covering the whole square, easy to hit. */
@@ -134,6 +159,29 @@
 .scan-square[aria-pressed='true'] .scan-dot {
   width: 56%;
   border-width: 3px;
+}
+
+/* Switches the camera's light on, where the phone lets the page. */
+.scan-torch {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  place-items: center;
+  /* Fits the corner outside the grid, even on a narrow phone. */
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.scan-torch[aria-pressed='true'] {
+  background: #fff;
+  color: #000;
 }
 
 /* Too dark, glare, or moving: across the top of the camera's view. */

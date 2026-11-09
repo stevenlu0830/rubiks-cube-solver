@@ -8,9 +8,15 @@ export interface Settings {
   letters: boolean
   /** Buzz on taps and results, on phones that can (see device/haptics.ts). */
   haptics: boolean
+  /** While scanning, take each side's photo by itself once it's held still. */
+  autoPhoto: boolean
 }
 
-export const DEFAULT_SETTINGS: Settings = { letters: false, haptics: true }
+export const DEFAULT_SETTINGS: Settings = {
+  letters: false,
+  haptics: true,
+  autoPhoto: true,
+}
 
 const STORAGE_KEY = 'rubiks-cube-solver/settings'
 

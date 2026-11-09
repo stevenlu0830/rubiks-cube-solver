@@ -95,6 +95,31 @@ describe('readSquares', () => {
     expect(glare).toEqual([0.6, 0.6, 0.6, 0, 0, 0, 0, 0, 0])
   })
 
+  it('sees the dark edge round each sticker on a cube, and none on a flat picture', () => {
+    const framed = picture(120, 120, (x, y) => {
+      const { square, across, down } = whereIn(120, x, y)
+      const nearEdge = Math.min(across, down, 1 - across, 1 - down) < 0.06
+      return nearEdge ? [20, 20, 20] : NINE[square]
+    })
+    for (const { edge } of inspectSquares(framed)) {
+      expect(edge).toBeGreaterThan(0.75) // even the darkest, [100, 10, 20]
+    }
+    const flat = picture(120, 120, (x, y) => NINE[whereIn(120, x, y).square])
+    expect(inspectSquares(flat).map(({ edge }) => edge)).toEqual(
+      Array(9).fill(0),
+    )
+  })
+
+  it('ignores a few dark specks round a square', () => {
+    const random = seededRandom(2)
+    const pixels = picture(120, 120, () =>
+      random() < 0.05 ? [0, 0, 0] : [200, 200, 200],
+    )
+    for (const { edge } of inspectSquares(pixels)) {
+      expect(edge).toBeLessThan(0.1)
+    }
+  })
+
   it('keeps a brightly lit white square that looks like glare all over', () => {
     const pixels = picture(120, 120, (x) =>
       x % 10 === 0 ? [225, 225, 225] : [245, 245, 245],
@@ -159,6 +184,21 @@ describe('grabFrame', () => {
       GRAB_SIZE,
       GRAB_SIZE,
     )
+  })
+
+  it('copies the part under the guide when the picture is shown mirrored', () => {
+    const { video, guide } = phoneHeldUpright()
+    // The guide 40 px left of the middle: on a mirrored picture that's the
+    // part of the camera's own picture 40 px right of its middle.
+    guide.getBoundingClientRect = at(16, 100 + 180, 280, 280)
+    const { context } = fakeCanvas()
+    grabFrame(video, guide)
+    grabFrame(video, guide, { mirrored: true })
+    const [plain, mirrored] = context.drawImage.mock.calls.map(
+      (call) => call[1] as number,
+    )
+    expect(plain).toBeCloseTo(482.5 - 45)
+    expect(mirrored).toBeCloseTo(482.5 + 45)
   })
 
   it('gives nothing until the camera has a picture', () => {

@@ -182,31 +182,81 @@ export function nextSideTurns(
   return options[0].swipes
 }
 
-/** How to turn a real cube the way these swipes turn the 3D one. */
-const TURNS: Record<SwipeDirection, { turn: string; side: string }> = {
-  left: { turn: 'turn your cube to the left', side: 'right' },
-  right: { turn: 'turn your cube to the right', side: 'left' },
-  up: { turn: 'tip the top of your cube away from you', side: 'bottom' },
-  down: { turn: 'tip the top of your cube towards you', side: 'top' },
+type TurnWords = Record<SwipeDirection, { turn: string; then: string }>
+
+/**
+ * How to turn a real cube the way these swipes turn the 3D one, with a
+ * phone's back camera: the camera sees the side facing you, as the 3D cube
+ * shows it.
+ */
+const TURNS: TurnWords = {
+  left: {
+    turn: 'turn your cube to the left',
+    then: 'its right side faces you',
+  },
+  right: {
+    turn: 'turn your cube to the right',
+    then: 'its left side faces you',
+  },
+  up: {
+    turn: 'tip the top of your cube away from you',
+    then: 'its bottom side faces you',
+  },
+  down: {
+    turn: 'tip the top of your cube towards you',
+    then: 'its top side faces you',
+  },
+}
+
+/**
+ * The same with a camera facing you, like a laptop's: the side to
+ * photograph faces the camera, and you see the cube from behind. Turning
+ * left or right is the same, but the side that comes round to the camera
+ * is the one on the other hand; and tipping goes the other way.
+ */
+const TURNS_FACING_YOU: TurnWords = {
+  left: {
+    turn: 'turn your cube to the left',
+    then: 'the side on your left faces the camera',
+  },
+  right: {
+    turn: 'turn your cube to the right',
+    then: 'the side on your right faces the camera',
+  },
+  up: {
+    turn: 'tip the top of your cube towards you',
+    then: 'its bottom side faces the camera',
+  },
+  down: {
+    turn: 'tip the top of your cube away from you',
+    then: 'its top side faces the camera',
+  },
 }
 
 /**
  * The swipes as an instruction for someone holding a real cube, e.g. "Turn
- * your cube to the left, so its right side faces you".
+ * your cube to the left, so its right side faces you". `facingYou`: the
+ * camera faces the user, like a laptop's.
  */
-export function turnInstruction(swipes: readonly SwipeDirection[]): string {
+export function turnInstruction(
+  swipes: readonly SwipeDirection[],
+  { facingYou = false }: { facingYou?: boolean } = {},
+): string {
+  const words = facingYou ? TURNS_FACING_YOU : TURNS
   let text: string
   if (swipes.length === 1) {
-    const { turn, side } = TURNS[swipes[0]]
-    text = `${turn}, so its ${side} side faces you`
+    const { turn, then } = words[swipes[0]]
+    text = `${turn}, so ${then}`
   } else if (
     swipes.length === 2 &&
     swipes[0] === swipes[1] &&
     (swipes[0] === 'left' || swipes[0] === 'right')
   ) {
-    text = 'turn your cube around, so its back side faces you'
+    text = facingYou
+      ? 'turn your cube around, so the side facing you faces the camera'
+      : 'turn your cube around, so its back side faces you'
   } else {
-    text = swipes.map((swipe) => TURNS[swipe].turn).join(', then ')
+    text = swipes.map((swipe) => words[swipe].turn).join(', then ')
   }
   return text.charAt(0).toUpperCase() + text.slice(1)
 }

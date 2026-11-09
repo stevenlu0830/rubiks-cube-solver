@@ -6,8 +6,13 @@ import { shownPart, type Rect } from '../src/scan/viewfinder.ts'
  * tests can scan without one. Chromium has its own fake camera, but it's
  * switched on with a Chromium-only flag; this works the same in WebKit too.
  * With `refuseFirst`, the first request is refused, as if the user said no.
+ * `facing` is which way the camera says it faces: a phone's back camera,
+ * or one facing the user, like a laptop's.
  */
-export function fakeCamera({ refuseFirst = false } = {}) {
+export function fakeCamera({
+  refuseFirst = false,
+  facing = 'environment',
+}: { refuseFirst?: boolean; facing?: 'environment' | 'user' } = {}) {
   const canvas = document.createElement('canvas')
   canvas.width = 640
   canvas.height = 480
@@ -15,13 +20,10 @@ export function fakeCamera({ refuseFirst = false } = {}) {
   /** A side of a cube to show, if any: where in the picture, and its 9 colours. */
   let side: { area: Rect; colors: string[] } | null = null
   const draw = () => {
-    context.fillStyle = '#333'
+    // Until a side is shown: a plain wall, which Auto photo won't take.
+    context.fillStyle = '#777'
     context.fillRect(0, 0, 640, 480)
-    if (!side) {
-      context.fillStyle = '#009b48'
-      context.fillRect(200, 120, 240, 240)
-      return
-    }
+    if (!side) return
     // Black plastic, with a sticker in each square.
     const { area, colors } = side
     const size = area.width / 3
@@ -55,6 +57,10 @@ export function fakeCamera({ refuseFirst = false } = {}) {
   MediaDevices.prototype.getUserMedia = async () => {
     if (refusals-- > 0) throw new DOMException('No', 'NotAllowedError')
     const stream = canvas.captureStream()
+    for (const track of stream.getVideoTracks()) {
+      const settings = track.getSettings.bind(track)
+      track.getSettings = () => ({ ...settings(), facingMode: facing })
+    }
     streams.push(stream)
     return stream
   }

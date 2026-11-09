@@ -8,7 +8,18 @@ import { STICKER_COLORS } from '../view/colors.ts'
 export interface FakeStream {
   stream: MediaStream
   /** Its one video track. Dispatch an 'ended' event on it to cut the camera off. */
-  track: EventTarget & { stop: Mock<() => void> }
+  track: EventTarget & {
+    stop: Mock<() => void>
+    /** Called to switch the torch on or off. */
+    applyConstraints: Mock<(constraints: unknown) => Promise<void>>
+  }
+}
+
+interface FakeCameraOptions {
+  /** Which way the camera faces: a phone's back camera, or a laptop's, facing the user. */
+  facing?: 'environment' | 'user'
+  /** Whether it has a torch (a light), as many Android phones' back cameras do. */
+  torch?: boolean
 }
 
 /**
@@ -19,14 +30,25 @@ export interface FakeStream {
  *
  * The test environment can't play video or draw it on a canvas either, so
  * those are faked too: `show` sets the 9 colours a photo will read (sticker
- * colour names, or exact [red, green, blue] colours), optionally with a
- * patch of glare covering part of the middle of every square.
+ * colour names, or exact [red, green, blue] colours), each framed in black
+ * plastic like a real cube, optionally with a patch of glare covering part
+ * of the middle of every square.
  */
-export function fakeCamera() {
+export function fakeCamera({
+  facing = 'environment',
+  torch = false,
+}: FakeCameraOptions = {}) {
   const opened: FakeStream[] = []
   const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
     void constraints
-    const track = Object.assign(new EventTarget(), { stop: vi.fn() })
+    const track = Object.assign(new EventTarget(), {
+      stop: vi.fn(),
+      getSettings: () => ({ facingMode: facing }),
+      getCapabilities: () => (torch ? { torch: true } : {}),
+      applyConstraints: vi.fn(async (constraints: unknown) => {
+        void constraints
+      }),
+    })
     const stream = {
       getTracks: () => [track],
       getVideoTracks: () => [track],
@@ -61,12 +83,16 @@ export function fakeCamera() {
     } as unknown as CanvasRenderingContext2D),
   )
 
-  /** Puts a side with these colours (row by row from the top left) in front of the camera. */
+  /**
+   * Puts a side with these colours (row by row from the top left) in front
+   * of the camera. With `plastic: false`, there's no black between the
+   * squares: a flat picture, like a poster, rather than a cube.
+   */
   const show = (
     colors: readonly (Color | Rgb)[],
-    { glare = 0 }: { glare?: number } = {},
+    { glare = 0, plastic = true }: { glare?: number; plastic?: boolean } = {},
   ) => {
-    picture = sidePicture(colors, glare)
+    picture = sidePicture(colors, glare, plastic)
   }
   return { getUserMedia, opened, play, pause, show }
 }
@@ -82,9 +108,14 @@ export function removeFakeCamera() {
 
 /**
  * What the guide would grab from a side in these colours: each square flat,
- * with glare over this share of the middle of each (the part that's read).
+ * with glare over this share of the middle of each (the part that's read),
+ * and a rim of black plastic round it.
  */
-function sidePicture(colors: readonly (Color | Rgb)[], glare = 0): Pixels {
+function sidePicture(
+  colors: readonly (Color | Rgb)[],
+  glare = 0,
+  plastic = true,
+): Pixels {
   const data = new Uint8ClampedArray(GRAB_SIZE * GRAB_SIZE * 4)
   const square = GRAB_SIZE / 3
   const rgbOf = (color: Color | Rgb) =>
@@ -95,13 +126,14 @@ function sidePicture(colors: readonly (Color | Rgb)[], glare = 0): Pixels {
       : color
   for (let y = 0; y < GRAB_SIZE; y++) {
     for (let x = 0; x < GRAB_SIZE; x++) {
-      const down = (y % square) / square // 0 to 1 within the square
+      // How far across and down the square, 0 to 1.
+      const [across, down] = [(x % square) / square, (y % square) / square]
       const shine = down >= 0.25 && down < 0.25 + glare / 2
+      const rim = Math.min(across, down, 1 - across, 1 - down) < 0.06
       const color = colors[Math.floor(y / square) * 3 + Math.floor(x / square)]
-      data.set(
-        [...(shine ? [252, 252, 250] : rgbOf(color)), 255],
-        (y * GRAB_SIZE + x) * 4,
-      )
+      const rgb =
+        plastic && rim ? [20, 20, 20] : shine ? [252, 252, 250] : rgbOf(color)
+      data.set([...rgb, 255], (y * GRAB_SIZE + x) * 4)
     }
   }
   return { data, width: GRAB_SIZE, height: GRAB_SIZE }

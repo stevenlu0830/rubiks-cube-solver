@@ -43,19 +43,31 @@ These are copies of the browsers' engines, not real phones, so also try the app 
 2. Add `?fps` to the end of the address to show the frame rate in the corner. Turns should stay near 60 fps (or 120 on some phones), and "slowest" should stay under about 20 ms.
 3. On the published site, **Add to Home Screen** (iPhone, from the Share menu) or **Install app** (Android Chrome) to use it like an app. After the first visit it also works with no internet.
 
-**Scan** (next to Solve) reads the cube with the back camera instead of tapping in every square:
+The ⚙ menu has **Letters on stickers** (W, Y, G, B, R, O, for telling colours apart), on phones that can vibrate **Vibration**, and where there's a camera **Auto photo** (see below).
 
-1. Line one side of your cube up in the grid. Dots show the colours it reads, live, with a warning if it's too dark, there's shine on the stickers, or the phone is moving. Tap **Take photo**: the colours appear on the photo and on the 3D cube. Squares it's unsure of get a dashed yellow ring; tap any square to pick its colour yourself, or tap **Retake**.
+## Scanning your cube
+
+**Scan** (next to Solve) reads your cube with the camera instead of tapping in every square:
+
+1. Hold one side of your cube up to the grid. Dots show the colours it reads, live, with a warning if it's too dark, there's shine on the stickers, or the phone is moving. Hold still for about half a second: the grid turns green and the photo takes itself. You can also tap **Take photo** any time, or switch **Auto photo** off in the ⚙ menu to only use the button. The colours appear on the photo and on the 3D cube. Squares it's unsure of get a dashed yellow ring; tap any square to pick its colour yourself, or tap **Retake**.
 2. Tap **Next side**. The 3D cube turns to the next side, and the app says how to turn yours to match, e.g. "Turn your cube to the left, so its right side faces you". All six sides take five turns. You can also swipe the 3D cube to any side yourself.
 3. After the sixth side, tap **Done**, check the cube, fix any square by tapping it, and tap **Solve**.
 
-After each photo the app shares the colours out over every side scanned so far, so no colour gets more than 9 squares (a real cube has 9 of each). That sorts out most red/orange and white/yellow mix-ups, and can change squares on earlier sides, but never ones you picked yourself. If a photo looks like a side you've already scanned, it says so: your real cube was probably turned differently from the 3D one.
+What helps it read your cube right:
 
-To collect test data from real photos, add `?scan-debug` to the address: see [src/scan/test-photos/README.md](src/scan/test-photos/README.md).
+- **9 of each colour.** After each photo the app shares the colours out over every side scanned so far, so no colour gets more than 9 squares, as on a real cube. That sorts out most red/orange and white/yellow mix-ups, and can change squares on earlier sides, but never ones you picked yourself.
+- **A side scanned twice.** If a photo looks like a side you've already scanned, it says so: your real cube was probably turned differently from the 3D one. Auto photo won't take one; it waits until you've turned your cube.
+- **A side held turned.** If a side was photographed a quarter or half turn round, every colour is right but the pieces don't fit together. Once all six sides are in, the app tries every way of turning each photo round (4,096 ways) and, if one fixes the cube, says e.g. "The blue side looks turned. Fix it?"
+- **Light.** Daylight from a window is best. Tilt the cube a little if there's shine on the stickers. On phones that allow it (Android Chrome), a torch button in the corner of the camera's view switches the phone's light on.
+- **Auto photo** only takes a side's first photo, and only when the grid sees black (or a dark gap) round each sticker, so it won't take a photo of the table. Retakes are always by button.
+
+With a laptop's camera, which faces you, the picture is shown like a mirror so the cube moves the way your hand does, and the instructions say which side to turn towards the camera, e.g. "Turn your cube to the left, so the side on your left faces the camera".
+
+Screen readers hear the colours each photo read, row by row, then what to do next. With **Letters on stickers** on, the dots show letters too.
 
 The camera switches off when you tap **Done** or switch to another app.
 
-The ⚙ menu has **Letters on stickers** (W, Y, G, B, R, O, for telling colours apart) and, on phones that can vibrate, **Vibration**.
+To collect test data from real photos, add `?scan-debug` to the address: see [src/scan/test-photos/README.md](src/scan/test-photos/README.md).
 
 ## Deployment
 
