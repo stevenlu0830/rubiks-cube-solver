@@ -19,6 +19,7 @@ test('opens and solves with no internet after the first visit', async ({
 
   await context.setOffline(true)
   await page.reload()
+  await page.getByRole('link', { name: /^3x3/ }).click()
   await page.getByRole('button', { name: 'Solve' }).click()
   await expect(page.getByLabel('How to hold your cube')).toBeVisible({
     timeout: 30_000,

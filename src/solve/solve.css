@@ -77,8 +77,7 @@
 
 /* Buttons shared by the card and the controls. */
 .solve-card button,
-.playback-controls button,
-.header-button {
+.playback-controls button {
   padding: 10px 16px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -99,12 +98,6 @@
 .playback-controls button:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-.header-button {
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  white-space: nowrap;
 }
 
 .playback-controls {

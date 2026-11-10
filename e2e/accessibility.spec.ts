@@ -29,10 +29,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`${colorScheme} mode`, () => {
     test.use({ colorScheme })
 
+    test('the page for picking a cube', async ({ page }) => {
+      // A saved cube, so the 3x3 card shows "In progress" too.
+      await page.addInitScript(savedCube, SCRAMBLED)
+      await page.goto('./')
+      await expect(page.getByText('In progress')).toBeVisible()
+      await expectNoProblems(page)
+    })
+
     test('the painting screen, its messages, the settings menu and the About window', async ({
       page,
     }) => {
-      await page.goto('./')
+      await page.goto('./#/3x3')
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Solve' }).click() // a problem: all blank
       await expectNoProblems(page)
@@ -48,7 +56,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       page,
     }) => {
       await page.addInitScript(fakeCamera, { refuseFirst: true })
-      await page.goto('./')
+      await page.goto('./#/3x3')
       await page.getByRole('button', { name: 'Scan' }).click()
       await expect(page.getByRole('alert')).toBeVisible()
       await expectNoProblems(page)
@@ -70,7 +78,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     test('the "already solved" message', async ({ page }) => {
       await page.addInitScript(savedCube, solvedState())
-      await page.goto('./')
+      await page.goto('./#/3x3')
       await page.getByRole('button', { name: 'Solve' }).click()
       await expect(page.getByRole('status')).toContainText('already solved')
       await expectNoProblems(page)
@@ -80,7 +88,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       page,
     }) => {
       await page.addInitScript(savedCube, SCRAMBLED)
-      await page.goto('./')
+      await page.goto('./#/3x3')
       await page.getByRole('button', { name: 'Solve' }).click()
       await expect(page.getByLabel('How to hold your cube')).toBeVisible({
         timeout: 30_000,

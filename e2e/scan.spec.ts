@@ -17,7 +17,7 @@ test('shows the camera with a guide, and switches it off with Done', async ({
   page,
 }) => {
   await page.addInitScript(fakeCamera)
-  await page.goto('./')
+  await page.goto('./#/3x3')
   await page.getByRole('button', { name: 'Scan' }).click()
 
   const scanner = page.getByRole('region', { name: 'Scan your cube' })
@@ -38,7 +38,7 @@ test('explains when the camera is blocked, and tries again', async ({
   page,
 }) => {
   await page.addInitScript(fakeCamera, { refuseFirst: true })
-  await page.goto('./')
+  await page.goto('./#/3x3')
   await page.getByRole('button', { name: 'Scan' }).click()
   await expect(page.getByRole('alert')).toContainText('The camera is blocked')
 
@@ -74,7 +74,7 @@ for (const facing of ['environment', 'user'] as const) {
     page,
   }) => {
     await page.addInitScript(fakeCamera, { facing })
-    await page.goto('./')
+    await page.goto('./#/3x3')
     await page.getByRole('button', { name: 'Scan' }).click()
     await expect.poll(() => pictureWidth(page)).toBe(640)
     // A camera facing you is shown like a mirror.
@@ -129,7 +129,7 @@ test('lets you swipe to the sides yourself, and turns the cube around for the la
   page,
 }) => {
   await page.addInitScript(fakeCamera)
-  await page.goto('./')
+  await page.goto('./#/3x3')
   await page.getByRole('button', { name: 'Scan' }).click()
   await expect.poll(() => pictureWidth(page)).toBe(640)
 
@@ -177,10 +177,10 @@ test('with Auto photo off, takes a photo with the button, and fixes a square by 
   page,
 }) => {
   await page.addInitScript(fakeCamera)
-  await page.goto('./')
+  await page.goto('./#/3x3')
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('checkbox', { name: /^Auto photo/ }).uncheck()
-  await page.getByRole('heading', { name: "Rubik's Cube Solver" }).click()
+  await page.getByRole('heading', { name: '3x3 Cube Solver' }).click()
   await page.getByRole('button', { name: 'Scan' }).click()
   await expect.poll(() => pictureWidth(page)).toBe(640)
   const cells = frontCells(new Quaternion())

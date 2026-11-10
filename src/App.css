@@ -28,9 +28,23 @@
 }
 
 /*
- * A round button holding just an icon: About (ⓘ) and Settings (⚙). Two
- * classes, so it wins over .header-button's padding in solve.css, which loads later.
+ * A small rounded button in the header: the way back (‹ Cubes, ‹ Edit cube,
+ * ‹ Done) and the icon buttons. ‹ Cubes is a link, so no underline.
  */
+.header-button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* A round button holding just an icon: About (ⓘ) and Settings (⚙). */
 .app-header .header-icon-button {
   display: grid;
   flex: none;
@@ -43,6 +57,14 @@
 .app-header h1 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+/*
+ * On opening another page, the title gets the focus, so screen readers say
+ * where you are (see App.tsx). It isn't something to tap, so no focus ring.
+ */
+.app-header h1:focus {
+  outline: none;
 }
 
 /* While solving or scanning, the header also holds the way back to painting. */

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test('turns on colour letters from the settings menu, and remembers them', async ({
   page,
 }) => {
-  await page.goto('./')
+  await page.goto('./#/3x3')
   const letters = page.getByRole('checkbox', { name: /^Letters on stickers/ })
   const green = page.getByRole('button', { name: /^green,/ })
   await expect(letters).toBeHidden()
@@ -13,7 +13,7 @@ test('turns on colour letters from the settings menu, and remembers them', async
   await expect(green).toContainText('G')
 
   // Tapping anywhere else closes the menu.
-  await page.getByRole('heading', { name: "Rubik's Cube Solver" }).click()
+  await page.getByRole('heading', { name: '3x3 Cube Solver' }).click()
   await expect(letters).toBeHidden()
 
   await page.reload()
@@ -24,7 +24,7 @@ test('offers vibration only where the phone can vibrate', async ({
   page,
   browserName,
 }) => {
-  await page.goto('./')
+  await page.goto('./#/3x3')
   await page.getByRole('button', { name: 'Settings' }).click()
   const vibration = page.getByRole('checkbox', { name: /^Vibration/ })
   if (browserName === 'webkit') {

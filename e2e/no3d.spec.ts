@@ -11,7 +11,7 @@ test.skip(
 )
 
 test('says so when the browser cannot draw 3D', async ({ page }) => {
-  await page.goto('./')
+  await page.goto('./#/3x3')
   await expect(page.getByRole('alert')).toContainText(
     "This browser can't draw the 3D cube",
   )

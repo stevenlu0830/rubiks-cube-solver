@@ -5,7 +5,7 @@ import { CubePainter } from './cubePainter.ts'
 import { SCRAMBLED, TWISTED_CORNER } from './cubes.ts'
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('./')
+  await page.goto('./#/3x3')
 })
 
 test('paints a scrambled cube, checks it, and plays the solution to the end', async ({
