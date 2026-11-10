@@ -85,22 +85,21 @@ export default defineConfig(({ mode }) => ({
   worker: { format: 'es', plugins: () => [fixCubejs] },
   test: {
     // Don't keep compiled test files between runs: a cached one would miss
-    // real-photo data files added later (src/scan/test-photos/). Compiling
+    // real-photo data files added later (test/scan/test-photos/). Compiling
     // afresh costs no noticeable time here.
     fsModuleCache: false,
     projects: [
       {
-        // The everyday tests: `npm test`.
+        // The everyday tests: `npm test`. They live in test/, in the same
+        // folders as the code they check in src/. (e2e/ is Playwright's, run
+        // by `npm run test:e2e`.)
         extends: true,
         test: {
           name: 'unit',
           environment: 'jsdom',
-          setupFiles: ['./src/test/setup.ts'],
-          exclude: [
-            ...configDefaults.exclude,
-            '**/*.slow.test.ts',
-            'e2e/**', // Playwright's, run by `npm run test:e2e`
-          ],
+          setupFiles: ['./test/helpers/setup.ts'],
+          include: ['test/**/*.test.{ts,tsx}'],
+          exclude: [...configDefaults.exclude, '**/*.slow.test.ts'],
         },
       },
       {
@@ -108,7 +107,7 @@ export default defineConfig(({ mode }) => ({
         test: {
           name: 'slow',
           environment: 'node',
-          include: ['src/**/*.slow.test.ts'],
+          include: ['test/**/*.slow.test.ts'],
           testTimeout: 180_000,
         },
       },

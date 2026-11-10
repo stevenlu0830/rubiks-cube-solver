@@ -27,6 +27,8 @@ npm run dev
 | `npm run build`     | Type-check and build the production site into `dist/`                                                |
 | `npm run preview`   | Serve the built `dist/` locally                                                                      |
 
+The tests that `npm test` runs are in [test/](test/), in the same folders as the code they check in [src/](src/) (e.g. [test/cube/moves.test.ts](test/cube/moves.test.ts) checks [src/cube/moves.ts](src/cube/moves.ts)). Helpers shared by several tests, such as the fake camera, are in [test/helpers/](test/helpers/).
+
 ## End-to-end tests
 
 [Playwright](https://playwright.dev) tests in [e2e/](e2e/) tap and swipe the built app in Safari's engine (WebKit) posing as an iPhone, and Chrome's posing as an Android phone: painting a cube, checking it, playing the solution, the settings menu, working offline, and automatic accessibility checks (including text contrast) in light and dark mode. The first time, download the browsers:
@@ -69,7 +71,7 @@ Screen readers hear the colours each photo read, row by row, then what to do nex
 
 The camera switches off when you tap **Done** or switch to another app.
 
-To collect test data from real photos, add `?scan-debug` to the address: see [src/scan/test-photos/README.md](src/scan/test-photos/README.md).
+To collect test data from real photos, add `?scan-debug` to the address: see [test/scan/test-photos/README.md](test/scan/test-photos/README.md).
 
 ## Deployment
 

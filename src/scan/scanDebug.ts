@@ -2,7 +2,7 @@
  * The hidden ?scan-debug mode (add ?scan-debug to the address). It records
  * what the camera read from each side, with the colours you ended up with
  * after fixing any by hand, so photos of a real cube in real light can be
- * kept as test data. See src/scan/test-photos/README.md.
+ * kept as test data. See test/scan/test-photos/README.md.
  */
 
 import { FACES, type Color, type Face } from '../cube/state.ts'
