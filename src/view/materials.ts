@@ -9,6 +9,7 @@ import {
   type Material,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { perPuzzle } from '../cube/puzzle.ts'
 import type { Cell, Color } from '../cube/state.ts'
 import { COLOR_LETTERS, LETTER_INK, STICKER_COLORS } from './colors.ts'
 import { CUBIE_SIZE, STICKER_CORNER_RADIUS, STICKER_SIZE } from './layout.ts'
@@ -55,12 +56,19 @@ export const HIGHLIGHT_MATERIAL = new MeshBasicMaterial({
 
 /**
  * Arrows showing which way the next turn goes: near-black with a white
- * outline, so they stand out on every sticker colour.
+ * outline, so they stand out on every sticker colour. Each reaches across a
+ * whole row of stickers (3 on a 3x3, 2 on a 2x2), plus a quarter sticker
+ * past the middle of the end ones.
  */
-export const ARROW_GEOMETRY = arrowShape(false, 0)
-export const ARROW_OUTLINE_GEOMETRY = arrowShape(false, 0.07)
-export const DOUBLE_ARROW_GEOMETRY = arrowShape(true, 0)
-export const DOUBLE_ARROW_OUTLINE_GEOMETRY = arrowShape(true, 0.07)
+export const arrowGeometriesOf = perPuzzle(({ size }) => {
+  const reach = (size - 1) / 2 + 0.25
+  return {
+    single: arrowShape(false, 0, reach),
+    singleOutline: arrowShape(false, 0.07, reach),
+    double: arrowShape(true, 0, reach),
+    doubleOutline: arrowShape(true, 0.07, reach),
+  }
+})
 export const ARROW_MATERIAL = new MeshBasicMaterial({ color: '#141417' })
 export const ARROW_OUTLINE_MATERIAL = new MeshBasicMaterial({
   color: '#ffffff',
@@ -161,11 +169,16 @@ function roundedSquare(size: number, radius: number): ShapeGeometry {
 }
 
 /**
- * A flat arrow pointing along +x across a row of three stickers, with a head
- * at both ends if `doubleHeaded`. `border` grows it, for the outline.
+ * A flat arrow pointing along +x, reaching `reach` each way from its middle,
+ * with a head at both ends if `doubleHeaded`. `border` grows it, for the
+ * outline.
  */
-function arrowShape(doubleHeaded: boolean, border: number): ShapeGeometry {
-  const halfLength = 1.25 + border
+function arrowShape(
+  doubleHeaded: boolean,
+  border: number,
+  reach: number,
+): ShapeGeometry {
+  const halfLength = reach + border
   const halfShaft = 0.1 + border
   const halfHead = 0.32 + border * 1.6
   const headLength = 0.5 + border * 1.6

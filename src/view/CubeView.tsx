@@ -9,22 +9,27 @@ import {
 } from 'react'
 import { Quaternion, Vector2, type Group, type PerspectiveCamera } from 'three'
 import type { Move } from '../cube/moves.ts'
+import type { Puzzle } from '../cube/puzzle.ts'
 import type { CubeState } from '../cube/state.ts'
 import { canDraw3D } from '../device/webgl.ts'
+import { usePuzzle } from '../puzzleContext.ts'
 import { arrowPlacement } from './arrows.ts'
-import { CAMERA_DIRECTION, CAMERA_FOV, fitCameraDistance } from './camera.ts'
+import {
+  CAMERA_DIRECTION,
+  CAMERA_FOV,
+  CAMERA_MARGIN,
+  cubeHalfSize,
+  fitCameraDistance,
+} from './camera.ts'
 import { createGestureTracker, type SwipeDirection } from './gestures.ts'
-import { CUBIES, type CubieLayout } from './layout.ts'
+import { cubiesOf, type CubieLayout } from './layout.ts'
 import { letterSpins } from './letters.ts'
 import {
-  ARROW_GEOMETRY,
   ARROW_MATERIAL,
-  ARROW_OUTLINE_GEOMETRY,
   ARROW_OUTLINE_MATERIAL,
+  arrowGeometriesOf,
   BODY_GEOMETRY,
   BODY_MATERIAL,
-  DOUBLE_ARROW_GEOMETRY,
-  DOUBLE_ARROW_OUTLINE_GEOMETRY,
   HIGHLIGHT_GEOMETRY,
   HIGHLIGHT_MATERIAL,
   STICKER_GEOMETRY,
@@ -73,11 +78,15 @@ interface CubeViewProps {
 }
 
 /**
- * Draws the cube in 3D. While painting, it reports swipes (to turn it) and
+ * Draws the cube in 3D: a 3x3 or 2x2, whichever the page is for (see
+ * puzzleContext.ts). While painting, it reports swipes (to turn it) and
  * taps on stickers; while solving, it animates face turns. It never changes
  * `state` or `orientation` itself: that's up to the parent.
  */
 export function CubeView(props: CubeViewProps) {
+  // Read here and handed down, rather than read inside the 3D scene: the
+  // scene is drawn by a separate React renderer (React Three Fiber).
+  const puzzle = usePuzzle()
   if (!canDraw3D()) {
     return (
       <p className="no-3d" role="alert">
@@ -96,10 +105,10 @@ export function CubeView(props: CubeViewProps) {
       flat
       camera={{ fov: CAMERA_FOV, near: 0.1, far: 100 }}
     >
-      <CameraFit />
+      <CameraFit puzzle={puzzle} />
       <ambientLight intensity={2.2} />
       <directionalLight position={[2, 4, 6]} intensity={1.6} />
-      <TurnableCube {...props} />
+      <TurnableCube {...props} puzzle={puzzle} />
     </Canvas>
   )
 }
@@ -118,7 +127,8 @@ function TurnableCube({
   onTurnDone,
   hint = null,
   letters = false,
-}: CubeViewProps) {
+  puzzle,
+}: CubeViewProps & { puzzle: Puzzle }) {
   const cube = useRef<Group>(null!)
   const highlighted = useMemo(() => new Set(highlight), [highlight])
   const canvas = useThree((s) => s.gl.domElement)
@@ -139,8 +149,11 @@ function TurnableCube({
   const shown = useRef<{ orientation: Quaternion; held: boolean } | null>(null)
   const ignoreTouches = held || disabled
   const spins = useMemo(
-    () => (letters ? letterSpins(held ? UNTURNED : restingOrientation) : null),
-    [letters, held, restingOrientation],
+    () =>
+      letters
+        ? letterSpins(held ? UNTURNED : restingOrientation, puzzle)
+        : null,
+    [letters, held, restingOrientation, puzzle],
   )
 
   useLayoutEffect(() => {
@@ -233,6 +246,7 @@ function TurnableCube({
   return (
     <group ref={cube}>
       <Cubies
+        puzzle={puzzle}
         state={state}
         highlighted={highlighted}
         spins={spins}
@@ -240,12 +254,13 @@ function TurnableCube({
         turnDurationMs={turnDurationMs}
         onTurnDone={onTurnDone}
       />
-      {hint && !turn && <TurnArrow move={hint} />}
+      {hint && !turn && <TurnArrow move={hint} puzzle={puzzle} />}
     </group>
   )
 }
 
 interface CubiesProps {
+  puzzle: Puzzle
   state: CubeState
   highlighted: ReadonlySet<number>
   /** With letters on: how far to spin each cell's sticker so its letter is upright. */
@@ -256,12 +271,14 @@ interface CubiesProps {
 }
 
 /**
- * The 26 cubies. During a face turn, the 9 in the turning layer sit in a
- * "pivot" group that rotates about the face's centre. When it finishes, the
- * parent swaps in the new cube state and the pivot empties: the stickers end
- * up exactly where the rotation left them, so the swap can't be seen.
+ * The cubies: 26 on a 3x3, 8 on a 2x2. During a face turn, the ones in the
+ * turning layer (9 or 4) sit in a "pivot" group that rotates about the
+ * face's centre. When it finishes, the parent swaps in the new cube state
+ * and the pivot empties: the stickers end up exactly where the rotation left
+ * them, so the swap can't be seen.
  */
 function Cubies({
+  puzzle,
   state,
   highlighted,
   spins,
@@ -307,8 +324,9 @@ function Cubies({
     }
   })
 
+  const cubies = cubiesOf(puzzle)
   const inLayer = (cubie: CubieLayout) =>
-    turn !== null && isInTurningLayer(cubie.position, turn)
+    turn !== null && isInTurningLayer(cubie.position, turn, puzzle)
   const draw = (cubie: CubieLayout) => (
     <Cubie
       key={cubie.position.join()}
@@ -320,8 +338,8 @@ function Cubies({
   )
   return (
     <>
-      {CUBIES.filter((cubie) => !inLayer(cubie)).map(draw)}
-      <group ref={pivot}>{CUBIES.filter(inLayer).map(draw)}</group>
+      {cubies.filter((cubie) => !inLayer(cubie)).map(draw)}
+      <group ref={pivot}>{cubies.filter(inLayer).map(draw)}</group>
     </>
   )
 }
@@ -367,22 +385,21 @@ function Cubie({ cubie, state, highlighted, spins }: CubieProps) {
 }
 
 /** An arrow lying on the cube, showing which way the next face turn goes. */
-function TurnArrow({ move }: { move: Move }) {
+function TurnArrow({ move, puzzle }: { move: Move; puzzle: Puzzle }) {
   const { position, quaternion, doubleHeaded } = useMemo(
-    () => arrowPlacement(move),
-    [move],
+    () => arrowPlacement(move, puzzle),
+    [move, puzzle],
   )
+  const arrows = arrowGeometriesOf(puzzle)
   return (
     <group position={position} quaternion={quaternion}>
       <mesh
-        geometry={
-          doubleHeaded ? DOUBLE_ARROW_OUTLINE_GEOMETRY : ARROW_OUTLINE_GEOMETRY
-        }
+        geometry={doubleHeaded ? arrows.doubleOutline : arrows.singleOutline}
         material={ARROW_OUTLINE_MATERIAL}
         position={[0, 0, -0.005]}
       />
       <mesh
-        geometry={doubleHeaded ? DOUBLE_ARROW_GEOMETRY : ARROW_GEOMETRY}
+        geometry={doubleHeaded ? arrows.double : arrows.single}
         material={ARROW_MATERIAL}
       />
     </group>
@@ -390,7 +407,7 @@ function TurnArrow({ move }: { move: Move }) {
 }
 
 /** Moves the camera back just far enough for the cube to fill the canvas, whatever its shape. */
-function CameraFit() {
+function CameraFit({ puzzle }: { puzzle: Puzzle }) {
   const camera = useThree((s) => s.camera as PerspectiveCamera)
   const { width, height } = useThree((s) => s.size)
   const invalidate = useThree((s) => s.invalidate)
@@ -403,11 +420,13 @@ function CameraFit() {
       CAMERA_DIRECTION,
       camera.fov,
       width / height,
+      CAMERA_MARGIN,
+      cubeHalfSize(puzzle),
     )
     camera.position.copy(CAMERA_DIRECTION).multiplyScalar(distance)
     camera.lookAt(0, 0, 0)
     invalidate()
-  }, [camera, width, height, invalidate])
+  }, [camera, width, height, invalidate, puzzle])
 
   return null
 }

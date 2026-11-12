@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Quaternion } from 'three'
+import { PUZZLES, type CubeType } from './cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
   colorCounts,
+  emptyState,
   type Color,
   type CubeState,
 } from './cube/state.ts'
@@ -18,6 +20,7 @@ import { Palette } from './editor/Palette.tsx'
 import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
 import { InfoButton } from './info/InfoButton.tsx'
+import { PuzzleContext } from './puzzleContext.ts'
 import { hashFor } from './routes.ts'
 import { canOfferCamera } from './scan/camera.ts'
 import { CameraIcon, Scanner } from './scan/Scanner.tsx'
@@ -54,14 +57,20 @@ import './solve/solve.css'
 type Solve = SolveStage | { stage: 'playing'; playback: Playback }
 
 /**
- * The page for one cube (so far, the 3x3): paint or scan it, check it, and
- * step through the solution. The page for picking a cube links here.
+ * The page for one cube: paint or scan it, check it, and step through the
+ * solution. The page for picking a cube links here.
+ *
+ * A 2x2 can so far only be painted: checking, solving and scanning one are
+ * still to come, so its page has no Scan button and Solve is switched off.
  */
-export function SolverPage() {
+export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
+  const puzzle = PUZZLES[cubeType]
+  const solvable = puzzle.name === '3x3'
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
-    () => initialEditorState(loadCube() ?? undefined),
+    () =>
+      initialEditorState(loadCube(localStorage, puzzle) ?? emptyState(puzzle)),
   )
   const [color, setColor] = useState<Color>('white')
   const [settings, setSettings] = useState(loadSettings)
@@ -109,8 +118,8 @@ export function SolverPage() {
 
   // Start the solver's setup now, so it's ready by the time the cube is painted.
   useEffect(() => {
-    getSolver()
-  }, [])
+    if (solvable) getSolver()
+  }, [solvable])
 
   // While playing, start the next turn after a short pause.
   const waitingToPlay =
@@ -134,8 +143,8 @@ export function SolverPage() {
   )
   /** While scanning: the side facing the user, which the next photo will fill. */
   const scanSide = useMemo(
-    () => (scanning ? frontCells(orientation) : undefined),
-    [scanning, orientation],
+    () => (scanning ? frontCells(orientation, puzzle) : undefined),
+    [scanning, orientation, puzzle],
   )
   const nextMove =
     playback && playback.ready && !isFinished(playback)
@@ -143,6 +152,7 @@ export function SolverPage() {
       : null
 
   async function handleSolve() {
+    if (!solvable) return
     const validation = validateCube(cube)
     if (!validation.valid || validation.solved) {
       setSolve({ cube, status: { stage: 'checked', validation } })
@@ -179,186 +189,198 @@ export function SolverPage() {
   }
 
   return (
-    <div className="app">
-      <header
-        className={
-          playback || scanning ? 'app-header app-header-compact' : 'app-header'
-        }
-      >
-        <div className="header-side">
-          {playback ? (
-            <button
-              type="button"
-              className="header-button"
-              onClick={() => setSolve(null)}
-            >
-              ‹ Edit cube
-            </button>
-          ) : scanning ? (
-            <button
-              type="button"
-              className="header-button"
-              onClick={() => setScanning(false)}
-            >
-              ‹ Done
-            </button>
-          ) : (
-            // A link, not a button: it goes to another page, and the
-            // browser's Back button comes back here.
-            <a className="header-button" href={hashFor('picker')}>
-              ‹ Cubes
-            </a>
-          )}
-        </div>
-        <h1 tabIndex={-1}>3x3 Cube Solver</h1>
-        <div className="header-side header-side-end">
-          <InfoButton />
-          <SettingsMenu settings={settings} onChange={changeSettings} />
-        </div>
-      </header>
-
-      {playback ? (
-        <SolveCard
-          playback={playback}
-          onReady={() => dispatchPlayback({ type: 'ready' })}
-          onWatchAgain={() => dispatchPlayback({ type: 'jump', step: 0 })}
-          onSolveAnother={() => {
-            setSolve(null)
-            dispatch({ type: 'reset' })
-          }}
-          map={
-            <CubeNet
-              state={shownCube}
-              activeFace={nextMove && turnedFace(nextMove)}
-            />
+    <PuzzleContext value={puzzle}>
+      <div className="app">
+        <header
+          className={
+            playback || scanning
+              ? 'app-header app-header-compact'
+              : 'app-header'
           }
-        />
-      ) : scanning ? (
-        <Scanner
-          cube={cube}
-          orientation={orientation}
-          onTurn={setOrientation}
-          onPaint={(paints) => {
-            dispatch({ type: 'paintCells', paints })
-            feel('tap')
-          }}
-          onDone={() => setScanning(false)}
-          letters={settings.letters}
-          autoPhoto={settings.autoPhoto}
-        />
-      ) : (
-        <>
-          <Palette
-            selected={color}
-            counts={colorCounts(cube)}
-            onSelect={setColor}
-            letters={settings.letters}
-          />
-          {message ? (
-            <SolveStatus status={message} onClose={() => setSolve(null)} />
-          ) : (
-            <p className="hint">
-              Pick a colour, then tap squares to paint (tap again to clear).
-              Swipe to turn the cube.
-            </p>
-          )}
-        </>
-      )}
-
-      {/* Stays in the same place in both modes, so the 3D view isn't rebuilt. */}
-      <main className="cube-stage">
-        <CubeView
-          state={shownCube}
-          // No painting while scanning: there's no palette to pick a colour from.
-          onCellTap={
-            scanning
-              ? undefined
-              : (cell) => {
-                  dispatch({ type: 'paint', cell, color })
-                  feel('tap')
-                }
-          }
-          highlight={
-            validation && !validation.valid ? validation.cells : scanSide
-          }
-          orientation={orientation}
-          onOrientationChange={setOrientation}
-          disabled={status?.stage === 'solving'}
-          held={playback !== null}
-          turn={playback?.turning?.move ?? null}
-          turnDurationMs={turnDurationMs(speed)}
-          onTurnDone={() => {
-            dispatchPlayback({ type: 'turnDone' })
-            const done = playback?.turning?.to
-            if (done !== undefined && done === playback?.moves.length) {
-              feel('solved')
-            }
-          }}
-          hint={nextMove}
-          letters={settings.letters}
-        />
-      </main>
-
-      {playback ? (
-        <>
-          <PlaybackControls playback={playback} dispatch={dispatchPlayback} />
-          <StepList
-            playback={playback}
-            onJump={(step) => dispatchPlayback({ type: 'jump', step })}
-          />
-        </>
-      ) : scanning ? null : (
-        <>
-          <nav className="toolbar" aria-label="Editing">
-            <button
-              type="button"
-              onClick={() => dispatch({ type: 'undo' })}
-              disabled={history.length === 0}
-            >
-              Undo
-            </button>
-            <button
-              type="button"
-              title="Paint the six centre squares in the standard colours: white on top, green in front"
-              onClick={() => dispatch({ type: 'fillCenters' })}
-              disabled={centersFilled(cube)}
-            >
-              Fill centres
-            </button>
-            <button
-              type="button"
-              onClick={() => dispatch({ type: 'reset' })}
-              disabled={cube.every((cell) => cell === null)}
-            >
-              Reset
-            </button>
-          </nav>
-          <div className="main-actions">
-            {canOfferCamera() && (
+        >
+          <div className="header-side">
+            {playback ? (
               <button
                 type="button"
-                className="scan-button"
-                onClick={() => {
-                  setSolve(null)
-                  setScanning(true)
-                }}
-                disabled={status?.stage === 'solving'}
+                className="header-button"
+                onClick={() => setSolve(null)}
               >
-                <CameraIcon />
-                Scan
+                ‹ Edit cube
               </button>
+            ) : scanning ? (
+              <button
+                type="button"
+                className="header-button"
+                onClick={() => setScanning(false)}
+              >
+                ‹ Done
+              </button>
+            ) : (
+              // A link, not a button: it goes to another page, and the
+              // browser's Back button comes back here.
+              <a className="header-button" href={hashFor('picker')}>
+                ‹ Cubes
+              </a>
             )}
-            <button
-              type="button"
-              className="solve-button"
-              onClick={handleSolve}
-              disabled={status?.stage === 'solving'}
-            >
-              {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
-            </button>
           </div>
-        </>
-      )}
-    </div>
+          <h1 tabIndex={-1}>{puzzle.name} Cube Solver</h1>
+          <div className="header-side header-side-end">
+            <InfoButton />
+            <SettingsMenu settings={settings} onChange={changeSettings} />
+          </div>
+        </header>
+
+        {playback ? (
+          <SolveCard
+            playback={playback}
+            onReady={() => dispatchPlayback({ type: 'ready' })}
+            onWatchAgain={() => dispatchPlayback({ type: 'jump', step: 0 })}
+            onSolveAnother={() => {
+              setSolve(null)
+              dispatch({ type: 'reset' })
+            }}
+            map={
+              <CubeNet
+                state={shownCube}
+                activeFace={nextMove && turnedFace(nextMove)}
+              />
+            }
+          />
+        ) : scanning ? (
+          <Scanner
+            cube={cube}
+            orientation={orientation}
+            onTurn={setOrientation}
+            onPaint={(paints) => {
+              dispatch({ type: 'paintCells', paints })
+              feel('tap')
+            }}
+            onDone={() => setScanning(false)}
+            letters={settings.letters}
+            autoPhoto={settings.autoPhoto}
+          />
+        ) : (
+          <>
+            <Palette
+              selected={color}
+              counts={colorCounts(cube)}
+              onSelect={setColor}
+              letters={settings.letters}
+            />
+            {message ? (
+              <SolveStatus status={message} onClose={() => setSolve(null)} />
+            ) : (
+              <p className="hint">
+                Pick a colour, then tap squares to paint (tap again to clear).
+                Swipe to turn the cube.
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Stays in the same place in both modes, so the 3D view isn't rebuilt. */}
+        <main className="cube-stage">
+          <CubeView
+            state={shownCube}
+            // No painting while scanning: there's no palette to pick a colour from.
+            onCellTap={
+              scanning
+                ? undefined
+                : (cell) => {
+                    dispatch({ type: 'paint', cell, color })
+                    feel('tap')
+                  }
+            }
+            highlight={
+              validation && !validation.valid ? validation.cells : scanSide
+            }
+            orientation={orientation}
+            onOrientationChange={setOrientation}
+            disabled={status?.stage === 'solving'}
+            held={playback !== null}
+            turn={playback?.turning?.move ?? null}
+            turnDurationMs={turnDurationMs(speed)}
+            onTurnDone={() => {
+              dispatchPlayback({ type: 'turnDone' })
+              const done = playback?.turning?.to
+              if (done !== undefined && done === playback?.moves.length) {
+                feel('solved')
+              }
+            }}
+            hint={nextMove}
+            letters={settings.letters}
+          />
+        </main>
+
+        {playback ? (
+          <>
+            <PlaybackControls playback={playback} dispatch={dispatchPlayback} />
+            <StepList
+              playback={playback}
+              onJump={(step) => dispatchPlayback({ type: 'jump', step })}
+            />
+          </>
+        ) : scanning ? null : (
+          <>
+            <nav className="toolbar" aria-label="Editing">
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'undo' })}
+                disabled={history.length === 0}
+              >
+                Undo
+              </button>
+              {puzzle.hasCenters && (
+                <button
+                  type="button"
+                  title="Paint the six centre squares in the standard colours: white on top, green in front"
+                  onClick={() => dispatch({ type: 'fillCenters' })}
+                  disabled={centersFilled(cube)}
+                >
+                  Fill centres
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'reset' })}
+                disabled={cube.every((cell) => cell === null)}
+              >
+                Reset
+              </button>
+            </nav>
+            <div className="main-actions">
+              {solvable && canOfferCamera() && (
+                <button
+                  type="button"
+                  className="scan-button"
+                  onClick={() => {
+                    setSolve(null)
+                    setScanning(true)
+                  }}
+                  disabled={status?.stage === 'solving'}
+                >
+                  <CameraIcon />
+                  Scan
+                </button>
+              )}
+              {solvable ? (
+                <button
+                  type="button"
+                  className="solve-button"
+                  onClick={handleSolve}
+                  disabled={status?.stage === 'solving'}
+                >
+                  {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
+                </button>
+              ) : (
+                <button type="button" className="solve-button" disabled>
+                  Solving a {puzzle.name} is coming soon
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </PuzzleContext>
   )
 }

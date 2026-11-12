@@ -37,6 +37,14 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
+    test('the 2x2 painting screen', async ({ page }) => {
+      await page.goto('./#/2x2')
+      await expect(
+        page.getByRole('button', { name: 'white, 0/4' }),
+      ).toBeVisible()
+      await expectNoProblems(page)
+    })
+
     test('the painting screen, its messages, the settings menu and the About window', async ({
       page,
     }) => {

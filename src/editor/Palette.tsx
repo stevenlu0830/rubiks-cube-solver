@@ -1,4 +1,5 @@
-import { CELLS_PER_COLOR, COLORS, type Color } from '../cube/state.ts'
+import { COLORS, type Color } from '../cube/state.ts'
+import { usePuzzle } from '../puzzleContext.ts'
 import { COLOR_LETTERS, LETTER_INK, STICKER_COLORS } from '../view/colors.ts'
 import './Palette.css'
 
@@ -12,7 +13,7 @@ interface PaletteProps {
   label?: string
 }
 
-/** The six paint colours, each showing how many cells use it out of the 9 a real cube has. */
+/** The six paint colours, each showing how many cells use it out of the 9 a real 3x3 has (4 on a 2x2). */
 export function Palette({
   selected,
   counts,
@@ -20,14 +21,15 @@ export function Palette({
   letters = false,
   label = 'Paint colour',
 }: PaletteProps) {
+  const { cellsPerColor } = usePuzzle()
   return (
     <div className="palette" role="group" aria-label={label}>
       {COLORS.map((color) => {
         const count = counts[color]
         const status =
-          count > CELLS_PER_COLOR
+          count > cellsPerColor
             ? 'over'
-            : count === CELLS_PER_COLOR
+            : count === cellsPerColor
               ? 'full'
               : undefined
         return (
@@ -52,7 +54,7 @@ export function Palette({
                 so voice control ("tap 3/9") works too. */}
             <span className="visually-hidden">{color},</span>{' '}
             <span className="swatch-count" data-status={status}>
-              {count}/{CELLS_PER_COLOR}
+              {count}/{cellsPerColor}
             </span>
           </button>
         )

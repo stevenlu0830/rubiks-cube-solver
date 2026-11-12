@@ -25,14 +25,18 @@ test('opens on the picker, goes to the 3x3 and back, and the Back button works',
   await expect(page.getByRole('heading', solverTitle)).toBeVisible()
 })
 
-test('shows the 2x2 as coming soon, and #/2x2 opens the picker', async ({
+test('shows the 2x2 as coming soon, though #/2x2 opens its page to try', async ({
   page,
 }) => {
-  await page.goto('./#/2x2')
-  await expect(page.getByRole('heading', pickerTitle)).toBeVisible()
+  await page.goto('./')
   const twoByTwo = page.getByRole('listitem').filter({ hasText: '2x2' })
   await expect(twoByTwo).toContainText('Coming soon')
   await expect(twoByTwo.getByRole('link')).toHaveCount(0)
+
+  await page.goto('./#/2x2')
+  await expect(
+    page.getByRole('heading', { name: '2x2 Cube Solver', level: 1 }),
+  ).toBeVisible()
 })
 
 test('keeps a cube painted on an earlier visit, and says so on the picker', async ({

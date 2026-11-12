@@ -1,7 +1,13 @@
 import { Matrix4, Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { dot, faceNormal, STICKERS } from '../../src/cube/geometry.ts'
+import {
+  dot,
+  faceNormal,
+  STICKERS,
+  stickersOf,
+} from '../../src/cube/geometry.ts'
 import { applyMoves, randomScramble, type Move } from '../../src/cube/moves.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
@@ -183,6 +189,53 @@ describe('frontCells', () => {
         expect(touches(cell, bottom), `${n} at the bottom`).toBe(row === 2)
         expect(touches(cell, left), `${n} on the left`).toBe(column === 0)
         expect(touches(cell, right), `${n} on the right`).toBe(column === 2)
+      })
+    }
+  })
+})
+
+describe('on a 2x2', () => {
+  const NUMBERED_2X2 = Array.from({ length: 24 }, (_, i) => i)
+  const cellsOf = (face: Face) =>
+    Array.from({ length: 4 }, (_, n) => cellIndex(face, n, PUZZLE_2X2))
+
+  it('cubeAsShown reads the cells exactly as the matching x/y moves would move them', () => {
+    const random = seededRandom(19)
+    for (let run = 0; run < 100; run++) {
+      const swipes = Array.from(
+        { length: Math.floor(random() * 8) },
+        () => SWIPES[Math.floor(random() * 4)],
+      )
+      const moves = swipes.map((direction) => SWIPE_MOVES[direction])
+      expect(cubeAsShown(NUMBERED_2X2, swipeAll(swipes))).toEqual(
+        applyMoves(NUMBERED_2X2, moves),
+      )
+    }
+  })
+
+  it.each<[string, SwipeDirection[], Face]>([
+    ['before any swipe', [], 'F'],
+    ['after a swipe left', ['left'], 'R'],
+    ['after a swipe up', ['up'], 'D'],
+    ['after two swipes left', ['left', 'left'], 'B'],
+  ])('frontCells, %s, reads the 4 cells in front', (_, swipes, face) => {
+    expect(frontCells(swipeAll(swipes), PUZZLE_2X2)).toEqual(cellsOf(face))
+  })
+
+  it('frontCells, in all 24 ways the cube can sit, reads the front row by row from the top left', () => {
+    const stickers = stickersOf(PUZZLE_2X2)
+    const touches = (cell: number, face: Face) =>
+      dot(stickers[cell].position, faceNormal(face)) === 0.5
+    for (const orientation of allOrientations()) {
+      const cells = frontCells(orientation, PUZZLE_2X2)
+      expect([...cells].sort((a, b) => a - b)).toEqual(
+        cellsOf(frontFace(orientation)),
+      )
+      const top = faceTowards(orientation, new Vector3(0, 1, 0))
+      const left = faceTowards(orientation, new Vector3(-1, 0, 0))
+      cells.forEach((cell, n) => {
+        expect(touches(cell, top), `${n} on top`).toBe(n < 2)
+        expect(touches(cell, left), `${n} on the left`).toBe(n % 2 === 0)
       })
     }
   })

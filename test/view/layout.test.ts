@@ -1,7 +1,8 @@
 import { Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { STICKERS } from '../../src/cube/geometry.ts'
-import { CUBIE_SIZE, CUBIES } from '../../src/view/layout.ts'
+import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
+import { CUBIE_SIZE, CUBIES, cubiesOf } from '../../src/view/layout.ts'
 
 const allStickers = CUBIES.flatMap((cubie) =>
   cubie.stickers.map((sticker) => ({ cubie, sticker })),
@@ -70,5 +71,30 @@ describe('CUBIES', () => {
         expectClose(new Vector3(0, 1, 0).applyQuaternion(spun), tops[quarters])
       })
     }
+  })
+})
+
+describe('cubiesOf a 2x2', () => {
+  const cubies = cubiesOf(PUZZLE_2X2)
+
+  it('has 8 corner cubies, each with 3 stickers', () => {
+    expect(cubies).toHaveLength(8)
+    for (const cubie of cubies) {
+      expect(cubie.stickers).toHaveLength(3)
+      for (const coordinate of cubie.position) {
+        expect(Math.abs(coordinate)).toBe(0.5)
+      }
+    }
+  })
+
+  it('shows each of the 24 cells exactly once', () => {
+    const cells = cubies.flatMap((cubie) => cubie.stickers.map((s) => s.cell))
+    expect(cells.sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 24 }, (_, i) => i),
+    )
+  })
+
+  it('keeps the 3x3 as it was', () => {
+    expect(cubiesOf(PUZZLE_3X3)).toBe(CUBIES)
   })
 })

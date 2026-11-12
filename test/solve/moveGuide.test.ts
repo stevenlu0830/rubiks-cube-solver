@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { faceNormal, STICKERS } from '../../src/cube/geometry.ts'
+import { faceNormal, STICKERS, stickersOf } from '../../src/cube/geometry.ts'
 import { applyMove } from '../../src/cube/moves.ts'
+import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
 import { FACES, type Face } from '../../src/cube/state.ts'
 import {
   describeMove,
   TURN_GUIDES,
   turnedFace,
+  turnGuidesOf,
 } from '../../src/solve/moveGuide.ts'
 
 const NUMBERED = Array.from({ length: 54 }, (_, i) => i)
@@ -75,4 +77,57 @@ describe('TURN_GUIDES', () => {
       expect(dot(along, DIRECTION_VECTORS[guide.direction])).toBeGreaterThan(0)
     },
   )
+})
+
+describe('turnGuidesOf a 2x2', () => {
+  const guides = turnGuidesOf(PUZZLE_2X2)
+  const stickers = stickersOf(PUZZLE_2X2)
+  const NUMBERED_2X2 = Array.from({ length: 24 }, (_, i) => i)
+
+  it.each(FACES)(
+    '%s: two stickers side by side on the same face, and in the same direction, as the 3x3',
+    (face: Face) => {
+      const guide = guides[face]
+      expect(guide.cells).toHaveLength(2)
+      expect(guide.face).toBe(TURN_GUIDES[face].face)
+      expect(guide.direction).toBe(TURN_GUIDES[face].direction)
+      const [a, b] = guide.cells.map((cell) => stickers[cell])
+      for (const sticker of [a, b]) {
+        expect(sticker.normal).toEqual(faceNormal(guide.face))
+      }
+      const step = sub(b.position, a.position)
+      expect(dot(step, step)).toBe(1)
+    },
+  )
+
+  it.each(FACES)(
+    '%s: a clockwise turn really moves those stickers the way the words say',
+    (face: Face) => {
+      const guide = guides[face]
+      const toward = DIRECTION_VECTORS[guide.direction]
+      /**
+       * The middle of a sticker's face. On a 2x2 every sticker is on a
+       * corner, and the end one wraps round the edge, so where its cubie's
+       * centre goes says less than where the sticker itself goes.
+       */
+      const surface = (cell: number) => {
+        const { position, normal } = stickers[cell]
+        return position.map((p, i) => p + normal[i] / 2)
+      }
+      for (const cell of guide.cells) {
+        const landsAt = applyMove(NUMBERED_2X2, face).indexOf(cell)
+        const moved = sub(surface(landsAt), surface(cell))
+        expect(dot(moved, toward)).toBeGreaterThan(0)
+      }
+      const along = sub(
+        stickers[guide.cells[1]].position,
+        stickers[guide.cells[0]].position,
+      )
+      expect(dot(along, toward)).toBeGreaterThan(0)
+    },
+  )
+
+  it('keeps the 3x3 guides as they were', () => {
+    expect(turnGuidesOf(PUZZLE_3X3)).toBe(TURN_GUIDES)
+  })
 })

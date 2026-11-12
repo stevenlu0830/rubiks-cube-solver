@@ -1,24 +1,20 @@
+import { CUBE_TYPES, PUZZLES, type CubeType } from '../cube/puzzle.ts'
 import { loadCube } from '../editor/storage.ts'
 import { InfoButton } from '../info/InfoButton.tsx'
-import {
-  APP_NAME,
-  CUBE_TYPES,
-  hashFor,
-  READY_CUBES,
-  type CubeType,
-} from '../routes.ts'
+import { APP_NAME, hashFor, READY_CUBES } from '../routes.ts'
 import { CubeIcon } from './CubeIcon.tsx'
 import '../App.css'
 import './picker.css'
 
-const CUBES: Record<CubeType, { size: number; about: string }> = {
-  '2x2': { size: 2, about: 'The pocket cube' },
-  '3x3': { size: 3, about: "The classic Rubik's cube" },
+const ABOUT: Record<CubeType, string> = {
+  '2x2': 'The pocket cube',
+  '3x3': "The classic Rubik's cube",
 }
 
 /** True when a cube of this type has been part-painted and saved. */
 function inProgress(cube: CubeType): boolean {
-  return cube === '3x3' && (loadCube()?.some((cell) => cell !== null) ?? false)
+  const saved = loadCube(localStorage, PUZZLES[cube])
+  return saved?.some((cell) => cell !== null) ?? false
 }
 
 /**
@@ -39,7 +35,8 @@ export function CubePicker() {
         <h2>Which cube are you solving?</h2>
         <ul className="cube-cards">
           {CUBE_TYPES.map((cube) => {
-            const { size, about } = CUBES[cube]
+            const { size } = PUZZLES[cube]
+            const about = ABOUT[cube]
             const ready = READY_CUBES.includes(cube)
             const details = (
               <>

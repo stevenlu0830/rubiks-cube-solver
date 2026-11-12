@@ -1,6 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { faceNormal, STICKERS } from '../../src/cube/geometry.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { cellIndex, FACES } from '../../src/cube/state.ts'
 import { CAMERA_DIRECTION, SCREEN_UP } from '../../src/view/camera.ts'
 import { CUBIES } from '../../src/view/layout.ts'
 import { letterSpins } from '../../src/view/letters.ts'
@@ -64,6 +66,24 @@ describe('letterSpins', () => {
       expect(visible).toHaveLength(27) // the front, top and right faces
       for (const { top } of visible) {
         expect(top.dot(SCREEN_UP)).toBeGreaterThan(0.3)
+      }
+    },
+  )
+})
+
+describe('letterSpins on a 2x2', () => {
+  it.each(ORIENTATIONS.map((q, i) => [i, q] as const))(
+    'orientation %i: spins each sticker as the 3x3 spins the stickers on the same face',
+    (_, orientation) => {
+      const twoByTwo = letterSpins(orientation, PUZZLE_2X2)
+      const threeByThree = letterSpins(orientation)
+      expect(twoByTwo).toHaveLength(24)
+      for (const face of FACES) {
+        for (let n = 0; n < 4; n++) {
+          expect(twoByTwo[cellIndex(face, n, PUZZLE_2X2)]).toBe(
+            threeByThree[cellIndex(face, 0)],
+          )
+        }
       }
     },
   )

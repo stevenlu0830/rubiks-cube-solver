@@ -182,10 +182,15 @@
   gap: 2px;
 }
 
+/*
+ * Each face is 26px square whatever the cube: 3 squares of 8px on a 3x3,
+ * 2 of 12.5px on a 2x2, with 1px gaps. --net-size is set by CubeNet.tsx.
+ */
 .cube-net-face {
+  --square: calc((26px - (var(--net-size, 3) - 1) * 1px) / var(--net-size, 3));
   display: grid;
-  grid-template-columns: repeat(3, 8px);
-  grid-auto-rows: 8px;
+  grid-template-columns: repeat(var(--net-size, 3), var(--square));
+  grid-auto-rows: var(--square);
   gap: 1px;
   border-radius: 2px;
 }

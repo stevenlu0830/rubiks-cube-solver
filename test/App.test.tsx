@@ -59,10 +59,31 @@ describe('App', () => {
     expect(document.title).toBe("3x3 · Rubik's Cube Solver")
   })
 
-  it('opens the picker at #/2x2 until the 2x2 can be solved', () => {
+  it('opens the 2x2 page at #/2x2, though the picker still says it is coming soon', () => {
     history.replaceState(null, '', '/#/2x2')
     render(<App />)
-    expect(heading("Rubik's Cube Solver")).toBeInTheDocument()
+    expect(heading('2x2 Cube Solver')).toBeInTheDocument()
+    expect(view.state).toHaveLength(24)
+    expect(document.title).toBe("2x2 · Rubik's Cube Solver")
+  })
+
+  it('keeps the 2x2 and 3x3 apart when switching between them', async () => {
+    history.replaceState(null, '', '/#/3x3')
+    render(<App />)
+    act(() => view.tap(4))
+
+    await goTo('#/2x2')
+    expect(view.state).toHaveLength(24)
+    expect(view.state.every((cell) => cell === null)).toBe(true)
+    act(() => view.tap(0))
+
+    await goTo('#/3x3')
+    expect(view.state).toHaveLength(54)
+    expect(view.state[4]).toBe('white')
+    expect(view.state[0]).toBeNull()
+
+    await goTo('#/2x2')
+    expect(view.state[0]).toBe('white')
   })
 
   it('goes to the 3x3 from its card, and back with ‹ Cubes', async () => {

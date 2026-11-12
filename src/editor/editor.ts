@@ -1,3 +1,4 @@
+import { puzzleOf } from '../cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
@@ -35,7 +36,7 @@ export type EditorAction =
       type: 'paintCells'
       paints: readonly (readonly [cell: number, color: Color])[]
     }
-  /** Set the six centres to the standard colour scheme. */
+  /** Set the six centres to the standard colour scheme (a 3x3 only: a 2x2 has none). */
   | { type: 'fillCenters' }
   /** Clear every cell. */
   | { type: 'reset' }
@@ -64,6 +65,7 @@ export function editorReducer(
       return change(state, cube)
     }
     case 'fillCenters': {
+      if (!puzzleOf(state.cube).hasCenters) return state
       const cube = [...state.cube]
       for (const face of FACES) {
         cube[cellIndex(face, CENTER)] = STANDARD_SCHEME[face]
@@ -71,7 +73,7 @@ export function editorReducer(
       return change(state, cube)
     }
     case 'reset':
-      return change(state, emptyState())
+      return change(state, emptyState(puzzleOf(state.cube)))
     case 'undo':
       if (state.history.length === 0) return state
       return {
@@ -91,8 +93,12 @@ function change(state: EditorState, cube: CubeState): EditorState {
   }
 }
 
-/** True when the six centres already match the standard colour scheme. */
+/**
+ * True when the six centres already match the standard colour scheme, or
+ * there are none to fill (a 2x2).
+ */
 export function centersFilled(cube: CubeState): boolean {
+  if (!puzzleOf(cube).hasCenters) return true
   return FACES.every(
     (face) => cube[cellIndex(face, CENTER)] === STANDARD_SCHEME[face],
   )

@@ -1,4 +1,6 @@
+import type { CSSProperties } from 'react'
 import { cellIndex, FACES, type CubeState, type Face } from '../cube/state.ts'
+import { usePuzzle } from '../puzzleContext.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
 
 /** Where each face sits in the unfolded cube (row, column), as drawn in cube/state.ts. */
@@ -22,8 +24,15 @@ interface CubeNetProps {
  * the 3D view) can be seen too.
  */
 export function CubeNet({ state, activeFace }: CubeNetProps) {
+  const puzzle = usePuzzle()
   return (
-    <div className="cube-net" role="img" aria-label="Map of all six faces">
+    <div
+      className="cube-net"
+      role="img"
+      aria-label="Map of all six faces"
+      // Squares along each face's edge, for solve.css.
+      style={{ '--net-size': puzzle.size } as CSSProperties}
+    >
       {FACES.map((face) => {
         const [row, column] = NET_POSITION[face]
         return (
@@ -33,8 +42,8 @@ export function CubeNet({ state, activeFace }: CubeNetProps) {
             data-active={face === activeFace || undefined}
             style={{ gridRow: row, gridColumn: column }}
           >
-            {Array.from({ length: 9 }, (_, n) => {
-              const color = state[cellIndex(face, n)]
+            {Array.from({ length: puzzle.cellsPerFace }, (_, n) => {
+              const color = state[cellIndex(face, n, puzzle)]
               return (
                 <span
                   key={n}

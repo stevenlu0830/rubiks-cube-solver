@@ -1,4 +1,5 @@
 import type { Move } from '../cube/moves.ts'
+import { perPuzzle, PUZZLE_3X3 } from '../cube/puzzle.ts'
 import { cellIndex, type Face } from '../cube/state.ts'
 
 /**
@@ -14,23 +15,47 @@ type Direction = 'left' | 'right' | 'up' | 'down'
 export interface TurnGuide {
   /** The visible face the guide row/column is on. */
   face: 'F' | 'U'
-  /** Three cells in a row or column that move during a clockwise turn, listed in the direction they move. */
-  cells: [number, number, number]
+  /**
+   * A whole row or column of cells that move during a clockwise turn (3 on
+   * a 3x3, 2 on a 2x2), listed in the direction they move.
+   */
+  cells: readonly number[]
   /** Which way they move during a clockwise turn, as seen from the front. */
   direction: Direction
 }
 
-const front = (n: number) => cellIndex('F', n)
-const top = (n: number) => cellIndex('U', n)
+/** Each face turn's guide, for each size of cube. */
+export const turnGuidesOf = perPuzzle((puzzle): Record<Face, TurnGuide> => {
+  const last = puzzle.size - 1
+  /** The cell at this row and column (from the top left) of a face. */
+  const at = (face: Face) => (row: number, column: number) =>
+    cellIndex(face, row * puzzle.size + column, puzzle)
+  const front = at('F')
+  const top = at('U')
+  /** 0, 1, … along a row or column. */
+  const along = (cell: (i: number) => number) =>
+    Array.from({ length: puzzle.size }, (_, i) => cell(i))
+  return {
+    // e.g. on a 3x3, U is F2 F1 F0: the front's top row, moving left.
+    U: {
+      face: 'F',
+      cells: along((i) => front(0, last - i)),
+      direction: 'left',
+    },
+    D: { face: 'F', cells: along((i) => front(last, i)), direction: 'right' },
+    R: {
+      face: 'F',
+      cells: along((i) => front(last - i, last)),
+      direction: 'up',
+    },
+    L: { face: 'F', cells: along((i) => front(i, 0)), direction: 'down' },
+    F: { face: 'U', cells: along((i) => top(last, i)), direction: 'right' },
+    B: { face: 'U', cells: along((i) => top(0, last - i)), direction: 'left' },
+  }
+})
 
-export const TURN_GUIDES: Record<Face, TurnGuide> = {
-  U: { face: 'F', cells: [front(2), front(1), front(0)], direction: 'left' },
-  D: { face: 'F', cells: [front(6), front(7), front(8)], direction: 'right' },
-  R: { face: 'F', cells: [front(8), front(5), front(2)], direction: 'up' },
-  L: { face: 'F', cells: [front(0), front(3), front(6)], direction: 'down' },
-  F: { face: 'U', cells: [top(6), top(7), top(8)], direction: 'right' },
-  B: { face: 'U', cells: [top(2), top(1), top(0)], direction: 'left' },
-}
+/** A 3x3's guides. Which face and direction each uses is the same for a 2x2. */
+export const TURN_GUIDES: Record<Face, TurnGuide> = turnGuidesOf(PUZZLE_3X3)
 
 const FACE_NAMES: Record<Face, string> = {
   U: 'top',

@@ -18,7 +18,8 @@ import {
   solvedState,
   type CubeState,
 } from '../src/cube/state.ts'
-import { saveCube } from '../src/editor/storage.ts'
+import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
+import { loadCube, saveCube } from '../src/editor/storage.ts'
 import { pauseMs } from '../src/solve/playback.ts'
 import { toFaceletString } from '../src/solver/facelets.ts'
 import { SolverError } from '../src/solver/solver.ts'
@@ -633,6 +634,75 @@ describe('SolverPage', () => {
       click('Next')
       act(() => view.turnDone())
       expect(vibrate).toHaveBeenCalledWith([30, 50, 30, 50, 90])
+    })
+  })
+
+  describe('a 2x2', () => {
+    afterEach(() => removeFakeCamera())
+
+    it('says which cube it is for, with a blank 2x2 of 24 squares', () => {
+      render(<SolverPage cube="2x2" />)
+      expect(
+        screen.getByRole('heading', { name: '2x2 Cube Solver' }),
+      ).toBeInTheDocument()
+      expect(view.state).toEqual(emptyState(PUZZLE_2X2))
+    })
+
+    it('paints squares, counting each colour out of 4', () => {
+      render(<SolverPage cube="2x2" />)
+      expect(
+        screen.getByRole('button', { name: 'white, 0/4' }),
+      ).toBeInTheDocument()
+      tap(0)
+      tap(23)
+      expect(view.state[0]).toBe('white')
+      expect(view.state[23]).toBe('white')
+      expect(
+        screen.getByRole('button', { name: 'white, 2/4' }),
+      ).toBeInTheDocument()
+    })
+
+    it('has Undo and Reset, but no Fill centres: a 2x2 has none', () => {
+      render(<SolverPage cube="2x2" />)
+      tap(3)
+      click('Undo')
+      expect(view.state[3]).toBeNull()
+      tap(3)
+      click('Reset')
+      expect(view.state).toEqual(emptyState(PUZZLE_2X2))
+      expect(screen.queryByRole('button', { name: 'Fill centres' })).toBeNull()
+    })
+
+    it("can't be scanned or solved yet", () => {
+      fakeCamera()
+      render(<SolverPage cube="2x2" />)
+      expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
+      expect(
+        screen.getByRole('button', { name: 'Solving a 2x2 is coming soon' }),
+      ).toBeDisabled()
+    })
+
+    it('keeps the painted 2x2 after a page refresh, apart from the 3x3', () => {
+      const { unmount } = render(<SolverPage cube="2x2" />)
+      tap(5)
+      unmount()
+      expect(loadCube(localStorage, PUZZLE_2X2)?.[5]).toBe('white')
+      expect(loadCube()).toBeNull()
+
+      render(<SolverPage cube="2x2" />)
+      expect(view.state[5]).toBe('white')
+    })
+
+    it('opens a 2x2 saved earlier', () => {
+      const saved = [...emptyState(PUZZLE_2X2)]
+      saved[10] = 'green'
+      saveCube(saved)
+      render(<SolverPage cube="2x2" />)
+      expect(view.state).toEqual(saved)
+      expect(
+        screen.getByRole('button', { name: 'green, 1/4' }),
+      ).toBeInTheDocument()
     })
   })
 })

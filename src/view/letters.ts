@@ -1,5 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { STICKERS } from '../cube/geometry.ts'
+import { stickersOf } from '../cube/geometry.ts'
+import { PUZZLE_3X3, type Puzzle } from '../cube/puzzle.ts'
 import { SCREEN_UP } from './camera.ts'
 
 /**
@@ -15,8 +16,11 @@ import { SCREEN_UP } from './camera.ts'
  * (see CubieLayout's `spun`) so its letter reads upright, with the cube
  * shown in `orientation`.
  */
-export function letterSpins(orientation: Quaternion): number[] {
-  return STICKERS.map(({ normal, up }) => {
+export function letterSpins(
+  orientation: Quaternion,
+  puzzle: Puzzle = PUZZLE_3X3,
+): number[] {
+  return stickersOf(puzzle).map(({ normal, up }) => {
     const n = new Vector3(...normal)
     const u = new Vector3(...up)
     const right = new Vector3().crossVectors(u, n)

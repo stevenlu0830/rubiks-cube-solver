@@ -11,12 +11,16 @@ import {
   randomScramble,
   type Move,
 } from '../../src/cube/moves.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
+  colorCounts,
+  COLORS,
   FACES,
   isSolved,
   solvedState,
+  STANDARD_SCHEME,
   type Color,
   type Face,
 } from '../../src/cube/state.ts'
@@ -185,5 +189,99 @@ describe('notation', () => {
 
   it('inverts a sequence by reversing it and inverting each move', () => {
     expect(formatMoves(invertMoves(parseMoves("R U2 F'")))).toBe("F U2 R'")
+  })
+})
+
+describe('on a 2x2', () => {
+  const NUMBERED_2X2 = Array.from({ length: 24 }, (_, i) => i)
+  const SOLVED_2X2 = solvedState(STANDARD_SCHEME, PUZZLE_2X2)
+
+  it.each(MOVES)('%s done 4 times returns the starting state', (move) => {
+    expect(applyMoves(NUMBERED_2X2, [move, move, move, move])).toEqual(
+      NUMBERED_2X2,
+    )
+  })
+
+  it.each(MOVES)(
+    '%s followed by its inverse returns the starting state',
+    (move) => {
+      expect(applyMoves(NUMBERED_2X2, [move, invertMove(move)])).toEqual(
+        NUMBERED_2X2,
+      )
+    },
+  )
+
+  it.each(MOVES.filter((move) => move.length === 1))(
+    '%s done twice is the same as a half turn',
+    (move) => {
+      expect(applyMoves(NUMBERED_2X2, [move, move])).toEqual(
+        applyMove(NUMBERED_2X2, `${move}2` as Move),
+      )
+    },
+  )
+
+  it.each(FACES)(
+    '%s moves exactly 12 cells: its own 4, and 2 on each face round it',
+    (face) => {
+      const after = applyMove(NUMBERED_2X2, face)
+      const moved = NUMBERED_2X2.filter((cell) => after[cell] !== cell)
+      expect(moved).toHaveLength(12)
+      const own = [0, 1, 2, 3].map((n) => cellIndex(face, n, PUZZLE_2X2))
+      for (const cell of own) expect(moved).toContain(cell)
+    },
+  )
+
+  it('turns the whole cube like turning two opposite faces, since a 2x2 has no middle layer', () => {
+    expect(applyMove(NUMBERED_2X2, 'y')).toEqual(
+      applyMoves(NUMBERED_2X2, parseMoves("U D'")),
+    )
+    expect(applyMove(NUMBERED_2X2, 'x')).toEqual(
+      applyMoves(NUMBERED_2X2, parseMoves("R L'")),
+    )
+    expect(applyMove(NUMBERED_2X2, 'z')).toEqual(
+      applyMoves(NUMBERED_2X2, parseMoves("F B'")),
+    )
+  })
+
+  it("moves the corners exactly as on a 3x3 (a 2x2 is a 3x3's corners)", () => {
+    // A 2x2 cell at (row, column) of a face matches the 3x3 corner cell at
+    // (2 × row, 2 × column) of that face.
+    const onThreeByThree = (cell: number) => {
+      const face = Math.floor(cell / 4)
+      const [row, column] = [Math.floor((cell % 4) / 2), cell % 2]
+      return face * 9 + row * 2 * 3 + column * 2
+    }
+    const moves = randomScramble(40, seededRandom(22))
+    const twoByTwo = applyMoves(NUMBERED_2X2, moves)
+    const threeByThree = applyMoves(
+      Array.from({ length: 54 }, (_, i) => i),
+      moves,
+    )
+    NUMBERED_2X2.forEach((cell) => {
+      expect(threeByThree[onThreeByThree(cell)]).toBe(
+        onThreeByThree(twoByTwo[cell]),
+      )
+    })
+  })
+
+  it("R U R' U' six times returns to the start", () => {
+    const sexyMove = parseMoves("R U R' U'")
+    const sixTimes = Array.from({ length: 6 }, () => sexyMove).flat()
+    expect(applyMoves(NUMBERED_2X2, sixTimes)).toEqual(NUMBERED_2X2)
+    expect(applyMoves(NUMBERED_2X2, sexyMove)).not.toEqual(NUMBERED_2X2)
+  })
+
+  it('scrambles a solved cube, keeping 4 of each colour, and the inverse solves it', () => {
+    const random = seededRandom(23)
+    for (let run = 0; run < 20; run++) {
+      const scramble = randomScramble(15, random)
+      const scrambled = applyMoves(SOLVED_2X2, scramble)
+      for (const color of COLORS) {
+        expect(colorCounts(scrambled)[color]).toBe(4)
+      }
+      const solved = applyMoves(scrambled, invertMoves(scramble))
+      expect(isSolved(solved)).toBe(true)
+      expect(solved).toEqual(SOLVED_2X2)
+    }
   })
 })

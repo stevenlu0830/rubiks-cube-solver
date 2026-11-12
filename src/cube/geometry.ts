@@ -1,13 +1,15 @@
+import { perPuzzle, PUZZLE_3X3, type Puzzle } from './puzzle.ts'
 import { FACES, type Face } from './state.ts'
 
 /**
- * Where each of the 54 cells sits in 3D space. The move engine uses this to
- * work out turns by actually rotating points, instead of hand-typed lookup
- * tables, and the 3D view uses it to place stickers.
+ * Where each cell sits in 3D space. The move engine uses this to work out
+ * turns by actually rotating points, instead of hand-typed lookup tables,
+ * and the 3D view uses it to place stickers.
  *
  * Axes: x points right (towards R), y points up (towards U), z points at the
- * viewer (towards F). The cube is 3×3×3 small cubes ("cubies") whose centres
- * have coordinates -1, 0 or 1.
+ * viewer (towards F). Neighbouring small cubes ("cubies") are 1 apart, and
+ * the cube's middle is at 0. So a 3×3×3 cube's cubie centres have
+ * coordinates -1, 0 or 1, and a 2×2×2 cube's -0.5 or 0.5.
  */
 
 export type Vec3 = readonly [number, number, number]
@@ -39,35 +41,70 @@ export function faceNormal(face: Face): Vec3 {
   return FACE_AXES[face].normal
 }
 
-/** STICKERS[i] is where cell i sits; same indexing as CubeState. */
-export const STICKERS: readonly Sticker[] = FACES.flatMap((face) => {
-  const { normal, right, down } = FACE_AXES[face]
-  return Array.from({ length: 9 }, (_, n) => {
-    const col = (n % 3) - 1
-    const row = Math.floor(n / 3) - 1
-    const position: Vec3 = [
-      normal[0] + col * right[0] + row * down[0],
-      normal[1] + col * right[1] + row * down[1],
-      normal[2] + col * right[2] + row * down[2],
-    ]
-    const up: Vec3 = [-down[0], -down[1], -down[2]]
-    return { position, normal, up }
+/**
+ * How far the outer layers' cubie centres are from the middle: 1 on a 3x3,
+ * 0.5 on a 2x2. A face turn moves the cubies this far out along its normal.
+ */
+export function outerLayer(puzzle: Puzzle): number {
+  return (puzzle.size - 1) / 2
+}
+
+/** stickersOf(puzzle)[i] is where cell i sits; same indexing as CubeState. */
+export const stickersOf = perPuzzle((puzzle): readonly Sticker[] => {
+  const { size, cellsPerFace } = puzzle
+  const outer = outerLayer(puzzle)
+  return FACES.flatMap((face) => {
+    const { normal, right, down } = FACE_AXES[face]
+    return Array.from({ length: cellsPerFace }, (_, n) => {
+      const col = (n % size) - outer
+      const row = Math.floor(n / size) - outer
+      const position: Vec3 = [
+        normal[0] * outer + col * right[0] + row * down[0],
+        normal[1] * outer + col * right[1] + row * down[1],
+        normal[2] * outer + col * right[2] + row * down[2],
+      ]
+      const up: Vec3 = [-down[0], -down[1], -down[2]]
+      return { position, normal, up }
+    })
   })
 })
 
+/** Where each of a 3x3's 54 cells sits. */
+export const STICKERS: readonly Sticker[] = stickersOf(PUZZLE_3X3)
+
 const stickerKey = (position: Vec3, normal: Vec3) => `${position}|${normal}`
 
-const INDEX_BY_STICKER = new Map(
-  STICKERS.map(({ position, normal }, i) => [stickerKey(position, normal), i]),
+const indexBySticker = perPuzzle(
+  (puzzle) =>
+    new Map(
+      stickersOf(puzzle).map(({ position, normal }, i) => [
+        stickerKey(position, normal),
+        i,
+      ]),
+    ),
 )
 
 /** The cell index of the sticker at this position facing this way. */
-export function stickerIndexAt(position: Vec3, normal: Vec3): number {
-  const index = INDEX_BY_STICKER.get(stickerKey(position, normal))
+export function stickerIndexAt(
+  position: Vec3,
+  normal: Vec3,
+  puzzle: Puzzle = PUZZLE_3X3,
+): number {
+  const index = indexBySticker(puzzle).get(stickerKey(position, normal))
   if (index === undefined) {
     throw new Error(`No sticker at ${position} facing ${normal}`)
   }
   return index
+}
+
+/**
+ * Rounds each coordinate to the nearest half: undoes the tiny errors left
+ * after turning a point with floating-point maths, for either cube (whose
+ * cubie centres are whole numbers on a 3x3 and halves on a 2x2).
+ */
+export function snapToGrid(v: Vec3): Vec3 {
+  const snap = (n: number) => Math.round(n * 2) / 2
+  return [snap(v[0]), snap(v[1]), snap(v[2])]
 }
 
 export function dot(a: Vec3, b: Vec3): number {

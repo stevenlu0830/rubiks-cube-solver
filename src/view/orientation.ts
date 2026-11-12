@@ -1,5 +1,11 @@
 import { Matrix4, Quaternion, Vector3 } from 'three'
-import { faceNormal, STICKERS, stickerIndexAt } from '../cube/geometry.ts'
+import {
+  faceNormal,
+  snapToGrid,
+  stickerIndexAt,
+  stickersOf,
+} from '../cube/geometry.ts'
+import { perPuzzle, PUZZLE_3X3, puzzleOf, type Puzzle } from '../cube/puzzle.ts'
 import { cellIndex, FACES, type Face } from '../cube/state.ts'
 import type { SwipeDirection } from './gestures.ts'
 
@@ -79,31 +85,45 @@ export function topFace(orientation: Quaternion): Face {
  * The cells as the user sees them on screen: cell U4 is whatever centre is
  * on top right now, F4 whatever centre faces them, and so on. The solver is
  * given the cube this way, so its moves (R, U, …) mean the sides the user
- * actually sees, and the user can hold their real cube the same way.
+ * actually sees, and the user can hold their real cube the same way. Works
+ * for either cube (see puzzleOf).
  */
 export function cubeAsShown<T>(
   cube: readonly T[],
   orientation: Quaternion,
 ): T[] {
+  const puzzle = puzzleOf(cube)
   const turnBack = orientation.clone().invert()
-  return STICKERS.map(({ position, normal }) => {
+  return stickersOf(puzzle).map(({ position, normal }) => {
     // Turn this spot on the screen back to where it is on the unturned cube.
-    const from = new Vector3(...position).applyQuaternion(turnBack).round()
-    const facing = new Vector3(...normal).applyQuaternion(turnBack).round()
-    return cube[stickerIndexAt(from.toArray(), facing.toArray())]
+    const from = new Vector3(...position).applyQuaternion(turnBack)
+    const facing = new Vector3(...normal).applyQuaternion(turnBack)
+    return cube[
+      stickerIndexAt(
+        snapToGrid(from.toArray()),
+        snapToGrid(facing.toArray()),
+        puzzle,
+      )
+    ]
   })
 }
 
 /** Each cell's own number: cubeAsShown on these says which cell shows where. */
-const CELL_NUMBERS = Array.from({ length: 54 }, (_, cell) => cell)
+const cellNumbers = perPuzzle((puzzle) =>
+  Array.from({ length: puzzle.cellCount }, (_, cell) => cell),
+)
 
 /**
- * The 9 cells on the side facing the viewer, in the order a photo of that
- * side reads them: row by row from the top left, as seen on screen.
+ * The cells on the side facing the viewer (9 on a 3x3, 4 on a 2x2), in the
+ * order a photo of that side reads them: row by row from the top left, as
+ * seen on screen.
  */
-export function frontCells(orientation: Quaternion): number[] {
-  return cubeAsShown(CELL_NUMBERS, orientation).slice(
-    cellIndex('F', 0),
-    cellIndex('F', 9),
+export function frontCells(
+  orientation: Quaternion,
+  puzzle: Puzzle = PUZZLE_3X3,
+): number[] {
+  return cubeAsShown(cellNumbers(puzzle), orientation).slice(
+    cellIndex('F', 0, puzzle),
+    cellIndex('F', puzzle.cellsPerFace, puzzle),
   )
 }

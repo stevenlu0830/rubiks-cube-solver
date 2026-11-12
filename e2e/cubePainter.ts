@@ -1,10 +1,13 @@
 import { expect, type Page } from '@playwright/test'
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three'
-import { STICKERS } from '../src/cube/geometry.ts'
+import { stickersOf } from '../src/cube/geometry.ts'
+import { PUZZLE_3X3, type Puzzle } from '../src/cube/puzzle.ts'
 import { COLORS, type CubeState } from '../src/cube/state.ts'
 import {
   CAMERA_DIRECTION,
   CAMERA_FOV,
+  CAMERA_MARGIN,
+  cubeHalfSize,
   fitCameraDistance,
 } from '../src/view/camera.ts'
 import type { SwipeDirection } from '../src/view/gestures.ts'
@@ -22,20 +25,23 @@ const TOUR: (SwipeDirection | null)[] = [null, 'left', 'left', 'up']
  * Paints the 3D cube the way a person would: picks a colour, taps stickers,
  * swipes to see the other sides. It keeps track of how the cube is turned,
  * using the app's own camera and swipe code, to work out where on screen
- * each sticker is.
+ * each sticker is. Give it the puzzle the page shows (a 3x3 unless told).
  */
 export class CubePainter {
   /** How the cube is turned on screen right now. */
   orientation = new Quaternion()
   private readonly page: Page
+  private readonly puzzle: Puzzle
 
-  constructor(page: Page) {
+  constructor(page: Page, puzzle: Puzzle = PUZZLE_3X3) {
     this.page = page
+    this.puzzle = puzzle
   }
 
+  /** Paints every cell that has a colour in `cube`; blank (null) ones are left alone. */
   async paint(cube: CubeState) {
     await this.waitUntilSized()
-    const left = new Set(STICKERS.keys())
+    const left = new Set([...cube.keys()].filter((cell) => cube[cell] !== null))
     for (const swipe of TOUR) {
       if (swipe) await this.swipe(swipe)
       const onScreen = await this.stickersOnScreen()
@@ -84,12 +90,20 @@ export class CubePainter {
     const camera = new PerspectiveCamera(CAMERA_FOV, aspect, 0.1, 100)
     camera.position
       .copy(CAMERA_DIRECTION)
-      .multiplyScalar(fitCameraDistance(CAMERA_DIRECTION, CAMERA_FOV, aspect))
+      .multiplyScalar(
+        fitCameraDistance(
+          CAMERA_DIRECTION,
+          CAMERA_FOV,
+          aspect,
+          CAMERA_MARGIN,
+          cubeHalfSize(this.puzzle),
+        ),
+      )
     camera.lookAt(0, 0, 0)
     camera.updateMatrixWorld()
 
     const found = new Map<number, { x: number; y: number }>()
-    STICKERS.forEach(({ position, normal }, cell) => {
+    stickersOf(this.puzzle).forEach(({ position, normal }, cell) => {
       const facing = new Vector3(...normal).applyQuaternion(this.orientation)
       if (facing.dot(CAMERA_DIRECTION) < MIN_FACING) return
       const centre = new Vector3(...position)

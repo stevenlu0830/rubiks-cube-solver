@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
+import { CUBE_TYPES, type CubeType } from './cube/puzzle.ts'
 
 /**
  * Which page to show, read from the end of the address after the # (its
- * "hash"): …/#/3x3 is the 3x3 solver, and anything else is the page for
- * picking a cube.
+ * "hash"): …/#/3x3 is the 3x3 solver, …/#/2x2 the 2x2's, and anything else
+ * is the page for picking a cube.
  *
  * Hash addresses need no help from the web server. The browser never sends
  * the part after # to it, so GitHub Pages (which has no way to send
@@ -12,10 +13,11 @@ import { useSyncExternalStore } from 'react'
  * the browser's Back button steps through hashes like any other page.
  */
 
-export const CUBE_TYPES = ['2x2', '3x3'] as const
-export type CubeType = (typeof CUBE_TYPES)[number]
-
-/** The cubes that can be solved so far; the picker shows the others as "Coming soon". */
+/**
+ * The cubes that can be solved so far; the picker shows the others as
+ * "Coming soon". Their pages still open from their address (e.g. #/2x2),
+ * to try them out while they're being built.
+ */
 export const READY_CUBES: readonly CubeType[] = ['3x3']
 
 export type Route = 'picker' | CubeType
@@ -24,7 +26,7 @@ export const APP_NAME = "Rubik's Cube Solver"
 
 export function routeFromHash(hash: string): Route {
   const name = hash.replace(/^#\/?/, '')
-  return READY_CUBES.find((cube) => cube === name) ?? 'picker'
+  return CUBE_TYPES.find((cube) => cube === name) ?? 'picker'
 }
 
 /** The address (from the # on) that shows this page. */

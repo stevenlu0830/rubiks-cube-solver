@@ -1,0 +1,82 @@
+import { expect, test } from '@playwright/test'
+import { applyMoves, parseMoves } from '../src/cube/moves.ts'
+import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
+import {
+  cellIndex,
+  COLORS,
+  emptyState,
+  solvedState,
+  STANDARD_SCHEME,
+} from '../src/cube/state.ts'
+import { CubePainter } from './cubePainter.ts'
+import { fakeCamera } from './fakeCamera.ts'
+
+/** A 2x2 scrambled by a few turns of every face. */
+const SCRAMBLED_2X2 = applyMoves(
+  solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+  parseMoves("R U2 F' L D B2 R' U F2"),
+)
+
+const count = (color: string, of: string) => `${color}, ${of}`
+
+test('paints a scrambled 2x2 by tapping and swiping, and keeps it after a reload', async ({
+  page,
+}) => {
+  await page.goto('./#/2x2')
+  await expect(
+    page.getByRole('heading', { name: '2x2 Cube Solver', level: 1 }),
+  ).toBeVisible()
+
+  await new CubePainter(page, PUZZLE_2X2).paint(SCRAMBLED_2X2)
+  for (const color of COLORS) {
+    await expect(
+      page.getByRole('button', { name: count(color, '4/4') }),
+    ).toBeVisible()
+  }
+  // Every one of the 24 squares went where it was tapped.
+  const saved = await page.evaluate(() =>
+    localStorage.getItem('rubiks-cube-solver/cube-2x2'),
+  )
+  expect(JSON.parse(saved!)).toEqual(SCRAMBLED_2X2)
+
+  await page.reload()
+  await expect(
+    page.getByRole('button', { name: count('white', '4/4') }),
+  ).toBeVisible()
+
+  // The 3x3 has its own cube, still blank.
+  await page.getByRole('link', { name: '‹ Cubes' }).click()
+  await page.getByRole('link', { name: /^3x3/ }).click()
+  await expect(
+    page.getByRole('button', { name: count('white', '0/9') }),
+  ).toBeVisible()
+})
+
+test('has Undo and Reset but no Fill centres, and no Scan or Solve yet', async ({
+  page,
+}) => {
+  // A camera, so the only reason for no Scan button is that it's a 2x2.
+  await page.addInitScript(fakeCamera)
+  await page.goto('./#/2x2')
+
+  const oneSquare = [...emptyState(PUZZLE_2X2)]
+  oneSquare[cellIndex('F', 0, PUZZLE_2X2)] = 'red'
+  await new CubePainter(page, PUZZLE_2X2).paint(oneSquare)
+  await expect(
+    page.getByRole('button', { name: count('red', '1/4') }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(
+    page.getByRole('button', { name: count('red', '0/4') }),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled()
+
+  await expect(page.getByRole('button', { name: 'Fill centres' })).toHaveCount(
+    0,
+  )
+  await expect(page.getByRole('button', { name: 'Scan' })).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Solving a 2x2 is coming soon' }),
+  ).toBeDisabled()
+})

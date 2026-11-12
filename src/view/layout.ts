@@ -1,13 +1,15 @@
 import { Matrix4, Quaternion, Vector3 } from 'three'
-import { STICKERS } from '../cube/geometry.ts'
+import { stickersOf } from '../cube/geometry.ts'
+import { perPuzzle, PUZZLE_3X3, type Puzzle } from '../cube/puzzle.ts'
 
 /**
  * Where every part of the 3D cube goes, kept apart from the React components
  * so it can be unit-tested without a browser.
  *
  * Units and axes match cube/geometry.ts (which also happen to be three.js's
- * defaults): neighbouring cubie centres are 1 apart, so the cube spans -1.5
- * to 1.5 on each axis, with x right, y up and z towards the viewer.
+ * defaults): neighbouring cubie centres are 1 apart, so a 3x3 spans -1.5
+ * to 1.5 on each axis (a 2x2, -1 to 1), with x right, y up and z towards
+ * the viewer.
  */
 
 type Tuple3 = [number, number, number]
@@ -46,8 +48,8 @@ export interface CubieLayout {
 /** A flat sticker's own centre line, before it's turned into place. */
 const SPIN_AXIS = new Vector3(0, 0, 1)
 
-function stickerLayout(cell: number): StickerLayout {
-  const { normal, up } = STICKERS[cell]
+function stickerLayout(cell: number, puzzle: Puzzle): StickerLayout {
+  const { normal, up } = stickersOf(puzzle)[cell]
   const n = new Vector3(...normal)
   const u = new Vector3(...up)
   const right = new Vector3().crossVectors(u, n)
@@ -77,14 +79,20 @@ function stickerLayout(cell: number): StickerLayout {
   }
 }
 
-/** The 26 visible cubies (the hidden centre one is skipped), each with its stickers. */
-export const CUBIES: readonly CubieLayout[] = (() => {
+/**
+ * The cubies that show, each with its stickers: 26 on a 3x3 (the hidden one
+ * in the middle is skipped), 8 on a 2x2.
+ */
+export const cubiesOf = perPuzzle((puzzle): readonly CubieLayout[] => {
   const byPosition = new Map<string, CubieLayout>()
-  STICKERS.forEach(({ position }, cell) => {
+  stickersOf(puzzle).forEach(({ position }, cell) => {
     const key = position.join()
     if (!byPosition.has(key))
       byPosition.set(key, { position: [...position], stickers: [] })
-    byPosition.get(key)!.stickers.push(stickerLayout(cell))
+    byPosition.get(key)!.stickers.push(stickerLayout(cell, puzzle))
   })
   return [...byPosition.values()]
-})()
+})
+
+/** A 3x3's 26 cubies. */
+export const CUBIES: readonly CubieLayout[] = cubiesOf(PUZZLE_3X3)

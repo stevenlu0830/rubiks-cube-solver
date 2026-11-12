@@ -21,7 +21,12 @@ function App() {
     }
   }, [route])
 
-  return route === 'picker' ? <CubePicker /> : <SolverPage />
+  // A new SolverPage for each cube (`key`), so nothing carries over from one to the other.
+  return route === 'picker' ? (
+    <CubePicker />
+  ) : (
+    <SolverPage key={route} cube={route} />
+  )
 }
 
 export default App
