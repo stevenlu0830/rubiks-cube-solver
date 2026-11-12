@@ -7,20 +7,16 @@
  *
  * Turning a photo round doesn't change its colours, only which square each
  * one goes on. So with the colours named once, every way of turning the six
- * photos (4 ways each: 4⁶ = 4,096) is put through the same check. If exactly
- * one of them gives a cube a real cube could be, that's almost certainly
- * what happened. Now and then a far-fetched answer passes too, like turning
- * all six sides; holding one side wrong is a much likelier slip, so the
- * answer turning the fewest sides wins, unless another ties with it.
+ * photos (4 ways each: 4⁶ = 4,096) is put through the same check, which
+ * works for a 2x2 or a 3x3. If exactly one of them gives a cube a real cube
+ * could be, that's almost certainly what happened. Now and then a
+ * far-fetched answer passes too, like turning all six sides; holding one
+ * side wrong is a much likelier slip, so the answer turning the fewest
+ * sides wins, unless another ties with it.
  */
 
-import {
-  CENTER,
-  FACES,
-  type Cell,
-  type Color,
-  type Face,
-} from '../cube/state.ts'
+import { puzzleOfSide } from '../cube/puzzle.ts'
+import { FACES, type Cell, type Color, type Face } from '../cube/state.ts'
 import { validateCube } from '../cube/validate.ts'
 import type { Classified } from './classify.ts'
 import type { Fixes, ScannedSides } from './sides.ts'
@@ -31,19 +27,27 @@ export type SideTurns = Partial<Record<Face, 1 | 2 | 3>>
 /**
  * For a side turned a quarter turn clockwise: which square of the side
  * (row by row from the top left) each square of the photo now shows. The
- * photo's top left shows what was the bottom left, and so on.
+ * photo's top left shows what was the bottom left, and so on: on a 3x3
+ * that's [6, 3, 0, 7, 4, 1, 8, 5, 2], on a 2x2 [2, 0, 3, 1].
  */
-const QUARTER_TURN = [6, 3, 0, 7, 4, 1, 8, 5, 2]
+function quarterTurn(size: number): number[] {
+  return Array.from({ length: size * size }, (_, n) => {
+    const [row, column] = [Math.floor(n / size), n % size]
+    return (size - 1 - column) * size + row
+  })
+}
 
-/** A photo's cells (see ScannedSide), for the side turned this many quarter turns clockwise. */
-export function turnCells(
-  cells: readonly number[],
-  quarterTurns: number,
-): number[] {
+/**
+ * A photo's cells (see ScannedSide), for the side turned this many quarter
+ * turns clockwise. Works on anything listed in photo order, such as the
+ * colours read.
+ */
+export function turnCells<T>(cells: readonly T[], quarterTurns: number): T[] {
+  const turn = quarterTurn(Math.round(Math.sqrt(cells.length)))
   let turned = [...cells]
   for (let i = 0; i < quarterTurns % 4; i++) {
     const before = turned
-    turned = QUARTER_TURN.map((from) => before[from])
+    turned = turn.map((from) => before[from])
   }
   return turned
 }
@@ -70,8 +74,9 @@ export function findTurnedSides(
       turns: [0, 1, 2, 3].map((n) => turnCells(cells, n)),
     }
   })
+  const { cellCount } = puzzleOfSide(sides.F!.cells)
   const cubeTurned = (turns: readonly number[]) => {
-    const cube = Array<Cell>(54).fill(null)
+    const cube = Array<Cell>(cellCount).fill(null)
     photos.forEach(({ colors, turns: cells }, side) =>
       cells[turns[side]].forEach((cell, n) => (cube[cell] = colors[n])),
     )
@@ -135,15 +140,4 @@ export function turnSides(
     nextSides[face] = { ...side, cells }
   }
   return { sides: nextSides, fixes: nextFixes }
-}
-
-/** The colour of each turned side's centre, to name it by. */
-export function turnedColors(
-  sides: ScannedSides,
-  named: ReadonlyMap<number, Classified>,
-  turns: SideTurns,
-): Color[] {
-  return FACES.filter((face) => turns[face]).map(
-    (face) => named.get(sides[face]!.cells[CENTER])!.color,
-  )
 }

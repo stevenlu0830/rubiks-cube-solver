@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import { Quaternion, Vector3 } from 'three'
+import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
 import { COLORS } from '../src/cube/state.ts'
 import { STICKER_COLORS } from '../src/view/colors.ts'
 import type { SwipeDirection } from '../src/view/gestures.ts'
 import { frontCells, turnBySwipe } from '../src/view/orientation.ts'
 import { CubePainter } from './cubePainter.ts'
-import { SCRAMBLED } from './cubes.ts'
+import { SCRAMBLED, SCRAMBLED_2X2 } from './cubes.ts'
 import {
   cameraIsOff,
   fakeCamera,
@@ -124,6 +125,53 @@ for (const facing of ['environment', 'user'] as const) {
     })
   })
 }
+
+test('scans all six sides of a scrambled 2x2 by following the instructions, then solves it', async ({
+  page,
+}) => {
+  await page.addInitScript(fakeCamera)
+  await page.goto('./')
+  await page.getByRole('link', { name: /^2x2/ }).click()
+  await page.getByRole('button', { name: 'Scan' }).click()
+  await expect.poll(() => pictureWidth(page)).toBe(640)
+  await expect(page.locator('.scan-guide > span')).toHaveCount(4)
+
+  // How the person holds their real cube: the same way as the 3D one.
+  let holding = new Quaternion()
+  for (let side = 1; side <= 6; side++) {
+    await showSide(
+      page,
+      frontCells(holding, PUZZLE_2X2).map(
+        (cell) => STICKER_COLORS[SCRAMBLED_2X2[cell]!],
+      ),
+    )
+    // Held still, the photo takes itself.
+    await expect(page.getByText(`${side} of 6 sides`)).toBeVisible()
+    await expect(page.locator('.scan-dot')).toHaveCount(4)
+    if (side === 6) break
+
+    await page.getByRole('button', { name: 'Next side ›' }).click()
+    const said = await page.locator('.scan-instruction').textContent()
+    const [, swipes] = INSTRUCTIONS.find(([pattern]) => pattern.test(said!))!
+    holding = swipes.reduce(turnBySwipe, holding)
+  }
+
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  for (const color of COLORS) {
+    await expect(
+      page.getByRole('button', { name: `${color}, 4/4` }),
+    ).toBeVisible()
+  }
+  const saved = await page.evaluate(() =>
+    localStorage.getItem('rubiks-cube-solver/cube-2x2'),
+  )
+  expect(JSON.parse(saved!)).toEqual(SCRAMBLED_2X2)
+
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.getByLabel('How to hold your cube')).toContainText(
+    'the corner at the back, bottom left',
+  )
+})
 
 test('lets you swipe to the sides yourself, and turns the cube around for the last one', async ({
   page,

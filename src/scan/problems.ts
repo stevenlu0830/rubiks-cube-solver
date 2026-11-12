@@ -58,8 +58,11 @@ export function pictureProblem(
  */
 const FRAMED = 0.35
 
-/** Most of the 9 squares must look like stickers: a cube not quite lined up can miss a couple. */
-const FRAMED_SQUARES = 7
+/**
+ * At least this share of the squares must look like stickers: 7 of a 3x3's
+ * 9, 3 of a 2x2's 4. A cube not quite lined up can miss one or two.
+ */
+const FRAMED_SHARE = 0.75
 
 /**
  * Whether the picture in the guide looks like a side of a cube, rather
@@ -67,7 +70,8 @@ const FRAMED_SQUARES = 7
  * be sure there's a cube to photograph.
  */
 export function looksLikeSide(squares: readonly Square[]): boolean {
-  return squares.filter(({ edge }) => edge >= FRAMED).length >= FRAMED_SQUARES
+  const framed = squares.filter(({ edge }) => edge >= FRAMED).length
+  return framed >= Math.ceil(FRAMED_SHARE * squares.length)
 }
 
 function averageChange(before: readonly Lab[], now: readonly Lab[]): number {

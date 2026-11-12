@@ -68,6 +68,12 @@ describe('looksLikeSide', () => {
     ).toBe(false)
   })
 
+  it("needs 3 of a 2x2's 4 squares to look like stickers", () => {
+    expect(looksLikeSide(squares(0.9, 0.8, 0.9, 0.7))).toBe(true)
+    expect(looksLikeSide(squares(0.9, 0.8, 0.1, 0.7))).toBe(true)
+    expect(looksLikeSide(squares(0.9, 0, 0.1, 0.7))).toBe(false)
+  })
+
   it("doesn't see a cube in a wall or a table", () => {
     expect(looksLikeSide(squares(...Array<number>(9).fill(0.05)))).toBe(false)
   })

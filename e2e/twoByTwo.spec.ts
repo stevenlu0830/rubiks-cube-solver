@@ -12,14 +12,8 @@ import {
 } from '../src/cube/state.ts'
 import { cubeAsShown } from '../src/view/orientation.ts'
 import { CubePainter } from './cubePainter.ts'
-import { savedCube } from './cubes.ts'
+import { savedCube, SCRAMBLED_2X2 } from './cubes.ts'
 import { fakeCamera } from './fakeCamera.ts'
-
-/** A 2x2 scrambled by a few turns of every face. */
-const SCRAMBLED_2X2 = applyMoves(
-  solvedState(STANDARD_SCHEME, PUZZLE_2X2),
-  parseMoves("R U2 F' L D B2 R' U F2"),
-)
 
 const count = (color: string, of: string) => `${color}, ${of}`
 
@@ -56,10 +50,7 @@ test('paints a scrambled 2x2 by tapping and swiping, and keeps it after a reload
   ).toBeVisible()
 })
 
-test('has Undo and Reset but no Fill centres, and no Scan yet', async ({
-  page,
-}) => {
-  // A camera, so the only reason for no Scan button is that it's a 2x2.
+test('has Undo, Reset and Scan, but no Fill centres', async ({ page }) => {
   await page.addInitScript(fakeCamera)
   await page.goto('./#/2x2')
 
@@ -79,7 +70,7 @@ test('has Undo and Reset but no Fill centres, and no Scan yet', async ({
   await expect(page.getByRole('button', { name: 'Fill centres' })).toHaveCount(
     0,
   )
-  await expect(page.getByRole('button', { name: 'Scan' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Scan' })).toBeVisible()
 })
 
 test('picks the 2x2, paints a scrambled one, and plays its solution to the end, solved', async ({

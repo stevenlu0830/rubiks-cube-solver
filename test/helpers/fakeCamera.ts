@@ -29,10 +29,10 @@ interface FakeCameraOptions {
  * `getUserMedia.mockRejectedValueOnce(new DOMException('', 'NotAllowedError'))`.
  *
  * The test environment can't play video or draw it on a canvas either, so
- * those are faked too: `show` sets the 9 colours a photo will read (sticker
- * colour names, or exact [red, green, blue] colours), each framed in black
- * plastic like a real cube, optionally with a patch of glare covering part
- * of the middle of every square.
+ * those are faked too: `show` sets the colours a photo will read (sticker
+ * colour names, or exact [red, green, blue] colours: 9 for a side of a 3x3,
+ * 4 for a 2x2), each framed in black plastic like a real cube, optionally
+ * with a patch of glare covering part of the middle of every square.
  */
 export function fakeCamera({
   facing = 'environment',
@@ -84,8 +84,8 @@ export function fakeCamera({
   )
 
   /**
-   * Puts a side with these colours (row by row from the top left) in front
-   * of the camera. With `plastic: false`, there's no black between the
+   * Puts a side with these colours (row by row from the top left, 9 or 4 of
+   * them) in front of the camera. With `plastic: false`, there's no black between the
    * squares: a flat picture, like a poster, rather than a cube.
    */
   const show = (
@@ -117,7 +117,8 @@ function sidePicture(
   plastic = true,
 ): Pixels {
   const data = new Uint8ClampedArray(GRAB_SIZE * GRAB_SIZE * 4)
-  const square = GRAB_SIZE / 3
+  const size = Math.round(Math.sqrt(colors.length)) // squares along each edge
+  const square = GRAB_SIZE / size
   const rgbOf = (color: Color | Rgb) =>
     typeof color === 'string'
       ? [1, 3, 5].map((i) =>
@@ -130,7 +131,8 @@ function sidePicture(
       const [across, down] = [(x % square) / square, (y % square) / square]
       const shine = down >= 0.25 && down < 0.25 + glare / 2
       const rim = Math.min(across, down, 1 - across, 1 - down) < 0.06
-      const color = colors[Math.floor(y / square) * 3 + Math.floor(x / square)]
+      const color =
+        colors[Math.floor(y / square) * size + Math.floor(x / square)]
       const rgb =
         plastic && rim ? [20, 20, 20] : shine ? [252, 252, 250] : rgbOf(color)
       data.set([...rgb, 255], (y * GRAB_SIZE + x) * 4)

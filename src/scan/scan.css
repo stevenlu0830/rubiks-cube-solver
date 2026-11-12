@@ -31,7 +31,8 @@
   width: 78cqmin;
   height: 78cqmin;
   display: grid;
-  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  /* --grid: squares along each edge, set on .viewfinder (3, or 2 for a 2x2). */
+  grid-template: repeat(var(--grid), 1fr) / repeat(var(--grid), 1fr);
   border: 2px solid #fff;
   border-radius: 12px;
   /* Darkens everything outside the guide. */
@@ -55,12 +56,12 @@
   scale: -1 1;
 }
 
-/* Lines between the nine squares. */
-.scan-guide span:not(:nth-child(3n)) {
+/* Lines between the squares. */
+.scan-guide span[data-line-right] {
   border-right: 1px solid rgb(255 255 255 / 0.6);
 }
 
-.scan-guide span:nth-child(-n + 6) {
+.scan-guide span[data-line-below] {
   border-bottom: 1px solid rgb(255 255 255 / 0.6);
 }
 
@@ -108,7 +109,7 @@
   width: 78cqmin;
   height: 78cqmin;
   display: grid;
-  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  grid-template: repeat(var(--grid), 1fr) / repeat(var(--grid), 1fr);
 }
 
 .scan-dots > * {

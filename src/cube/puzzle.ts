@@ -71,6 +71,14 @@ export function puzzleOf(cells: { readonly length: number }): Puzzle {
 }
 
 /**
+ * Which cube one side's worth of squares is from, told by how many there
+ * are: 4 for a 2x2, 9 for a 3x3. Works on colours, cell numbers, anything.
+ */
+export function puzzleOfSide(squares: { readonly length: number }): Puzzle {
+  return puzzleOf({ length: 6 * squares.length })
+}
+
+/**
  * Wraps `make` so it runs once per puzzle and its answer is kept: for
  * tables worked out from a puzzle's size, such as where every sticker is.
  */

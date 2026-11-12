@@ -1,10 +1,10 @@
 /**
- * Reading the 9 squares of one side from the camera.
+ * Reading the squares of one side from the camera: 9 on a 3x3, 4 on a 2x2.
  *
  * grabFrame copies the part of the camera's picture under the on-screen
  * guide into a small square of pixels. readSquares then works out one
- * colour for each of the 9 squares. It only needs plain numbers, so tests
- * can make up pictures without a camera.
+ * colour for each square. It only needs plain numbers, so tests can make
+ * up pictures without a camera.
  */
 
 import type { Rgb } from './colorSpace.ts'
@@ -21,7 +21,7 @@ export interface Pixels {
   readonly height: number
 }
 
-/** How many pixels across a grabbed picture is: 40 for each square. */
+/** How many pixels across a grabbed picture is: 40 for each square of a 3x3, 60 of a 2x2. */
 export const GRAB_SIZE = 120
 
 /**
@@ -86,22 +86,23 @@ export interface Square {
 }
 
 /**
- * Each of the 9 squares in a picture of one side, row by row from the top
- * left (so the centre is number 4).
+ * Each square in a picture of one side with `size` squares along each edge
+ * (3 for a 3x3, 2 for a 2x2), row by row from the top left: on a 3x3 the
+ * centre is number 4.
  */
-export function inspectSquares(pixels: Pixels): Square[] {
+export function inspectSquares(pixels: Pixels, size = 3): Square[] {
   const squares: Square[] = []
-  for (let row = 0; row < 3; row++) {
-    for (let column = 0; column < 3; column++) {
-      squares.push(readSquare(pixels, column, row))
+  for (let row = 0; row < size; row++) {
+    for (let column = 0; column < size; column++) {
+      squares.push(readSquare(pixels, column, row, size))
     }
   }
   return squares
 }
 
-/** Just the colour of each of the 9 squares, as inspectSquares. */
-export function readSquares(pixels: Pixels): Rgb[] {
-  return inspectSquares(pixels).map(({ color }) => color)
+/** Just the colour of each square, as inspectSquares. */
+export function readSquares(pixels: Pixels, size = 3): Rgb[] {
+  return inspectSquares(pixels, size).map(({ color }) => color)
 }
 
 /**
@@ -115,10 +116,11 @@ function readSquare(
   { data, width, height }: Pixels,
   column: number,
   row: number,
+  size: number,
 ): Square {
   const margin = (1 - MIDDLE) / 2
-  const across = (n: number) => Math.round((n * width) / 3)
-  const down = (n: number) => Math.round((n * height) / 3)
+  const across = (n: number) => Math.round((n * width) / size)
+  const down = (n: number) => Math.round((n * height) / size)
   const [left, right] = [across(column + margin), across(column + 1 - margin)]
   const [top, bottom] = [down(row + margin), down(row + 1 - margin)]
   const colors: Rgb[] = []

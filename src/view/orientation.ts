@@ -81,6 +81,28 @@ export function topFace(orientation: Quaternion): Face {
   return faceTowards(orientation, UP_AXIS)
 }
 
+/** Where a side of the cube is as seen on screen. */
+export type ScreenSide = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
+
+const SCREEN_SIDES: readonly [ScreenSide, Vector3][] = [
+  ['front', new Vector3(0, 0, 1)],
+  ['back', new Vector3(0, 0, -1)],
+  ['left', new Vector3(-1, 0, 0)],
+  ['right', new Vector3(1, 0, 0)],
+  ['top', new Vector3(0, 1, 0)],
+  ['bottom', new Vector3(0, -1, 0)],
+]
+
+/**
+ * Where `face` of the cube is when it's shown in this orientation: on a 2x2,
+ * whose sides have no centre colour to name them by, it's how they're named.
+ */
+export function screenSideOf(orientation: Quaternion, face: Face): ScreenSide {
+  return SCREEN_SIDES.find(
+    ([, direction]) => faceTowards(orientation, direction) === face,
+  )![0]
+}
+
 /**
  * The cells as the user sees them on screen: cell U4 is whatever centre is
  * on top right now, F4 whatever centre faces them, and so on. The solver is

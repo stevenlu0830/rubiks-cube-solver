@@ -3,19 +3,23 @@ import { useEffect, useState } from 'react'
 import { Quaternion } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
+import { PUZZLE_2X2, PUZZLE_3X3, type Puzzle } from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   emptyState,
   solvedState,
+  STANDARD_SCHEME,
   type Color,
   type CubeState,
 } from '../../src/cube/state.ts'
+import { PuzzleContext } from '../../src/puzzleContext.ts'
 import { fakeCamera, removeFakeCamera } from '../helpers/fakeCamera.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
 import type { SwipeDirection } from '../../src/view/gestures.ts'
 import {
   frontCells,
   frontFace,
+  screenSideOf,
   turnBySwipe,
 } from '../../src/view/orientation.ts'
 import type { Rgb } from '../../src/scan/colorSpace.ts'
@@ -37,12 +41,15 @@ const app = {
 function Harness({
   autoPhoto = false,
   letters = false,
+  puzzle = PUZZLE_3X3,
 }: {
   autoPhoto?: boolean
   letters?: boolean
+  /** Which cube the page is for, as SolverPage says. */
+  puzzle?: Puzzle
 }) {
   const [orientation, setOrientation] = useState(() => new Quaternion())
-  const [cube, setCube] = useState<CubeState>(emptyState)
+  const [cube, setCube] = useState<CubeState>(() => emptyState(puzzle))
   // Let the tests see the latest of each, and swipe as a finger would.
   useEffect(() => {
     app.orientation = orientation
@@ -51,24 +58,26 @@ function Harness({
       act(() => setOrientation((current) => turnBySwipe(current, direction)))
   })
   return (
-    <Scanner
-      cube={cube}
-      orientation={orientation}
-      onTurn={(to) => {
-        app.turns.push(to)
-        setOrientation(to)
-      }}
-      onPaint={(paints) =>
-        setCube((current) => {
-          const next = [...current]
-          for (const [cell, color] of paints) next[cell] = color
-          return next
-        })
-      }
-      onDone={app.done}
-      autoPhoto={autoPhoto}
-      letters={letters}
-    />
+    <PuzzleContext value={puzzle}>
+      <Scanner
+        cube={cube}
+        orientation={orientation}
+        onTurn={(to) => {
+          app.turns.push(to)
+          setOrientation(to)
+        }}
+        onPaint={(paints) =>
+          setCube((current) => {
+            const next = [...current]
+            for (const [cell, color] of paints) next[cell] = color
+            return next
+          })
+        }
+        onDone={app.done}
+        autoPhoto={autoPhoto}
+        letters={letters}
+      />
+    </PuzzleContext>
   )
 }
 
@@ -786,6 +795,124 @@ describe('Scanner', () => {
       expect(letters('.scan-dots')).toBe('RWBGGYORW')
     })
 
+    describe('a 2x2', () => {
+      const SCRAMBLED_2X2 = applyMoves(
+        solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+        parseMoves("R U2 F' L D B2 R' U F2"),
+      )
+      const twoByTwoCells = () => frontCells(app.orientation, PUZZLE_2X2)
+      /** The colours of whichever side of the scrambled 2x2 faces the camera. */
+      const sideColors = () =>
+        twoByTwoCells().map((cell) => SCRAMBLED_2X2[cell]!)
+
+      it('shows a 2×2 guide, and live dots for its 4 squares', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} />)
+        await cameraAnswers()
+        expect(guide()!.children).toHaveLength(4)
+        camera.show(['red', 'white', 'green', 'blue'])
+        lookThrough()
+        expect(dots('.scan-dots-live')).toEqual(
+          asCss(['red', 'white', 'green', 'blue']),
+        )
+      })
+
+      it('scans all six sides of a scrambled 2x2 in five quarter turns, then is done', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} />)
+        await cameraAnswers()
+        for (let side = 1; side <= 6; side++) {
+          camera.show(sideColors())
+          click('Take photo')
+          expect(dots()).toHaveLength(4)
+          expect(screen.getByText(`${side} of 6 sides`)).toBeInTheDocument()
+          if (side < 6) click('Next side ›')
+        }
+        expect(app.turns).toHaveLength(5)
+        expect(app.cube).toEqual(SCRAMBLED_2X2)
+        expect(instruction()).toMatch(/^All six sides are in/)
+      })
+
+      it('names its squares top left, top right, bottom left and bottom right', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} />)
+        await cameraAnswers()
+        camera.show(['red', 'white', 'green', 'blue'])
+        click('Take photo')
+        const squares = within(
+          screen.getByRole('group', {
+            name: 'Colours read: tap a square to change it',
+          }),
+        ).getAllByRole('button')
+        expect(
+          squares.map((square) => square.getAttribute('aria-label')),
+        ).toEqual([
+          'top left: red',
+          'top right: white',
+          'bottom left: green',
+          'bottom right: blue',
+        ])
+        expect(heard()).toMatch(
+          /^Colours read, row by row: red, white; green, blue\. /,
+        )
+        fireEvent.click(squares[3])
+        expect(
+          screen.getByText('Pick the colour of the bottom right square:'),
+        ).toBeInTheDocument()
+      })
+
+      it('says when a photo looks like a side already scanned, naming it by where it is', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} />)
+        await cameraAnswers()
+        camera.show(['red', 'white', 'green', 'blue'])
+        click('Take photo')
+        click('Next side ›') // the side just scanned goes to the left
+        // The real cube wasn't turned: the same side again, but held turned.
+        camera.show(['green', 'red', 'blue', 'white'])
+        click('Take photo')
+        expect(instruction()).toBe(
+          "This looks like the left side, which you've already scanned. If it is, turn your cube to match the one below, then retake.",
+        )
+        expect(document.querySelector('.scan-instruction')).toHaveAttribute(
+          'data-warning',
+        )
+      })
+
+      it('says which side looks turned by where it is, and turns it back', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} />)
+        await cameraAnswers()
+        let turnedFace = null as ReturnType<typeof frontFace> | null
+        for (let side = 1; side <= 6; side++) {
+          let shows = twoByTwoCells()
+          if (side === 2) {
+            // The real cube held a quarter turn round from the 3D one.
+            shows = turnCells(shows, 1)
+            turnedFace = frontFace(app.orientation)
+          }
+          camera.show(shows.map((cell) => SCRAMBLED_2X2[cell]!))
+          click('Take photo')
+          if (side < 6) click('Next side ›')
+        }
+        expect(app.cube).not.toEqual(SCRAMBLED_2X2)
+        const where = screenSideOf(app.orientation, turnedFace!)
+        expect(instruction()).toBe(`The ${where} side looks turned. Fix it?`)
+
+        // Named by where it is now: swiping the 3D cube changes the name.
+        app.swipe('left')
+        expect(instruction()).toBe(
+          `The ${screenSideOf(app.orientation, turnedFace!)} side looks turned. Fix it?`,
+        )
+        click('Fix it')
+        expect(app.cube).toEqual(SCRAMBLED_2X2)
+      })
+
+      it('takes a photo by itself, with Auto photo on', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} autoPhoto />)
+        await cameraAnswers()
+        camera.show(['red', 'white', 'green', 'blue'])
+        for (let i = 0; i < 3; i++) lookThrough()
+        expect(screen.getByText('1 of 6 sides')).toBeInTheDocument()
+        expect(dots()).toEqual(asCss(['red', 'white', 'green', 'blue']))
+      })
+    })
+
     describe('?scan-debug', () => {
       beforeEach(() => {
         localStorage.clear()
@@ -807,12 +934,28 @@ describe('Scanner', () => {
           localStorage.getItem('rubiks-cube-solver/scan-debug')!,
         )
         expect(scan.light).toBe('warm bulb')
+        expect(scan.cube).toBe('3x3')
         expect(scan.sides.F.colors).toEqual(Array(9).fill('blue'))
         expect(scan.sides.F.rgb[0]).toEqual([0, 70, 173])
         expect(screen.getByText('1 scan saved')).toBeInTheDocument()
 
         click('Clear')
         expect(localStorage.getItem('rubiks-cube-solver/scan-debug')).toBeNull()
+      })
+
+      it('records which cube was scanned', async () => {
+        render(<Harness puzzle={PUZZLE_2X2} />)
+        await cameraAnswers()
+        camera.show(['red', 'white', 'green', 'blue'])
+        click('Take photo')
+        const [scan] = JSON.parse(
+          localStorage.getItem('rubiks-cube-solver/scan-debug')!,
+        )
+        expect(scan.cube).toBe('2x2')
+        expect(scan.sides.F.colors).toEqual(['red', 'white', 'green', 'blue'])
+        expect(scan.sides.F.cells).toEqual(
+          frontCells(new Quaternion(), PUZZLE_2X2),
+        )
       })
 
       it('is hidden without ?scan-debug', async () => {

@@ -112,6 +112,17 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
+    test('the 2x2 scan screen, and a photo', async ({ page }) => {
+      await page.addInitScript(fakeCamera)
+      await page.goto('./#/2x2')
+      await page.getByRole('button', { name: 'Scan' }).click()
+      await expect(page.locator('.scan-guide > span')).toHaveCount(4)
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Take photo' }).click()
+      await expect(page.locator('.scan-dot')).toHaveCount(4)
+      await expectNoProblems(page)
+    })
+
     test('the "already solved" message', async ({ page }) => {
       await page.addInitScript(savedCube, solvedState())
       await page.goto('./#/3x3')

@@ -6,17 +6,21 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type Ref,
 } from 'react'
 import type { Quaternion } from 'three'
+import type { Puzzle } from '../cube/puzzle.ts'
 import {
   CENTER,
   colorCounts,
   FACES,
   type Color,
   type CubeState,
+  type Face,
 } from '../cube/state.ts'
 import { Palette } from '../editor/Palette.tsx'
+import { usePuzzle } from '../puzzleContext.ts'
 import { CubeNet } from '../solve/CubeNet.tsx'
 import { COLOR_LETTERS, LETTER_INK, STICKER_COLORS } from '../view/colors.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
@@ -24,6 +28,7 @@ import {
   cubeAsShown,
   frontCells,
   frontFace,
+  screenSideOf,
   turnBySwipe,
 } from '../view/orientation.ts'
 import {
@@ -59,7 +64,7 @@ import {
   type Fixes,
   type ScannedSides,
 } from './sides.ts'
-import { findTurnedSides, turnedColors, turnSides } from './turnedSides.ts'
+import { findTurnedSides, turnSides } from './turnedSides.ts'
 import './scan.css'
 
 /** How often the live dots and warnings update while lining a side up. */
@@ -68,18 +73,21 @@ const LOOK_EVERY_MS = 250
 /** With Auto photo on: how long a side must stay still and clear before its photo is taken. */
 const AUTO_PHOTO_MS = 500
 
-/** The 9 squares of a side, by name, for screen readers. */
-const SQUARE_NAMES = [
-  'top left',
-  'top',
-  'top right',
-  'left',
-  'centre',
-  'right',
-  'bottom left',
-  'bottom',
-  'bottom right',
-]
+/** The squares of a side, by name, for screen readers: a 3x3's 9, or a 2x2's 4. */
+const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
+  3: [
+    'top left',
+    'top',
+    'top right',
+    'left',
+    'centre',
+    'right',
+    'bottom left',
+    'bottom',
+    'bottom right',
+  ],
+  2: ['top left', 'top right', 'bottom left', 'bottom right'],
+}
 
 interface ScannerProps {
   /** The painted cube, for the map of all six sides. */
@@ -112,9 +120,10 @@ interface Look {
 }
 
 /**
- * The scan screen, above the 3D cube: what the camera sees, with a 3×3 grid
- * to line one side up in, and the buttons to photograph each side in turn.
- * The camera is on only while this is shown and the app is on screen.
+ * The scan screen, above the 3D cube: what the camera sees, with a grid
+ * (3×3, or 2×2 for a 2x2) to line one side up in, and the buttons to
+ * photograph each side in turn. The camera is on only while this is shown
+ * and the app is on screen.
  */
 export function Scanner({
   cube,
@@ -125,6 +134,8 @@ export function Scanner({
   letters = false,
   autoPhoto = false,
 }: ScannerProps) {
+  const puzzle = usePuzzle()
+  const squareNames = SQUARE_NAMES[puzzle.size]
   const visible = usePageVisible()
   // Try again bumps this: a new key starts a new CameraView, so a fresh camera.
   const [attempt, setAttempt] = useState(0)
@@ -164,13 +175,22 @@ export function Scanner({
     : null
   const unsure = photo?.filter((square) => square.unsure).length ?? 0
   const repeat = frozen ? repeatedSide(sides, front) : null
-  const repeatColor = repeat && named.get(sides[repeat]!.cells[CENTER])!.color
   const liveColors =
     live && !frozen && lastLook?.orientation === orientation ? lastLook : null
   const facingYou = live?.facingYou ?? false
   // Once all six are in, a side photographed turned round can be spotted.
   const turned = useMemo(() => findTurnedSides(sides, named), [sides, named])
-  const turnedNames = turned ? turnedColors(sides, named, turned) : []
+  const turnedNames = FACES.filter((face) => turned?.[face]).map(sideName)
+
+  /**
+   * A side, to name it to the user: a 3x3's by its centre's colour ("the
+   * green side"); a 2x2's by where it is on screen now ("the left side").
+   */
+  function sideName(face: Face): string {
+    return puzzle.hasCenters
+      ? named.get(sides[face]!.cells[CENTER])!.color
+      : screenSideOf(orientation, face)
+  }
 
   /** Paints every scanned square (a new photo can change earlier sides), as one Undo step. */
   function paint(nextSides: ScannedSides, nextFixes: Fixes, nextLight = light) {
@@ -183,7 +203,7 @@ export function Scanner({
 
   function takePhoto(squares = camera.current?.look()) {
     if (!squares) return // no picture yet
-    const cells = frontCells(orientation)
+    const cells = frontCells(orientation, puzzle)
     const rgb = squares.map((square) => square.color)
     const nextSides = {
       ...sides,
@@ -236,7 +256,7 @@ export function Scanner({
     const squares = camera.current?.look()
     if (!squares) return null
     const readings = squares.map(({ color }) => rgbToLab(color))
-    const cells = frontCells(orientation)
+    const cells = frontCells(orientation, puzzle)
     const preview = { ...sides, [front]: { cells, rgb: [], readings } }
     const previewNamed = readScannedCube(preview, withoutCells(fixes, cells))
     const colors = cells.map((cell) => previewNamed.get(cell)!.color)
@@ -293,8 +313,12 @@ export function Scanner({
 
   function instruction(): string {
     if (photo) {
-      if (repeatColor) {
-        return `You've already scanned the ${repeatColor} side. ${lineUpAgain}, then retake.`
+      if (repeat && puzzle.hasCenters) {
+        return `You've already scanned the ${sideName(repeat)} side. ${lineUpAgain}, then retake.`
+      }
+      if (repeat) {
+        // Two sides of a 2x2 can look alike, so it might not be a repeat.
+        return `This looks like the ${sideName(repeat)} side, which you've already scanned. If it is, ${lowerFirst(lineUpAgain)}, then retake.`
       }
       if (turnedText) return turnedText
       if (unsure > 0) {
@@ -343,12 +367,15 @@ export function Scanner({
         className="viewfinder"
         data-mirrored={facingYou || undefined}
         data-ready={liveColors?.ready || undefined}
+        // Squares along each edge of the grid, for scan.css.
+        style={{ '--grid': puzzle.size } as CSSProperties}
       >
         {/* Off while the app is in the background: saves battery, and frees the camera for other apps. */}
         {visible && (
           <CameraView
             key={attempt}
             ref={camera}
+            size={puzzle.size}
             frozen={frozen}
             onLive={setLive}
             onRetry={() => setAttempt((n) => n + 1)}
@@ -357,6 +384,7 @@ export function Scanner({
         {live && photo && (
           <PhotoSquares
             squares={photo}
+            names={squareNames}
             picking={picking}
             onPick={(cell) => setPicking(cell === picking ? null : cell)}
             letters={letters}
@@ -379,7 +407,7 @@ export function Scanner({
       </div>
       {picking !== null && pickingSquare >= 0 ? (
         <div className="scan-picker">
-          <p>Pick the colour of the {SQUARE_NAMES[pickingSquare]} square:</p>
+          <p>Pick the colour of the {squareNames[pickingSquare]} square:</p>
           <Palette
             label="Colour for this square"
             selected={named.get(picking)!.color}
@@ -431,12 +459,14 @@ export function Scanner({
           </p>
           <p
             className="scan-instruction"
-            data-warning={repeatColor || turnedText ? true : undefined}
+            data-warning={repeat || turnedText ? true : undefined}
             aria-live="polite"
           >
             {/* Screen readers hear what each photo read, then what to do. */}
             {photo && (
-              <span className="visually-hidden">{describePhoto(photo)} </span>
+              <span className="visually-hidden">
+                {describePhoto(photo, puzzle.size)}{' '}
+              </span>
             )}
             {instruction()}
           </p>
@@ -456,14 +486,19 @@ export function Scanner({
 }
 
 /** What a photo read, for screen readers: "Colours read, row by row: red, white, blue; …". */
-function describePhoto(squares: readonly Classified[]): string {
-  const rows = [0, 3, 6].map((start) =>
+function describePhoto(squares: readonly Classified[], size: number): string {
+  const rows = Array.from({ length: size }, (_, row) =>
     squares
-      .slice(start, start + 3)
+      .slice(row * size, (row + 1) * size)
       .map(({ color, unsure }) => (unsure ? `${color} (not sure)` : color))
       .join(', '),
   )
   return `Colours read, row by row: ${rows.join('; ')}.`
+}
+
+/** "Turn your cube" → "turn your cube", to go mid-sentence. */
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1)
 }
 
 /** "red", "red and blue", "red, green and blue". */
@@ -503,6 +538,8 @@ function Dot({
 
 interface PhotoSquaresProps {
   squares: (Classified & { cell: number })[]
+  /** Each square's name, for screen readers. */
+  names: readonly string[]
   picking: number | null
   onPick: (cell: number) => void
   letters: boolean
@@ -514,6 +551,7 @@ interface PhotoSquaresProps {
  */
 function PhotoSquares({
   squares,
+  names,
   picking,
   onPick,
   letters,
@@ -530,7 +568,7 @@ function PhotoSquares({
           type="button"
           className="scan-square"
           aria-pressed={cell === picking}
-          aria-label={`${SQUARE_NAMES[n]}: ${color}${unsure ? ', not sure' : ''}`}
+          aria-label={`${names[n]}: ${color}${unsure ? ', not sure' : ''}`}
           onClick={() => onPick(cell)}
         >
           <Dot color={color} letters={letters} unsure={unsure} />
@@ -546,12 +584,14 @@ type CameraState =
   | { status: 'failed'; message: string }
 
 interface CameraHandle {
-  /** Each of the 9 squares in the guide right now, or null with no picture yet. */
+  /** Each square in the guide right now, or null with no picture yet. */
   look: () => Square[] | null
 }
 
 interface CameraViewProps {
   ref: Ref<CameraHandle>
+  /** Squares along each edge of the guide: 3 for a 3x3, 2 for a 2x2. */
+  size: number
   /** Hold the picture still, for a photo. */
   frozen: boolean
   /** Told about the camera once its picture is showing, and null when it stops. */
@@ -560,7 +600,7 @@ interface CameraViewProps {
 }
 
 /** Starts the camera when shown and stops it when removed, whatever happens in between. */
-function CameraView({ ref, frozen, onLive, onRetry }: CameraViewProps) {
+function CameraView({ ref, size, frozen, onLive, onRetry }: CameraViewProps) {
   const video = useRef<HTMLVideoElement>(null)
   const guide = useRef<HTMLDivElement>(null)
   const track = useRef<MediaStreamTrack | null>(null)
@@ -576,7 +616,7 @@ function CameraView({ ref, frozen, onLive, onRetry }: CameraViewProps) {
         video.current && guide.current
           ? grabFrame(video.current, guide.current, { mirrored })
           : null
-      return pixels && inspectSquares(pixels)
+      return pixels && inspectSquares(pixels, size)
     },
   }))
 
@@ -659,8 +699,13 @@ function CameraView({ ref, frozen, onLive, onRetry }: CameraViewProps) {
       />
       {camera.status === 'on' && (
         <div className="scan-guide" ref={guide} aria-hidden="true">
-          {Array.from({ length: 9 }, (_, n) => (
-            <span key={n} />
+          {/* Lines between the squares: right of all but the last column, under all but the last row. */}
+          {Array.from({ length: size * size }, (_, n) => (
+            <span
+              key={n}
+              data-line-right={n % size < size - 1 || undefined}
+              data-line-below={n < size * (size - 1) || undefined}
+            />
           ))}
         </div>
       )}

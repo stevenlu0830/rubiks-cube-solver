@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { COLORS, type Color } from '../../src/cube/state.ts'
+import { applyMoves, randomScramble } from '../../src/cube/moves.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import {
+  cellIndex,
+  COLORS,
+  FACES,
+  solvedState,
+  STANDARD_SCHEME,
+  type Color,
+  type CubeState,
+} from '../../src/cube/state.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
+import { seededRandom } from '../helpers/seededRandom.ts'
 import {
   classifySides as classifyWithDoubts,
   colorDistance,
@@ -235,7 +246,100 @@ describe('classifySides', () => {
         ...Array(3).fill(lab(BRAND.green)),
       ],
     ])
-    expect(read[0][0]).toEqual({ color: 'green', unsure: false })
+    expect(read[0][0]).toMatchObject({ color: 'green', unsure: false })
     expect(read[0][5].unsure).toBe(true)
+  })
+})
+
+describe('classifySides on a 2x2', () => {
+  const random = seededRandom(22)
+  const SOLVED_2X2 = solvedState(STANDARD_SCHEME, PUZZLE_2X2)
+  const scrambled = () => applyMoves(SOLVED_2X2, randomScramble(25, random))
+
+  /**
+   * A 2x2's six sides photographed, 4 squares each in photo order, some in
+   * shadow and some brightly lit, as in a real photo.
+   */
+  function photographTwoByTwo(
+    cube: CubeState,
+    light: (rgb: Rgb) => Rgb = (rgb) => rgb,
+  ) {
+    const colors = FACES.map((face) =>
+      [0, 1, 2, 3].map((n) => cube[cellIndex(face, n, PUZZLE_2X2)]!),
+    )
+    const readings = colors.map((side, s) =>
+      side.map((color, n) =>
+        lab(shade(light(BRAND[color]), [0.7, 0.85, 1, 1.15][(s + n) % 4])),
+      ),
+    )
+    return { colors, readings }
+  }
+
+  it('names every square in ordinary light, with no centres to go by', () => {
+    for (let run = 0; run < 10; run++) {
+      const { colors, readings } = photographTwoByTwo(scrambled())
+      expect(classifySides(readings)).toEqual(colors)
+    }
+  })
+
+  it('reads one side on its own', () => {
+    const { colors, readings } = photographTwoByTwo(scrambled())
+    expect(classifySides([readings[2]])).toEqual([colors[2]])
+  })
+
+  it('gives no colour more than 4 squares', () => {
+    const red = lab(BRAND.red)
+    const named = classifySides([Array(4).fill(red), Array(4).fill(red)])
+    expect(named.flat().filter((color) => color === 'red')).toHaveLength(4)
+  })
+
+  it("learns what the colours look like in the room's light from the squares themselves", () => {
+    // Warm light makes a third of the squares look like another colour on
+    // their own. Learning each colour from the squares that got it puts
+    // nearly every cube right; typical photo colours alone get about half.
+    let squaresWrongAlone = 0
+    let cubesRight = 0
+    const runs = 20
+    for (let run = 0; run < runs; run++) {
+      const { colors, readings } = photographTwoByTwo(scrambled(), warm)
+      squaresWrongAlone += readings
+        .flat()
+        .filter((square, i) => nearestColor(square) !== colors.flat()[i]).length
+      if (JSON.stringify(classifySides(readings)) === JSON.stringify(colors)) {
+        cubesRight++
+      }
+    }
+    expect(squaresWrongAlone / (runs * 24)).toBeGreaterThan(0.25)
+    expect(cubesRight).toBeGreaterThanOrEqual(0.85 * runs)
+  })
+
+  it('keeps colours picked by hand, and counts them towards the 4', () => {
+    const { colors, readings } = photographTwoByTwo(scrambled())
+    const fixed = colors.map(() => Array<Color | null>(4).fill(null))
+    // A green square the user has picked as red: it stays red, so one fewer
+    // red is left for the rest.
+    const s = colors.findIndex((side) => side.includes('green'))
+    const n = colors[s].indexOf('green')
+    fixed[s][n] = 'red'
+    const read = classifyWithDoubts(readings, { fixed })
+    expect(read[s][n]).toEqual({ color: 'red', unsure: false })
+    expect(read.flat().filter(({ color }) => color === 'red')).toHaveLength(4)
+  })
+
+  it('says what an unsure square might be instead, and how much worse that fits', () => {
+    const { readings } = photographTwoByTwo(SOLVED_2X2)
+    const between = lab([220, 65, 35]) // about as red as it is orange
+    readings[1][0] = between // a square of the red side
+    const read = classifyWithDoubts(readings)[1][0]
+    expect(read.unsure).toBe(true)
+    expect([read.color, read.secondChoice!.color].sort()).toEqual([
+      'orange',
+      'red',
+    ])
+    expect(Math.abs(read.secondChoice!.cost)).toBeLessThan(20)
+    // A clear square's second choice fits far worse.
+    const clear = classifyWithDoubts(readings)[2][0]
+    expect(clear.unsure).toBe(false)
+    expect(clear.secondChoice!.cost).toBeGreaterThan(20)
   })
 })

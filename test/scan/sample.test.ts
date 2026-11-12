@@ -53,6 +53,16 @@ describe('readSquares', () => {
     expect(readSquares(pixels)).toEqual(NINE)
   })
 
+  it("reads a 2x2's side as 4 squares", () => {
+    const FOUR = NINE.slice(0, 4)
+    const pixels = picture(120, 120, (x, y) => {
+      const square = Math.floor(y / 60) * 2 + Math.floor(x / 60)
+      return FOUR[square]
+    })
+    expect(readSquares(pixels, 2)).toEqual(FOUR)
+    expect(inspectSquares(pixels, 2)).toHaveLength(4)
+  })
+
   it('works when the size is not a multiple of 3', () => {
     const pixels = picture(100, 100, (x, y) => NINE[whereIn(100, x, y).square])
     expect(readSquares(pixels)).toEqual(NINE)

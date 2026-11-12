@@ -8,6 +8,7 @@
  */
 
 import { Vector3, type Quaternion } from 'three'
+import { puzzleOfSide } from '../cube/puzzle.ts'
 import { CENTER, COLORS, FACES, type Color, type Face } from '../cube/state.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
 import { faceTowards, frontFace } from '../view/orientation.ts'
@@ -18,7 +19,9 @@ import {
   PHOTO_COLORS,
   type Classified,
 } from './classify.ts'
+import { settleCloseCalls } from './closeCalls.ts'
 import type { Lab, Rgb } from './colorSpace.ts'
+import { findTurnedSides, turnCells } from './turnedSides.ts'
 
 /** One side's photo: what the camera read, and where on the cube it goes. */
 export interface ScannedSide {
@@ -37,16 +40,19 @@ export type ScannedSides = Partial<Record<Face, ScannedSide>>
 export type Fixes = Readonly<Partial<Record<number, Color>>>
 
 /**
- * Names every scanned square at once, by cell: the centres of all the
- * sides, and the "9 of each colour" rule, help with each (see
- * classifySides). So a new photo can change squares on earlier sides too,
- * but never the ones in `fixes`.
+ * Names every scanned square at once, by cell: all the sides, and the "9
+ * of each colour" rule (4 on a 2x2), help with each (see classifySides). So
+ * a new photo can change squares on earlier sides too, but never the ones
+ * in `fixes`. Once a 2x2's six sides are in, its close calls are settled by
+ * the check before solving (see closeCalls.ts).
  */
 export function readScannedCube(
   sides: ScannedSides,
   fixes: Fixes = {},
-): Map<number, Classified> {
+): ReadonlyMap<number, Classified> {
   const faces = FACES.filter((face) => sides[face])
+  if (faces.length === 0) return new Map()
+  const puzzle = puzzleOfSide(sides[faces[0]]!.cells)
   const named = classifySides(
     faces.map((face) => sides[face]!.readings),
     {
@@ -59,7 +65,9 @@ export function readScannedCube(
   faces.forEach((face, i) =>
     sides[face]!.cells.forEach((cell, n) => cube.set(cell, named[i][n])),
   )
-  return cube
+  // A side photographed turned is fixed differently (see turnedSides.ts).
+  if (puzzle.hasCenters || findTurnedSides(sides, cube)) return cube
+  return settleCloseCalls(cube, puzzle.cellCount)
 }
 
 /**
@@ -70,15 +78,25 @@ const SAME_STICKER = 12
 
 /**
  * The side already scanned that this photo looks like a second photo of,
- * if any: its centre reads almost the same as that side's centre, and
- * closer than to any colour no other side has. That usually means the real
- * cube was turned differently from the 3D one.
+ * if any. That usually means the real cube was turned differently from the
+ * 3D one.
+ *
+ * On a 3x3, its centre reads almost the same as that side's centre, and
+ * closer than to any colour no other side has: every side's centre is a
+ * different colour. A 2x2 has no centre, so every square must read almost
+ * the same as that side's, with the photo turned any of the 4 ways. Now
+ * and then (on about 1 in 60 scrambled 2x2s) two different sides really do
+ * look alike, so for a 2x2 this is only "looks like".
  */
 export function repeatedSide(sides: ScannedSides, face: Face): Face | null {
-  const center = sides[face]?.readings[CENTER]
-  if (!center) return null
+  const side = sides[face]
+  if (!side) return null
   const others = FACES.filter((other) => other !== face && sides[other])
   if (others.length === 0) return null
+  if (!puzzleOfSide(side.cells).hasCenters) {
+    return lookAlikeSide(sides, side.readings, others)
+  }
+  const center = side.readings[CENTER]
   const otherCenters = others.map((other) => sides[other]!.readings[CENTER])
   const distances = otherCenters.map((other) => colorDistance(center, other))
   const closest = Math.min(...distances)
@@ -94,6 +112,29 @@ export function repeatedSide(sides: ScannedSides, face: Face): Face | null {
     return null
   }
   return others[distances.indexOf(closest)]
+}
+
+/** The side, of `others`, whose squares all read almost the same as `readings`, turned any way. */
+function lookAlikeSide(
+  sides: ScannedSides,
+  readings: readonly Lab[],
+  others: readonly Face[],
+): Face | null {
+  let closest: Face | null = null
+  let closestDistance = SAME_STICKER
+  for (const other of others) {
+    for (let turns = 0; turns < 4; turns++) {
+      const turned = turnCells(sides[other]!.readings, turns)
+      const furthest = Math.max(
+        ...turned.map((reading, n) => colorDistance(reading, readings[n])),
+      )
+      if (furthest <= closestDistance) {
+        closest = other
+        closestDistance = furthest
+      }
+    }
+  }
+  return closest
 }
 
 const OPPOSITE: Record<Face, Face> = {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
+import { PUZZLE_2X2, puzzleOf } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   FACES,
   solvedState,
+  STANDARD_SCHEME,
   type Color,
   type CubeState,
   type Face,
@@ -13,7 +15,6 @@ import type { ScannedSides } from '../../src/scan/sides.ts'
 import {
   findTurnedSides,
   turnCells,
-  turnedColors,
   turnSides,
   type SideTurns,
 } from '../../src/scan/turnedSides.ts'
@@ -23,8 +24,10 @@ const SCRAMBLED = applyMoves(
   parseMoves("R U2 F' L D B2 R' U F2 L'"),
 )
 
-const faceCells = (face: Face) =>
-  Array.from({ length: 9 }, (_, n) => cellIndex(face, n))
+const faceCells = (face: Face, puzzle = puzzleOf(SCRAMBLED)) =>
+  Array.from({ length: puzzle.cellsPerFace }, (_, n) =>
+    cellIndex(face, n, puzzle),
+  )
 
 /**
  * A scan of `cube` with each side's photo in its usual place, except the
@@ -36,7 +39,7 @@ function scan(cube: CubeState, turned: SideTurns = {}) {
   const sides: ScannedSides = {}
   const named = new Map<number, Classified>()
   for (const face of FACES) {
-    const cells = faceCells(face)
+    const cells = faceCells(face, puzzleOf(cube))
     const shows = turnCells(cells, turned[face] ?? 0)
     sides[face] = { cells, rgb: [], readings: [] }
     cells.forEach((cell, n) =>
@@ -48,7 +51,7 @@ function scan(cube: CubeState, turned: SideTurns = {}) {
 
 /** The cube a scan paints: each photo's colours on its cells. */
 function painted(sides: ScannedSides, named: Map<number, Classified>) {
-  const cube = Array<Color | null>(54).fill(null)
+  const cube = Array<Color | null>(named.size).fill(null)
   for (const face of FACES) {
     for (const cell of sides[face]!.cells) cube[cell] = named.get(cell)!.color
   }
@@ -166,12 +169,43 @@ describe('turnSides', () => {
     })
     expect(turned.sides.R).toBe(sides.R) // other sides untouched
   })
+})
 
-  it('names turned sides by their centre colour', () => {
-    const { sides, named } = scan(SCRAMBLED)
-    expect(turnedColors(sides, named, { U: 1, F: 2 })).toEqual([
-      SCRAMBLED[cellIndex('U', 4)],
-      SCRAMBLED[cellIndex('F', 4)],
-    ])
+describe('on a 2x2', () => {
+  const SCRAMBLED_2X2 = applyMoves(
+    solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+    parseMoves("R U2 F' L D B2 R' U F2"),
+  )
+
+  it('turns a photo of 4 squares a quarter turn clockwise', () => {
+    // The top left shows what was the bottom left, the top right the top left…
+    expect(turnCells([0, 1, 2, 3], 1)).toEqual([2, 0, 3, 1])
+    expect(turnCells([0, 1, 2, 3], 2)).toEqual([3, 2, 1, 0])
+    expect(turnCells([0, 1, 2, 3], 4)).toEqual([0, 1, 2, 3])
   })
+
+  it('finds nothing to fix in a 2x2 scanned right', () => {
+    const { sides, named } = scan(SCRAMBLED_2X2)
+    expect(findTurnedSides(sides, named)).toBeNull()
+  })
+
+  it.each(
+    FACES.flatMap((face) => [1, 2, 3].map((turns) => [face, turns] as const)),
+  )(
+    'finds side %s of a 2x2 photographed %i quarter turn(s) round, and turns it back',
+    (face, turns) => {
+      const { sides, named } = scan(SCRAMBLED_2X2, { [face]: turns })
+      const found = findTurnedSides(sides, named)
+      expect(found).toEqual({ [face]: turns })
+
+      const turned = turnSides(sides, {}, found!)
+      const renamed = new Map<number, Classified>()
+      for (const side of FACES) {
+        sides[side]!.cells.forEach((cell, n) =>
+          renamed.set(turned.sides[side]!.cells[n], named.get(cell)!),
+        )
+      }
+      expect(painted(turned.sides, renamed)).toEqual(SCRAMBLED_2X2)
+    },
+  )
 })

@@ -24,6 +24,7 @@ import {
   faceTowards,
   frontCells,
   frontFace,
+  screenSideOf,
   topFace,
   turnBySwipe,
 } from '../../src/view/orientation.ts'
@@ -141,6 +142,36 @@ describe('cubeAsShown', () => {
     expect(cubeAsShown(cube, orientation)[cellIndex('F', CENTER)]).toBe(
       cube[cellIndex('D', CENTER)],
     )
+  })
+})
+
+describe('screenSideOf', () => {
+  it('says where each side of the cube is on screen', () => {
+    const unturned = new Quaternion()
+    expect(FACES.map((face) => screenSideOf(unturned, face))).toEqual([
+      'top',
+      'right',
+      'front',
+      'bottom',
+      'left',
+      'back',
+    ])
+  })
+
+  it('follows the cube as it turns', () => {
+    const turned = swipeAll(['left']) // the right side comes to the front
+    expect(screenSideOf(turned, 'R')).toBe('front')
+    expect(screenSideOf(turned, 'F')).toBe('left')
+    expect(screenSideOf(turned, 'B')).toBe('right')
+    expect(screenSideOf(turned, 'U')).toBe('top')
+  })
+
+  it('names a different place for every side, however the cube is turned', () => {
+    for (const orientation of allOrientations()) {
+      const places = FACES.map((face) => screenSideOf(orientation, face))
+      expect(new Set(places).size).toBe(6)
+      expect(screenSideOf(orientation, frontFace(orientation))).toBe('front')
+    }
   })
 })
 

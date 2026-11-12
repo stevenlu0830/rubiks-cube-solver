@@ -17,7 +17,7 @@ export function fakeCamera({
   canvas.width = 640
   canvas.height = 480
   const context = canvas.getContext('2d')!
-  /** A side of a cube to show, if any: where in the picture, and its 9 colours. */
+  /** A side of a cube to show, if any: where in the picture, and its colours (9, or 4 for a 2x2). */
   let side: { area: Rect; colors: string[] } | null = null
   const draw = () => {
     // Until a side is shown: a plain wall, which Auto photo won't take.
@@ -26,14 +26,15 @@ export function fakeCamera({
     if (!side) return
     // Black plastic, with a sticker in each square.
     const { area, colors } = side
-    const size = area.width / 3
+    const across = Math.round(Math.sqrt(colors.length)) // squares each way
+    const size = area.width / across
     context.fillStyle = '#111'
     context.fillRect(area.x, area.y, area.width, area.height)
     colors.forEach((color, n) => {
       context.fillStyle = color
       context.fillRect(
-        area.x + (n % 3) * size + size * 0.08,
-        area.y + Math.floor(n / 3) * size + size * 0.08,
+        area.x + (n % across) * size + size * 0.08,
+        area.y + Math.floor(n / across) * size + size * 0.08,
         size * 0.84,
         size * 0.84,
       )
@@ -86,7 +87,8 @@ export function pictureWidth(page: Page) {
 
 /**
  * Holds a side of a cube in these colours (CSS colours, row by row from the
- * top left) up to the fake camera, lined up with the guide on screen.
+ * top left: 9 for a 3x3, 4 for a 2x2) up to the fake camera, lined up with
+ * the guide on screen.
  */
 export async function showSide(page: Page, colors: string[]) {
   const [video, guide] = await Promise.all([
@@ -113,17 +115,27 @@ export async function showSide(page: Page, colors: string[]) {
       ).showFakeSide(area, colors),
     [area, colors] as const,
   )
-  // Wait for the camera's picture to catch up: its middle shows the centre.
-  await page.waitForFunction((centre) => {
-    const video = document.querySelector('video')!
-    const canvas = document.createElement('canvas')
-    canvas.width = canvas.height = 1
-    const context = canvas.getContext('2d')!
-    context.drawImage(video, 320, 240, 1, 1, 0, 0, 1, 1)
-    const [r, g, b] = context.getImageData(0, 0, 1, 1).data
-    context.fillStyle = centre
-    context.fillRect(0, 0, 1, 1)
-    const [er, eg, eb] = context.getImageData(0, 0, 1, 1).data
-    return Math.abs(r - er) + Math.abs(g - eg) + Math.abs(b - eb) < 30
-  }, colors[4])
+  // Wait for the camera's picture to catch up: the middle of every square
+  // shows its colour.
+  await page.waitForFunction(
+    ([area, colors]) => {
+      const video = document.querySelector('video')!
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 1
+      const context = canvas.getContext('2d')!
+      const across = Math.round(Math.sqrt(colors.length))
+      const size = area.width / across
+      return colors.every((color, n) => {
+        const x = area.x + ((n % across) + 0.5) * size
+        const y = area.y + (Math.floor(n / across) + 0.5) * size
+        context.drawImage(video, x, y, 1, 1, 0, 0, 1, 1)
+        const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+        context.fillStyle = color
+        context.fillRect(0, 0, 1, 1)
+        const [er, eg, eb] = context.getImageData(0, 0, 1, 1).data
+        return Math.abs(r - er) + Math.abs(g - eg) + Math.abs(b - eb) < 30
+      })
+    },
+    [area, colors] as const,
+  )
 }

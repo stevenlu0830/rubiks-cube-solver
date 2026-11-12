@@ -3,12 +3,14 @@
  *
  * Each reading is compared with a reference for every colour (what that
  * colour looks like in a photo), and takes the name of the nearest one. The
- * references start as typical photo colours, then each side's centre square
- * becomes the reference for its colour: your own cube, in your own light,
- * is the best guide to what its colours look like.
+ * references start as typical photo colours, then are learned from the
+ * photos: each side's centre square on a 3x3, the squares themselves on a
+ * 2x2. Your own cube, in your own light, is the best guide to what its
+ * colours look like.
  */
 
-import { CELLS_PER_COLOR, CENTER, COLORS, type Color } from '../cube/state.ts'
+import { puzzleOfSide } from '../cube/puzzle.ts'
+import { CENTER, COLORS, type Color } from '../cube/state.ts'
 import { cheapestAssignment } from './assign.ts'
 import { chroma, rgbToLab, type Lab } from './colorSpace.ts'
 
@@ -115,10 +117,17 @@ export interface Classified {
   color: Color
   /**
    * True when it might well be another colour: another one was nearly as
-   * close, or the "9 of each" rule moved it off the colour it looked most
-   * like. The app outlines these for the user to check.
+   * close, or the "9 of each" rule (4 on a 2x2) moved it off the colour it
+   * looked most like. The app outlines these for the user to check.
    */
   unsure: boolean
+  /**
+   * For a square named from its photo: the next likeliest colour, and how
+   * much worse the photo fits it than `color` (below 0 when the photo looks
+   * more like it, and only "9 of each" moved it off). Not given for squares
+   * picked by hand, or centres. See closeCalls.ts.
+   */
+  secondChoice?: { color: Color; cost: number }
 }
 
 /**
@@ -128,20 +137,23 @@ export interface Classified {
 const SURE_RATIO = 0.7
 
 /**
- * Names the colours of every side scanned so far. Each side is the 9
- * readings from one photo, row by row from the top left, so the centre is
- * reading 4. `fixed` gives the colours the user picked by hand for some
- * squares (null for the rest); those always stay as picked.
+ * Names the colours of every side scanned so far. Each side is the readings
+ * from one photo, row by row from the top left: 9 for a 3x3 (the centre is
+ * reading 4), 4 for a 2x2. `fixed` gives the colours the user picked by
+ * hand for some squares (null for the rest); those always stay as picked.
  *
- * 1. The centres are named by matchCenters.
- * 2. Each centre becomes the reference for its colour (unless it looks
- *    nothing like it, see below).
- * 3. The other squares are shared out among the colours so that no colour
- *    gets more than 9 squares, as on a real cube, while each square stays as
- *    close to its colour as possible overall. Squares that look like
- *    nothing else keep their nearest colour; when, say, 11 squares look
- *    red, the 2 least red of them go to the colour that's short, often
- *    orange. With all six sides in, every colour ends up with exactly 9.
+ * Every square is shared out among the colours so that no colour gets more
+ * squares than a real cube has (9 on a 3x3, 4 on a 2x2), while each square
+ * stays as close to its colour as possible overall. Squares that look like
+ * nothing else keep their nearest colour; when, say, 11 squares look red on
+ * a 3x3, the 2 least red of them go to the colour that's short, often
+ * orange. With all six sides in, every colour ends up with exactly its
+ * share.
+ *
+ * What each colour looks like (the references squares are compared with)
+ * starts as typical photo colours, `start`, and is then learned from the
+ * photos: on a 3x3 from the centres (see classifyByCenters), on a 2x2 from
+ * the squares themselves (see classifyWithoutCenters).
  */
 export function classifySides(
   sides: readonly (readonly Lab[])[],
@@ -153,12 +165,34 @@ export function classifySides(
     start?: References
   } = {},
 ): Classified[][] {
-  const pickedFor = (side: number, n: number) => fixed[side]?.[n] ?? null
+  if (sides.length === 0) return []
+  const picked = sides.map((side, i) =>
+    side.map((_, n) => fixed[i]?.[n] ?? null),
+  )
+  const { hasCenters, cellsPerColor } = puzzleOfSide(sides[0])
+  return hasCenters
+    ? classifyByCenters(sides, picked, start, cellsPerColor)
+    : classifyWithoutCenters(sides, picked, start, cellsPerColor)
+}
+
+/**
+ * A 3x3's sides:
+ * 1. The centres are named by matchCenters.
+ * 2. Each centre becomes the reference for its colour (unless it looks
+ *    nothing like it, see below).
+ * 3. The other squares are shared out (see shareOut).
+ */
+function classifyByCenters(
+  sides: readonly (readonly Lab[])[],
+  picked: readonly (readonly (Color | null)[])[],
+  start: References,
+  perColor: number,
+): Classified[][] {
   const centers = sides.map((side) => side[CENTER])
   const centerColors = matchCenters(
     centers,
     start,
-    sides.map((_, i) => pickedFor(i, CENTER)),
+    picked.map((side) => side[CENTER]),
   )
   const references: Record<Color, Lab> = { ...start }
   centers.forEach((center, i) => {
@@ -171,29 +205,101 @@ export function classifySides(
       references[color] = center
     }
   })
+  const given = sides.map((side, i) =>
+    side.map((square, n) => {
+      const color = n === CENTER ? centerColors[i] : picked[i][n]
+      if (color === null) return null // shared out
+      const unsure =
+        picked[i][n] === null && nearestColor(square, references) !== color
+      return { color, unsure }
+    }),
+  )
+  return shareOut(sides, given, references, perColor)
+}
 
-  // How many of the 9 squares of each colour are already accounted for.
+/**
+ * From this many sides on, a 2x2's colours are learned from its photos:
+ * with fewer, most colours have only a square or two to learn from.
+ */
+const LEARN_FROM_SIDES = 3
+
+/** How many times to learn the colours and share the squares out again. */
+const LEARNING_ROUNDS = 2
+
+/**
+ * A 2x2's sides. With no centres to learn from, the squares are first
+ * shared out by typical photo colours. Once a few sides are in, each
+ * colour's reference becomes the middle of the squares it got, and the
+ * squares are shared out again by those: a better guide to your own cube in
+ * your own light. Two rounds of that settle it.
+ */
+function classifyWithoutCenters(
+  sides: readonly (readonly Lab[])[],
+  picked: readonly (readonly (Color | null)[])[],
+  start: References,
+  perColor: number,
+): Classified[][] {
+  const given = picked.map((side) =>
+    side.map((color) => color && { color, unsure: false }),
+  )
+  let named = shareOut(sides, given, start, perColor)
+  if (sides.length >= LEARN_FROM_SIDES) {
+    for (let round = 0; round < LEARNING_ROUNDS; round++) {
+      named = shareOut(sides, given, learnedFrom(sides, named, start), perColor)
+    }
+  }
+  return named
+}
+
+/**
+ * Each colour's reference: the middle of the readings named that colour,
+ * where at least two are, and it still looks like that colour (its nearest
+ * or next nearest, as for a 3x3's centres). Otherwise the starting one.
+ */
+function learnedFrom(
+  sides: readonly (readonly Lab[])[],
+  named: readonly (readonly Classified[])[],
+  start: References,
+): References {
+  const references: Record<Color, Lab> = { ...start }
+  for (const color of COLORS) {
+    const readings = sides.flatMap((side, i) =>
+      side.filter((_, n) => named[i][n].color === color),
+    )
+    if (readings.length < 2) continue
+    const middle = medianLab(readings)
+    if (byDistance(middle, start).indexOf(color) < 2) {
+      references[color] = middle
+    }
+  }
+  return references
+}
+
+/**
+ * Names the squares not `given` a colour already: they're shared out among
+ * the colours so that no colour gets more than `perColor` squares, at the
+ * lowest total distance from their colours' references.
+ */
+function shareOut(
+  sides: readonly (readonly Lab[])[],
+  given: readonly (readonly (Classified | null)[])[],
+  references: References,
+  perColor: number,
+): Classified[][] {
+  // How many of each colour's squares are already accounted for.
   const used = Object.fromEntries(COLORS.map((color) => [color, 0])) as Record<
     Color,
     number
   >
-  const result: (Classified | null)[][] = sides.map((side, i) =>
-    side.map((square, n) => {
-      const color = n === CENTER ? centerColors[i] : pickedFor(i, n)
-      if (color === null) return null // shared out below
-      used[color]++
-      const unsure =
-        pickedFor(i, n) === null && nearestColor(square, references) !== color
-      return { color, unsure }
-    }),
-  )
+  for (const square of given.flat()) if (square) used[square.color]++
+  const result = given.map((side) => [...side])
 
   // The rest: a row for each square, a column for each colour's spare slots.
   const squares = sides.flatMap((side, i) =>
-    side.flatMap((reading, n) => (result[i][n] ? [] : [{ i, n, reading }])),
+    side.flatMap((reading, n) => (given[i][n] ? [] : [{ i, n, reading }])),
   )
   const slots = COLORS.flatMap((color) =>
-    Array<Color>(Math.max(0, CELLS_PER_COLOR - used[color])).fill(color),
+    Array<Color>(Math.max(0, perColor - used[color])).fill(color),
   )
   const assignment = cheapestAssignment(
     squares.map(({ reading }) =>
@@ -202,14 +308,35 @@ export function classifySides(
   )
   squares.forEach(({ i, n, reading }, row) => {
     const color = slots[assignment[row]]
+    const distance = (other: Color) => colorDistance(reading, references[other])
     const [nearest, next] = byDistance(reading, references)
-    const closeCall =
-      colorDistance(reading, references[nearest]) >
-      SURE_RATIO * colorDistance(reading, references[next])
-    result[i][n] = { color, unsure: color !== nearest || closeCall }
+    const closeCall = distance(nearest) > SURE_RATIO * distance(next)
+    const second = color === nearest ? next : nearest
+    result[i][n] = {
+      color,
+      unsure: color !== nearest || closeCall,
+      secondChoice: { color: second, cost: distance(second) - distance(color) },
+    }
   })
   return result as Classified[][] // every square has its colour now
 }
+
+/** The middle value of each of l, a and b. */
+function medianLab(readings: readonly Lab[]): Lab {
+  const middle = (values: number[]) => {
+    const sorted = values.sort((x, y) => x - y)
+    const half = sorted.length / 2
+    return Number.isInteger(half)
+      ? (sorted[half - 1] + sorted[half]) / 2
+      : sorted[Math.floor(half)]
+  }
+  return {
+    l: middle(readings.map(({ l }) => l)),
+    a: middle(readings.map(({ a }) => a)),
+    b: middle(readings.map(({ b }) => b)),
+  }
+}
+
 /** All six colours, nearest first. */
 function byDistance(reading: Lab, references: References): Color[] {
   const distance = (color: Color) => colorDistance(reading, references[color])

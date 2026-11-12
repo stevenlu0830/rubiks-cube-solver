@@ -674,11 +674,40 @@ describe('SolverPage', () => {
       expect(screen.queryByRole('button', { name: 'Fill centres' })).toBeNull()
     })
 
-    it("can't be scanned yet, even with a camera", () => {
-      fakeCamera()
+    it('reads all six sides with the camera, outlining the 4 squares facing you, ready to solve', async () => {
+      const camera = fakeCamera()
+      const asked: string[] = []
+      solver.solve = (facelets) => {
+        asked.push(facelets)
+        return Promise.resolve(parseMoves('R U'))
+      }
+      const scrambled = applyMoves(
+        solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+        parseMoves("R U2 F' L D B2"),
+      )
       render(<SolverPage cube="2x2" />)
-      expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
-      expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+      await act(async () => click('Scan'))
+      expect(view.highlight).toEqual(frontCells(new Quaternion(), PUZZLE_2X2))
+      for (let side = 0; side < 6; side++) {
+        // The real cube, turned the way the 3D cube shows, in front of the camera.
+        camera.show(
+          frontCells(view.orientation!, PUZZLE_2X2).map(
+            (cell) => scrambled[cell]!,
+          ),
+        )
+        click('Take photo')
+        click(side < 5 ? 'Next side ›' : 'Done')
+      }
+
+      expect(
+        screen.queryByRole('region', { name: 'Scan your cube' }),
+      ).toBeNull()
+      expect(view.state).toEqual(scrambled)
+      await act(async () => click('Solve'))
+      expect(asked).toEqual([
+        toFaceletString(cubeAsShown(scrambled, view.orientation!)),
+      ])
+      expect(screen.getByLabelText('How to hold your cube')).toBeInTheDocument()
     })
 
     describe('Solve', () => {

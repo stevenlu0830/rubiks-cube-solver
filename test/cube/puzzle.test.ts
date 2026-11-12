@@ -5,6 +5,7 @@ import {
   PUZZLE_3X3,
   PUZZLES,
   puzzleOf,
+  puzzleOfSide,
 } from '../../src/cube/puzzle.ts'
 
 describe('PUZZLES', () => {
@@ -45,6 +46,14 @@ describe('puzzleOf', () => {
   it('refuses any other number of cells', () => {
     expect(() => puzzleOf(Array(53))).toThrow('No cube has 53 cells')
     expect(() => puzzleOf([])).toThrow()
+  })
+})
+
+describe('puzzleOfSide', () => {
+  it("tells the cube from one side's squares", () => {
+    expect(puzzleOfSide(Array(9))).toBe(PUZZLE_3X3)
+    expect(puzzleOfSide(Array(4))).toBe(PUZZLE_2X2)
+    expect(() => puzzleOfSide(Array(5))).toThrow()
   })
 })
 
