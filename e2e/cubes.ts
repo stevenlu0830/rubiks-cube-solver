@@ -18,7 +18,14 @@ export const TWISTED_CORNER: CubeState = (() => {
   return cube
 })()
 
-/** Runs before the page loads, as if this cube had been painted on an earlier visit. */
+/**
+ * Runs before the page loads, as if this cube had been painted on an
+ * earlier visit: a 3x3, or a 2x2 (24 cells), each saved in its own place.
+ */
 export function savedCube(cube: CubeState) {
-  localStorage.setItem('rubiks-cube-solver/cube', JSON.stringify(cube))
+  const key =
+    cube.length === 24
+      ? 'rubiks-cube-solver/cube-2x2'
+      : 'rubiks-cube-solver/cube'
+  localStorage.setItem(key, JSON.stringify(cube))
 }

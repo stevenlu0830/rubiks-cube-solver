@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { Quaternion } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CORNER_CELLS } from '../src/cube/cubies.ts'
+import { CORNER_CELLS, cornerCellsOf } from '../src/cube/cubies.ts'
 import {
   applyMove,
   applyMoves,
@@ -16,6 +16,7 @@ import {
   emptyState,
   isSolved,
   solvedState,
+  STANDARD_SCHEME,
   type CubeState,
 } from '../src/cube/state.ts'
 import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
@@ -673,14 +674,87 @@ describe('SolverPage', () => {
       expect(screen.queryByRole('button', { name: 'Fill centres' })).toBeNull()
     })
 
-    it("can't be scanned or solved yet", () => {
+    it("can't be scanned yet, even with a camera", () => {
       fakeCamera()
       render(<SolverPage cube="2x2" />)
       expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
-      expect(
-        screen.getByRole('button', { name: 'Solving a 2x2 is coming soon' }),
-      ).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+    })
+
+    describe('Solve', () => {
+      const SOLVED_2X2 = solvedState(STANDARD_SCHEME, PUZZLE_2X2)
+      const renderWith = (cube: CubeState) => {
+        saveCube(cube)
+        render(<SolverPage cube="2x2" />)
+      }
+
+      it('asks for all 24 squares, pointing out the blank ones', () => {
+        render(<SolverPage cube="2x2" />)
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          '24 squares are still blank. Paint all 24 to match your cube.',
+        )
+        expect(view.highlight).toHaveLength(24)
+      })
+
+      it('says when the 2x2 is already solved', () => {
+        renderWith(SOLVED_2X2)
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent('already solved')
+      })
+
+      it('points at a twisted corner, without asking the solver', () => {
+        solver.solve = vi.fn(() => Promise.resolve([]))
+        const cube = [...SOLVED_2X2]
+        const [up, right, front] = cornerCellsOf(PUZZLE_2X2)[0] // white, red, green
+        ;[cube[up], cube[right], cube[front]] = ['green', 'white', 'red']
+        renderWith(cube)
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'A corner is twisted',
+        )
+        expect(view.highlight).toHaveLength(24)
+        expect(solver.solve).not.toHaveBeenCalled()
+      })
+
+      it('sends the cube as seen to the solver, then lists the moves', async () => {
+        const cube = applyMoves(SOLVED_2X2, parseMoves("R U2 F'"))
+        const answer = deferred<Move[]>()
+        solver.solve = vi.fn(() => answer.promise)
+        renderWith(cube)
+        // Turned to show the right side in front: the solver gets the cube as seen.
+        const turned = turnBySwipe(new Quaternion(), 'left')
+        act(() => view.swipeTo(turned))
+
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'Finding a solution',
+        )
+        expect(solver.solve).toHaveBeenCalledWith(
+          toFaceletString(cubeAsShown(cube, turned)),
+        )
+        expect(vi.mocked(solver.solve).mock.calls[0][0]).toHaveLength(24)
+
+        await act(async () => answer.resolve(parseMoves("F U2 R'")))
+        const status = screen.getByRole('status')
+        expect(status).toHaveTextContent(
+          "The shortest solution is 3 moves: F U2 R'",
+        )
+        expect(status).toHaveTextContent('Hold your cube as shown')
+        // Still painting: no solve screen for a 2x2 yet.
+        expect(view.held).toBe(false)
+        expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+      })
+
+      it('says so if the solver fails', async () => {
+        solver.solve = () =>
+          Promise.reject(new SolverError('timeout', 'too slow'))
+        renderWith(applyMoves(SOLVED_2X2, parseMoves('R U')))
+        await act(async () => click('Solve'))
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'The solver took too long',
+        )
+      })
     })
 
     it('keeps the painted 2x2 after a page refresh, apart from the 3x3', () => {

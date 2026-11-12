@@ -1,6 +1,13 @@
-import { CORNER_CELLS, CORNERS, EDGE_CELLS, EDGES, toCubies } from './cubies.ts'
 import {
-  CELLS_PER_COLOR,
+  cornerCellsOf,
+  CORNERS,
+  EDGE_CELLS,
+  EDGES,
+  faceColorsOf,
+  toCubies,
+} from './cubies.ts'
+import { puzzleOf } from './puzzle.ts'
+import {
   CENTER,
   cellIndex,
   colorCounts,
@@ -21,6 +28,11 @@ import {
  * The checks run from the simplest to the subtlest, and stop at the first
  * problem, because later checks only make sense once earlier ones pass
  * (e.g. pieces can't be identified until the centres are known).
+ *
+ * The same checks work for a 2x2 (told apart by its 24 cells), minus the
+ * ones about centres and edges, which it doesn't have. With no centres to
+ * say which colours are opposite, a 2x2 is assumed to have the standard
+ * colours (see faceColorsOf).
  */
 
 export type Problem =
@@ -54,6 +66,8 @@ const OPPOSITE: Record<Face, Face> = {
 }
 
 export function validateCube(cube: CubeState): Validation {
+  const puzzle = puzzleOf(cube)
+  const isThreeByThree = puzzle.name === '3x3'
   const fail = (
     problem: Problem,
     message: string,
@@ -72,51 +86,54 @@ export function validateCube(cube: CubeState): Validation {
   if (blank.length > 0) {
     return fail(
       'unpainted',
-      `${blank.length === 1 ? '1 square is' : `${blank.length} squares are`} still blank. Paint all 54 to match your cube.`,
+      `${blank.length === 1 ? '1 square is' : `${blank.length} squares are`} still blank. Paint all ${puzzle.cellCount} to match your cube.`,
       blank,
     )
   }
 
-  // 2. Nine cells of each colour.
+  // 2. Nine cells of each colour (four on a 2x2).
+  const { cellsPerColor } = puzzle
   const counts = colorCounts(cube)
-  const wrongCounts = COLORS.filter(
-    (color) => counts[color] !== CELLS_PER_COLOR,
-  )
+  const wrongCounts = COLORS.filter((color) => counts[color] !== cellsPerColor)
   if (wrongCounts.length > 0) {
-    const tooMany = wrongCounts.filter(
-      (color) => counts[color] > CELLS_PER_COLOR,
-    )
+    const tooMany = wrongCounts.filter((color) => counts[color] > cellsPerColor)
     return fail(
       'color-count',
-      `Each colour needs exactly 9 squares, but ${listWords(wrongCounts.map((color) => `${color} has ${counts[color]}`))}.`,
+      `Each colour needs exactly ${cellsPerColor} squares, but ${listWords(wrongCounts.map((color) => `${color} has ${counts[color]}`))}.`,
       cellsWhere((cell) => tooMany.includes(cell!)),
     )
   }
 
   // 3. Six different centres. Centres never move, so each one names its face.
-  const centerCells = FACES.map((face) => cellIndex(face, CENTER))
-  const sharedCenters = centerCells.filter((cell) =>
-    centerCells.some((other) => other !== cell && cube[other] === cube[cell]),
-  )
-  if (sharedCenters.length > 0) {
-    return fail(
-      'centers',
-      `More than one centre is ${cube[sharedCenters[0]]}. The six centres must all be different colours.`,
-      sharedCenters,
+  if (puzzle.hasCenters) {
+    const centerCells = FACES.map((face) => cellIndex(face, CENTER))
+    const sharedCenters = centerCells.filter((cell) =>
+      centerCells.some((other) => other !== cell && cube[other] === cube[cell]),
     )
+    if (sharedCenters.length > 0) {
+      return fail(
+        'centers',
+        `More than one centre is ${cube[sharedCenters[0]]}. The six centres must all be different colours.`,
+        sharedCenters,
+      )
+    }
   }
-  const faceOf = (color: Color) =>
-    FACES.find((face) => cube[cellIndex(face, CENTER)] === color)!
-  const colorOf = (face: Face) => cube[cellIndex(face, CENTER)]!
+  // Can't be null: the centres differ (3x3), or are assumed (2x2).
+  const scheme = faceColorsOf(cube)!
+  const faceOf = (color: Color) => FACES.find((face) => scheme[face] === color)!
+  const colorOf = (face: Face) => scheme[face]
   const pieceName = (name: string) =>
     [...name].map((face) => colorOf(face as Face)).join('–')
   const colorsAt = (cells: number[]) => cells.map((cell) => cube[cell]!)
   const hasOpposites = (colors: Color[]) =>
     colors.some((a) => colors.some((b) => faceOf(b) === OPPOSITE[faceOf(a)]))
   const cubies = toCubies(cube)! // can't be null: every cell is painted and the centres differ
+  const cornerCells = cornerCellsOf(puzzle)
 
-  // 4. Every edge's two colours belong together, and each of the 12 edges appears once.
-  const badEdges = EDGE_CELLS.filter((_, slot) => cubies.ep[slot] === -1)
+  // 4. Every edge's two colours belong together, and each of the 12 edges
+  //    appears once. (A 2x2 has no edges.)
+  const edgeCells = isThreeByThree ? EDGE_CELLS : []
+  const badEdges = edgeCells.filter((_, slot) => cubies.ep[slot] === -1)
   if (badEdges.length > 0) {
     const [a, b] = colorsAt(badEdges[0])
     const reason =
@@ -134,13 +151,13 @@ export function validateCube(cube: CubeState): Validation {
     return fail(
       'edges',
       `The ${pieceName(EDGES[cubies.ep[repeatedEdges[0]]])} edge appears more than once, so another edge is missing. Check the highlighted edges.`,
-      repeatedEdges.flatMap((slot) => EDGE_CELLS[slot]),
+      repeatedEdges.flatMap((slot) => edgeCells[slot]),
     )
   }
 
   // 5. Every corner's three colours form a real corner, in the right clockwise
   //    order, and each of the 8 corners appears once.
-  const badCorners = CORNER_CELLS.filter((_, slot) => cubies.cp[slot] === -1)
+  const badCorners = cornerCells.filter((_, slot) => cubies.cp[slot] === -1)
   if (badCorners.length > 0) {
     const colors = colorsAt(badCorners[0])
     const repeated = colors.find((color, i) => colors.indexOf(color) !== i)
@@ -160,19 +177,22 @@ export function validateCube(cube: CubeState): Validation {
     return fail(
       'corners',
       `The ${pieceName(CORNERS[cubies.cp[repeatedCorners[0]]])} corner appears more than once, so another corner is missing. Check the highlighted corners.`,
-      repeatedCorners.flatMap((slot) => CORNER_CELLS[slot]),
+      repeatedCorners.flatMap((slot) => cornerCells[slot]),
     )
   }
 
   // 6–8. Every piece is real and present, but a real cube can't reach every
   //      arrangement of them by turning: these three rules must also hold.
+  //      A 2x2 only has the first: with no edges, any arrangement of its
+  //      corners can be reached, even two swapped.
   if (sum(cubies.co) % 3 !== 0) {
     return fail(
       'twist',
       'A corner is twisted: its colours are right but turned the wrong way. Check each corner against your cube.',
-      CORNER_CELLS.flat(),
+      cornerCells.flat(),
     )
   }
+  if (!isThreeByThree) return { valid: true, solved: isSolved(cube) }
   if (sum(cubies.eo) % 2 !== 0) {
     return fail(
       'flip',

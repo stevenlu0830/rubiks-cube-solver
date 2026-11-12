@@ -1,8 +1,15 @@
-import { faceNormal, stickerIndexAt, type Vec3 } from './geometry.ts'
+import {
+  faceNormal,
+  outerLayer,
+  stickerIndexAt,
+  type Vec3,
+} from './geometry.ts'
+import { perPuzzle, PUZZLE_3X3, puzzleOf, type Puzzle } from './puzzle.ts'
 import {
   CENTER,
   cellIndex,
   FACES,
+  STANDARD_SCHEME,
   type Color,
   type ColorScheme,
   solvedState,
@@ -12,9 +19,11 @@ import {
 
 /**
  * The cube as pieces instead of stickers: which corner and edge piece sits in
- * each slot, and how it is turned there. The Phase 5 validator needs this
+ * each slot, and how it is turned there. The checks before solving need this
  * view, because the rules for a solvable cube (e.g. "corner twists must add
  * up to a multiple of 3") are about pieces, not stickers.
+ *
+ * A 2x2 has the same 8 corners, and no edges.
  *
  * Numbering and orientation follow Kociemba's cubie model. A piece's name
  * lists its faces starting with U or D (for corners) and going clockwise, so
@@ -59,19 +68,34 @@ export interface CubieCube {
 }
 
 /** The cell indexes of each slot's stickers, in the order its name lists faces. */
-function slotCells(name: string): number[] {
+function slotCells(name: string, puzzle: Puzzle): number[] {
   const faces = [...name] as Face[]
+  // The slot's cubie is in the outer layer of each face it touches.
+  const outer = outerLayer(puzzle)
   const position = faces
     .map(faceNormal)
     .reduce<Vec3>(
-      (sum, n) => [sum[0] + n[0], sum[1] + n[1], sum[2] + n[2]],
+      (sum, n) => [
+        sum[0] + n[0] * outer,
+        sum[1] + n[1] * outer,
+        sum[2] + n[2] * outer,
+      ],
       [0, 0, 0],
     )
-  return faces.map((face) => stickerIndexAt(position, faceNormal(face)))
+  return faces.map((face) => stickerIndexAt(position, faceNormal(face), puzzle))
 }
 
-export const CORNER_CELLS: readonly number[][] = CORNERS.map(slotCells)
-export const EDGE_CELLS: readonly number[][] = EDGES.map(slotCells)
+/** Each corner slot's cells, for either cube. */
+export const cornerCellsOf = perPuzzle((puzzle) =>
+  CORNERS.map((name) => slotCells(name, puzzle)),
+)
+
+/** A 3x3's corner slots' cells. */
+export const CORNER_CELLS: readonly number[][] = cornerCellsOf(PUZZLE_3X3)
+/** A 3x3's edge slots' cells (a 2x2 has no edges). */
+export const EDGE_CELLS: readonly number[][] = EDGES.map((name) =>
+  slotCells(name, PUZZLE_3X3),
+)
 
 export function solvedCubies(): CubieCube {
   return {
@@ -83,26 +107,42 @@ export function solvedCubies(): CubieCube {
 }
 
 /**
+ * Which colour each face is when the cube is solved. On a 3x3 the centres
+ * say, whichever way the cube is held; null unless they're six different
+ * colours. A 2x2 has no centres, so the standard colours are assumed: for
+ * checking one, all that matters is which colours are opposite and their
+ * order round each corner, which is the same however it's held.
+ */
+export function faceColorsOf(state: CubeState): ColorScheme | null {
+  if (!puzzleOf(state).hasCenters) return STANDARD_SCHEME
+  const scheme: Partial<Record<Face, Color>> = {}
+  for (const face of FACES) {
+    const center = state[cellIndex(face, CENTER)]
+    if (center === null || Object.values(scheme).includes(center)) return null
+    scheme[face] = center
+  }
+  return scheme as ColorScheme
+}
+
+/**
  * Reads which piece is in each slot from the cell colours. Each face is
- * identified by its centre colour, so this works whichever way the cube is
- * held.
+ * identified by its colour (see faceColorsOf), so this works whichever way
+ * the cube is held. A 2x2 has corners only, so its edge lists are empty.
  *
- * Returns null if any cell is unpainted or the six centres aren't six
+ * Returns null if any cell is unpainted or a 3x3's six centres aren't six
  * different colours, because then the pieces can't be identified at all.
  */
 export function toCubies(state: CubeState): CubieCube | null {
-  const faceOfColor = new Map<Color, Face>()
-  for (const face of FACES) {
-    const center = state[cellIndex(face, CENTER)]
-    if (center === null || faceOfColor.has(center)) return null
-    faceOfColor.set(center, face)
-  }
+  const scheme = faceColorsOf(state)
+  if (scheme === null) return null
   if (state.some((cell) => cell === null)) return null
+  const faceOfColor = new Map(FACES.map((face) => [scheme[face], face]))
   const faceAt = (cell: number) => faceOfColor.get(state[cell]!)!
+  const puzzle = puzzleOf(state)
 
   const cp: number[] = []
   const co: number[] = []
-  for (const cells of CORNER_CELLS) {
+  for (const cells of cornerCellsOf(puzzle)) {
     const faces = cells.map(faceAt)
     // The twist is which of the slot's three stickers shows the U or D colour.
     const twist = faces.findIndex((face) => face === 'U' || face === 'D')
@@ -118,7 +158,7 @@ export function toCubies(state: CubeState): CubieCube | null {
 
   const ep: number[] = []
   const eo: number[] = []
-  for (const [a, b] of EDGE_CELLS) {
+  for (const [a, b] of puzzle.name === '3x3' ? EDGE_CELLS : []) {
     const straight = EDGES.findIndex((edge) => edge === faceAt(a) + faceAt(b))
     const flipped = EDGES.findIndex((edge) => edge === faceAt(b) + faceAt(a))
     ep.push(straight !== -1 ? straight : flipped)

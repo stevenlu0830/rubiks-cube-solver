@@ -1,14 +1,18 @@
 import { expect, test } from '@playwright/test'
+import { cornerCellsOf } from '../src/cube/cubies.ts'
 import { applyMoves, parseMoves } from '../src/cube/moves.ts'
 import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
 import {
   cellIndex,
   COLORS,
   emptyState,
+  isSolved,
   solvedState,
   STANDARD_SCHEME,
 } from '../src/cube/state.ts'
+import { cubeAsShown } from '../src/view/orientation.ts'
 import { CubePainter } from './cubePainter.ts'
+import { savedCube } from './cubes.ts'
 import { fakeCamera } from './fakeCamera.ts'
 
 /** A 2x2 scrambled by a few turns of every face. */
@@ -52,7 +56,7 @@ test('paints a scrambled 2x2 by tapping and swiping, and keeps it after a reload
   ).toBeVisible()
 })
 
-test('has Undo and Reset but no Fill centres, and no Scan or Solve yet', async ({
+test('has Undo and Reset but no Fill centres, and no Scan yet', async ({
   page,
 }) => {
   // A camera, so the only reason for no Scan button is that it's a 2x2.
@@ -76,7 +80,47 @@ test('has Undo and Reset but no Fill centres, and no Scan or Solve yet', async (
     0,
   )
   await expect(page.getByRole('button', { name: 'Scan' })).toHaveCount(0)
-  await expect(
-    page.getByRole('button', { name: 'Solving a 2x2 is coming soon' }),
-  ).toBeDisabled()
+})
+
+test('paints, swipes and solves a scrambled 2x2 with its own solver, listing the moves for the cube as seen', async ({
+  page,
+}) => {
+  await page.goto('./#/2x2')
+  const painter = new CubePainter(page, PUZZLE_2X2)
+  await painter.paint(SCRAMBLED_2X2) // ends with the cube turned round
+  await page.getByRole('button', { name: 'Solve' }).click()
+
+  const status = page.getByRole('status')
+  await expect(status).toContainText('The shortest solution is')
+  const moves = parseMoves(
+    (await status.locator('.move-notation').textContent()) ?? '',
+  )
+  expect(moves.length).toBeGreaterThan(0)
+  expect(moves.length).toBeLessThanOrEqual(11)
+  // Done to the cube as it's shown on screen, the moves solve it.
+  const shown = cubeAsShown(SCRAMBLED_2X2, painter.orientation)
+  expect(isSolved(applyMoves(shown, moves))).toBe(true)
+
+  // The 2x2's solver ran, and the 3x3's (much bigger) one was never started.
+  const workers = page.workers().map((worker) => worker.url())
+  expect(workers.some((url) => url.includes('twoByTwo.worker'))).toBe(true)
+  expect(workers.some((url) => url.includes('solver.worker'))).toBe(false)
+})
+
+test('points out a 2x2 painted wrong: blank squares, then a twisted corner', async ({
+  page,
+}) => {
+  const twisted = [...solvedState(STANDARD_SCHEME, PUZZLE_2X2)]
+  const [up, right, front] = cornerCellsOf(PUZZLE_2X2)[0] // white, red, green
+  ;[twisted[up], twisted[right], twisted[front]] = ['green', 'white', 'red']
+  await page.addInitScript(savedCube, twisted)
+  await page.goto('./#/2x2')
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.getByRole('status')).toContainText('A corner is twisted')
+
+  await page.getByRole('button', { name: 'Reset' }).click()
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.getByRole('status')).toContainText(
+    '24 squares are still blank. Paint all 24',
+  )
 })

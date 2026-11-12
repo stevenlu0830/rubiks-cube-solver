@@ -1,3 +1,4 @@
+import { formatMoves, type Move } from '../cube/moves.ts'
 import type { Validation } from '../cube/validate.ts'
 import './SolveStatus.css'
 
@@ -8,6 +9,11 @@ export type SolveStage =
   /** Waiting for the solver; `starting` if it's still doing its one-off setup. */
   | { stage: 'solving'; starting: boolean }
   | { stage: 'failed'; message: string }
+  /**
+   * A 2x2's solution, listed as moves: step-by-step help with the 3D cube
+   * isn't ready for a 2x2 yet.
+   */
+  | { stage: 'found'; moves: readonly Move[] }
 
 interface SolveStatusProps {
   status: SolveStage
@@ -74,5 +80,21 @@ function StageMessage({ status }: { status: SolveStage }) {
       )
     case 'failed':
       return <p>{status.message}</p>
+    case 'found':
+      return (
+        <>
+          <p>
+            The shortest solution is {status.moves.length}{' '}
+            {status.moves.length === 1 ? 'move' : 'moves'}:{' '}
+            <span className="move-notation">{formatMoves(status.moves)}</span>
+          </p>
+          <p>
+            Hold your cube as shown. U, R and F turn the top, right and front
+            faces clockwise, as if you were looking straight at that face; R'
+            means the right face anticlockwise, and R2 a half turn. Step-by-step
+            help for the 2x2 is coming soon.
+          </p>
+        </>
+      )
   }
 }

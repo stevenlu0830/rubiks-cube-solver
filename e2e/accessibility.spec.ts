@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { solvedState } from '../src/cube/state.ts'
+import { applyMoves, parseMoves } from '../src/cube/moves.ts'
+import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
+import { solvedState, STANDARD_SCHEME } from '../src/cube/state.ts'
 import { savedCube, SCRAMBLED } from './cubes.ts'
 import { fakeCamera } from './fakeCamera.ts'
 
@@ -37,11 +39,32 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 2x2 painting screen', async ({ page }) => {
+    test('the 2x2 painting screen, a problem, and its solution', async ({
+      page,
+    }) => {
       await page.goto('./#/2x2')
       await expect(
         page.getByRole('button', { name: 'white, 0/4' }),
       ).toBeVisible()
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Solve' }).click() // all blank
+      await expect(page.getByRole('status')).toContainText('still blank')
+      await expectNoProblems(page)
+
+      await page.evaluate(
+        (cube) =>
+          localStorage.setItem(
+            'rubiks-cube-solver/cube-2x2',
+            JSON.stringify(cube),
+          ),
+        applyMoves(
+          solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+          parseMoves("R U2 F' R"),
+        ),
+      )
+      await page.reload()
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByRole('status')).toContainText('shortest solution')
       await expectNoProblems(page)
     })
 

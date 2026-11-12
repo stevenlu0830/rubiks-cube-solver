@@ -1,4 +1,5 @@
 import type { Move } from '../cube/moves.ts'
+import { PUZZLE_3X3, type CubeType, type Puzzle } from '../cube/puzzle.ts'
 import type { SolveRequest, SolverMessage } from './protocol.ts'
 
 /**
@@ -54,8 +55,21 @@ export interface Solver {
   solve(facelets: string): Promise<Move[]>
 }
 
-const startWorker = (): WorkerLike =>
-  new Worker(new URL('./solver.worker.ts', import.meta.url), { type: 'module' })
+/**
+ * Starts each cube's solver worker. Each `new Worker(new URL(…))` must be
+ * written out in full like this, so the build can find the worker's file.
+ */
+const START_WORKER: Record<CubeType, () => WorkerLike> = {
+  '3x3': () =>
+    new Worker(new URL('./solver.worker.ts', import.meta.url), {
+      type: 'module',
+    }),
+  '2x2': () =>
+    new Worker(new URL('./twoByTwo.worker.ts', import.meta.url), {
+      type: 'module',
+    }),
+}
+const startWorker = START_WORKER['3x3']
 
 export function createSolver(
   makeWorker: () => WorkerLike = startWorker,
@@ -125,13 +139,16 @@ export function createSolver(
   }
 }
 
-let shared: Solver | undefined
+const shared = new Map<CubeType, Solver>()
 
 /**
- * The app's one solver, started on first use. The app asks for it as soon as
- * it loads, so the setup is usually done before the user finishes painting.
+ * The app's one solver for each cube, started on first use. A cube's page
+ * asks for it as soon as it opens, so the setup is usually done before the
+ * user finishes painting.
  */
-export function getSolver(): Solver {
-  shared ??= createSolver()
-  return shared
+export function getSolver(puzzle: Puzzle = PUZZLE_3X3): Solver {
+  if (!shared.has(puzzle.name)) {
+    shared.set(puzzle.name, createSolver(START_WORKER[puzzle.name]))
+  }
+  return shared.get(puzzle.name)!
 }

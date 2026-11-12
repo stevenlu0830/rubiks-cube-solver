@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
 import type { SolveRequest, SolverMessage } from '../../src/solver/protocol.ts'
 import {
   createSolver,
+  getSolver,
   SolverError,
   solverErrorMessage,
   type WorkerLike,
@@ -106,5 +108,32 @@ describe('solverErrorMessage', () => {
     expect(solverErrorMessage(new Error('?'))).toContain(
       "couldn't solve this cube",
     )
+  })
+})
+
+describe('getSolver', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("starts each cube's own worker, once: the 2x2 page never loads the 3x3's solver", () => {
+    const started: string[] = []
+    vi.stubGlobal(
+      'Worker',
+      class extends FakeWorker {
+        constructor(url: URL) {
+          super()
+          started.push(String(url))
+        }
+      },
+    )
+    const twoByTwo = getSolver(PUZZLE_2X2)
+    expect(getSolver(PUZZLE_2X2)).toBe(twoByTwo)
+    expect(started).toHaveLength(1)
+    expect(started[0]).toContain('twoByTwo.worker')
+
+    const threeByThree = getSolver(PUZZLE_3X3)
+    expect(threeByThree).not.toBe(twoByTwo)
+    expect(getSolver()).toBe(threeByThree) // a 3x3 unless told
+    expect(started).toHaveLength(2)
+    expect(started[1]).toContain('solver.worker')
   })
 })

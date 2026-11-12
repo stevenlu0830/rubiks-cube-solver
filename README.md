@@ -20,7 +20,7 @@ npm run dev
 | `npm run dev`       | Start the dev server on this computer                                                                |
 | `npm run dev:phone` | Same, but reachable from a phone on the same Wi-Fi, over https:// so the camera works (see below)    |
 | `npm test`          | Run the tests once (`npm run test:watch` to re-run on save)                                          |
-| `npm run test:slow` | Run the long checks too, e.g. solving 1,000 random cubes (about 35 seconds)                          |
+| `npm run test:slow` | Run the long checks too, e.g. solving 1,000 random 3x3s and 1,000 random 2x2s (about 45 seconds)     |
 | `npm run test:e2e`  | Build, then test the whole app in real browsers posing as an iPhone and an Android phone (see below) |
 | `npm run lint`      | Check the code for likely bugs with ESLint                                                           |
 | `npm run format`    | Auto-format all files with Prettier                                                                  |

@@ -2,12 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
   CORNER_CELLS,
+  cornerCellsOf,
   EDGE_CELLS,
   fromCubies,
   solvedCubies,
   type CubieCube,
 } from '../../src/cube/cubies.ts'
-import { applyMoves, parseMoves, randomScramble } from '../../src/cube/moves.ts'
+import {
+  applyMoves,
+  MOVES,
+  parseMoves,
+  randomScramble,
+} from '../../src/cube/moves.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
@@ -255,5 +262,118 @@ describe('check order', () => {
     cube[0] = 'red'
     cube[1] = null
     expectProblem(cube, 'unpainted') // blank (1) before colour counts (2)
+  })
+})
+
+describe('a 2x2', () => {
+  const SOLVED_2X2 = solvedState(STANDARD_SCHEME, PUZZLE_2X2)
+  const CORNERS_2X2 = cornerCellsOf(PUZZLE_2X2)
+  const scrambled2x2 = (seed: number) =>
+    applyMoves(SOLVED_2X2, randomScramble(20, seededRandom(seed)))
+  /**
+   * A 2x2 is a 3x3's corners: builds one from 3x3 pieces (see fromPieces),
+   * keeping the corner squares. The 2x2 cell at (row, column) of a face is
+   * the 3x3 cell at (2 × row, 2 × column).
+   */
+  const twoByTwoFromPieces = (changes: Partial<CubieCube>) => {
+    const threeByThree = fromPieces(changes)
+    return Array.from({ length: 24 }, (_, cell) => {
+      const face = Math.floor(cell / 4)
+      const [row, column] = [Math.floor((cell % 4) / 2), cell % 2]
+      return threeByThree[face * 9 + row * 6 + column * 2]
+    })
+  }
+
+  it('reports a solved 2x2 as already solved, whichever way it was painted', () => {
+    expect(validateCube(SOLVED_2X2)).toEqual({ valid: true, solved: true })
+    expect(validateCube(applyMoves(SOLVED_2X2, parseMoves('x y2 z')))).toEqual({
+      valid: true,
+      solved: true,
+    })
+  })
+
+  it('passes 100 scrambled 2x2s as valid, held any of the 24 ways', () => {
+    const turns = MOVES.filter((move) => /^[xyz]/.test(move))
+    const random = seededRandom(77)
+    for (let seed = 1; seed <= 100; seed++) {
+      const held = applyMoves(scrambled2x2(seed), [
+        turns[Math.floor(random() * turns.length)],
+        turns[Math.floor(random() * turns.length)],
+      ])
+      expect(validateCube(held)).toEqual({ valid: true, solved: false })
+    }
+  })
+
+  it('accepts any two corners swapped: with no edges, a 2x2 can reach that', () => {
+    const cube = twoByTwoFromPieces({ cp: [1, 0, 2, 3, 4, 5, 6, 7] })
+    expect(validateCube(cube)).toEqual({ valid: true, solved: false })
+  })
+
+  it('asks for all 24 squares to be painted', () => {
+    const result = expectProblem(emptyState(PUZZLE_2X2), 'unpainted')
+    expect(result.cells).toHaveLength(24)
+    expect(result.message).toBe(
+      '24 squares are still blank. Paint all 24 to match your cube.',
+    )
+  })
+
+  it('asks for exactly 4 squares of each colour', () => {
+    const cube = [...SOLVED_2X2]
+    cube[0] = 'red' // a white square painted red
+    const result = expectProblem(cube, 'color-count')
+    expect(result.message).toBe(
+      'Each colour needs exactly 4 squares, but white has 3 and red has 5.',
+    )
+    expect(result.cells).toHaveLength(5)
+  })
+
+  it('catches a corner whose colours are in mirror-image order', () => {
+    const [, urfRight, urfFront] = CORNERS_2X2[0]
+    const result = expectProblem(
+      swapCells(SOLVED_2X2, urfRight, urfFront),
+      'corners',
+    )
+    expect(result.message).toContain('mirror-image')
+    expect(result.cells).toEqual(sorted(CORNERS_2X2[0]))
+  })
+
+  it('catches corners with opposite colours or a colour twice', () => {
+    const [, , urfFront] = CORNERS_2X2[0] // green
+    const [dlfDown] = CORNERS_2X2[5] // yellow
+    const result = expectProblem(
+      swapCells(SOLVED_2X2, urfFront, dlfDown),
+      'corners',
+    )
+    expect(result.message).toContain('opposite sides') // URF: white, red and yellow
+    expect(result.message).toContain('2 corners have problems') // DLF: green twice
+  })
+
+  it('catches a corner that appears twice', () => {
+    const result = expectProblem(
+      twoByTwoFromPieces({ cp: [0, 1, 2, 0, 4, 6, 6, 7] }),
+      'corners',
+    )
+    expect(result.message).toBe(
+      'The white–red–green corner appears more than once, so another corner is missing. Check the highlighted corners.',
+    )
+    expect(result.cells).toEqual(
+      sorted([0, 3, 5, 6].flatMap((slot) => CORNERS_2X2[slot])),
+    )
+  })
+
+  it('catches one twisted corner, held any way, and highlights all corners', () => {
+    const co = solvedCubies().co
+    co[0] = 1
+    const twisted = twoByTwoFromPieces({ co })
+    for (const turns of ['', 'x', 'y', 'z', "x2 y'", "z' x"]) {
+      const result = expectProblem(
+        applyMoves(twisted, parseMoves(turns)),
+        'twist',
+      )
+      expect(result.message).toContain('A corner is twisted')
+      expect(result.cells).toEqual(
+        Array.from({ length: 24 }, (_, cell) => cell),
+      )
+    }
   })
 })

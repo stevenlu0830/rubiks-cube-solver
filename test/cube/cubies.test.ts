@@ -2,15 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
   CORNER_CELLS,
+  cornerCellsOf,
   CORNERS,
   EDGE_CELLS,
   EDGES,
+  faceColorsOf,
   fromCubies,
   solvedCubies,
   toCubies,
   type CubieCube,
 } from '../../src/cube/cubies.ts'
-import { STICKERS, type Vec3 } from '../../src/cube/geometry.ts'
+import { STICKERS, stickersOf, type Vec3 } from '../../src/cube/geometry.ts'
+import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
 import {
   applyMove,
   applyMoves,
@@ -238,5 +241,61 @@ describe('fromCubies', () => {
     const cubies = solvedCubies()
     cubies.cp[0] = -1
     expect(() => fromCubies(cubies, STANDARD_SCHEME)).toThrow()
+  })
+})
+
+describe('on a 2x2', () => {
+  const SOLVED_2X2 = solvedState(STANDARD_SCHEME, PUZZLE_2X2)
+
+  it("finds each corner slot's 3 cells, on the faces its name lists", () => {
+    const stickers = stickersOf(PUZZLE_2X2)
+    cornerCellsOf(PUZZLE_2X2).forEach((cells, slot) => {
+      expect(cells).toHaveLength(3)
+      const faces = cells.map((cell) => FACES[Math.floor(cell / 4)])
+      expect(faces.join('')).toBe(CORNERS[slot])
+      // All three on the same cubie.
+      expect(
+        new Set(cells.map((cell) => `${stickers[cell].position}`)).size,
+      ).toBe(1)
+    })
+    expect(
+      cornerCellsOf(PUZZLE_2X2)
+        .flat()
+        .toSorted((a, b) => a - b),
+    ).toEqual(Array.from({ length: 24 }, (_, i) => i))
+  })
+
+  it('keeps the 3x3 corner cells as they were', () => {
+    expect(cornerCellsOf(PUZZLE_3X3)).toBe(CORNER_CELLS)
+  })
+
+  it('assumes the standard colours, having no centres to read them from', () => {
+    expect(faceColorsOf(SOLVED_2X2)).toBe(STANDARD_SCHEME)
+    expect(faceColorsOf(applyMoves(SOLVED_2X2, parseMoves('x y')))).toBe(
+      STANDARD_SCHEME,
+    )
+  })
+
+  it('reads a solved 2x2 as every corner in place, and no edges', () => {
+    expect(toCubies(SOLVED_2X2)).toEqual({
+      cp: [0, 1, 2, 3, 4, 5, 6, 7],
+      co: [0, 0, 0, 0, 0, 0, 0, 0],
+      ep: [],
+      eo: [],
+    })
+  })
+
+  it('reads its corners exactly like the matching 3x3 corners, after any moves', () => {
+    const moves = randomScramble(30, seededRandom(31))
+    const twoByTwo = toCubies(applyMoves(SOLVED_2X2, moves))!
+    const threeByThree = toCubies(applyMoves(solvedState(), moves))!
+    expect(twoByTwo.cp).toEqual(threeByThree.cp)
+    expect(twoByTwo.co).toEqual(threeByThree.co)
+  })
+
+  it('returns null with a square still blank', () => {
+    const cube = [...SOLVED_2X2]
+    cube[7] = null
+    expect(toCubies(cube)).toBeNull()
   })
 })

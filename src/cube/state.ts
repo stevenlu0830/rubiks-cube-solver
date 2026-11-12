@@ -53,6 +53,20 @@ export const STANDARD_SCHEME: ColorScheme = {
   B: 'blue',
 }
 
+/**
+ * The colour on the opposite side of the cube, with the standard colours.
+ * A 3x3's centres show which colours are opposite; a 2x2 has no centres,
+ * so this is assumed (nearly every cube is coloured this way).
+ */
+export const OPPOSITE_COLOR: Readonly<Record<Color, Color>> = {
+  white: 'yellow',
+  yellow: 'white',
+  red: 'orange',
+  orange: 'red',
+  green: 'blue',
+  blue: 'green',
+}
+
 /** How many cells of each colour a real 3x3 has (see Puzzle for any cube). */
 export const CELLS_PER_COLOR = PUZZLE_3X3.cellsPerColor
 

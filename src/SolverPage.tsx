@@ -60,12 +60,15 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
  *
- * A 2x2 can so far only be painted: checking, solving and scanning one are
- * still to come, so its page has no Scan button and Solve is switched off.
+ * For a 2x2, scanning and stepping through the solution on the 3D cube are
+ * still to come: its page has no Scan button, and Solve lists the moves.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
-  const solvable = puzzle.name === '3x3'
+  // Still to come for a 2x2: scanning, and stepping through its solution on
+  // the 3D cube (until then, Solve lists the moves).
+  const canScan = puzzle.name === '3x3'
+  const canPlay = puzzle.name === '3x3'
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -118,8 +121,8 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
 
   // Start the solver's setup now, so it's ready by the time the cube is painted.
   useEffect(() => {
-    if (solvable) getSolver()
-  }, [solvable])
+    getSolver(puzzle)
+  }, [puzzle])
 
   // While playing, start the next turn after a short pause.
   const waitingToPlay =
@@ -152,7 +155,6 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
       : null
 
   async function handleSolve() {
-    if (!solvable) return
     const validation = validateCube(cube)
     if (!validation.valid || validation.solved) {
       setSolve({ cube, status: { stage: 'checked', validation } })
@@ -162,7 +164,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
 
     // Read the cube as it's shown, so the moves match how the user holds it.
     const shown = cubeAsShown(cube, orientation)
-    const solver = getSolver()
+    const solver = getSolver(puzzle)
     setSolve({
       cube,
       status: { stage: 'solving', starting: !solver.isReady() },
@@ -170,15 +172,17 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
     let result: Solve
     try {
       const moves = await solver.solve(toFaceletString(shown))
-      result = {
-        stage: 'playing',
-        playback: startPlayback(
-          shown,
-          moves,
-          shown[cellIndex('F', CENTER)]!,
-          shown[cellIndex('U', CENTER)]!,
-        ),
-      }
+      result = canPlay
+        ? {
+            stage: 'playing',
+            playback: startPlayback(
+              shown,
+              moves,
+              shown[cellIndex('F', CENTER)]!,
+              shown[cellIndex('U', CENTER)]!,
+            ),
+          }
+        : { stage: 'found', moves }
     } catch (error) {
       result = { stage: 'failed', message: solverErrorMessage(error) }
     }
@@ -349,7 +353,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
               </button>
             </nav>
             <div className="main-actions">
-              {solvable && canOfferCamera() && (
+              {canScan && canOfferCamera() && (
                 <button
                   type="button"
                   className="scan-button"
@@ -363,20 +367,14 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
                   Scan
                 </button>
               )}
-              {solvable ? (
-                <button
-                  type="button"
-                  className="solve-button"
-                  onClick={handleSolve}
-                  disabled={status?.stage === 'solving'}
-                >
-                  {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
-                </button>
-              ) : (
-                <button type="button" className="solve-button" disabled>
-                  Solving a {puzzle.name} is coming soon
-                </button>
-              )}
+              <button
+                type="button"
+                className="solve-button"
+                onClick={handleSolve}
+                disabled={status?.stage === 'solving'}
+              >
+                {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
+              </button>
             </div>
           </>
         )}
