@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Color } from '../cube/state.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
+import type { Hold } from './hold.ts'
 import { describeMove } from './moveGuide.ts'
 import { currentStep, isFinished, type Playback } from './playback.ts'
 
@@ -26,12 +27,11 @@ export function SolveCard({
   if (!playback.ready) {
     return (
       <section className="solve-card" aria-label="How to hold your cube">
-        <p>
-          Hold your cube with <ColorName color={playback.front} /> facing you
-          and <ColorName color={playback.top} /> on top. Keep it this way for
-          every step.
-        </p>
+        <HoldInstruction hold={playback.hold} />
         <p className="solve-card-note">
+          {/* A 2x2's corner is out of sight on the 3D cube: say what to compare. */}
+          {playback.hold.by === 'corner' &&
+            "Your cube's top, front and right should then look like the one on screen. "}
           “Clockwise” means as if you were looking straight at that face.
         </p>
         <button type="button" className="primary-button" onClick={onReady}>
@@ -45,7 +45,12 @@ export function SolveCard({
     return (
       <section className="solve-card solve-card-done">
         <h2>Solved 🎉</h2>
-        <p>That's all {moves.length} moves: your cube is solved.</p>
+        <p>
+          {moves.length === 1
+            ? "That's the only move"
+            : `That's all ${moves.length} moves`}
+          : your cube is solved.
+        </p>
         <div className="solve-card-actions">
           <button type="button" onClick={onWatchAgain}>
             Watch again
@@ -77,6 +82,27 @@ export function SolveCard({
       </div>
       {map}
     </section>
+  )
+}
+
+/** Which way round to hold the cube: by its centres, or by the corner that never moves. */
+function HoldInstruction({ hold }: { hold: Hold }) {
+  if (hold.by === 'centres') {
+    return (
+      <p>
+        Hold your cube with <ColorName color={hold.front} /> facing you and{' '}
+        <ColorName color={hold.top} /> on top. Keep it this way for every step.
+      </p>
+    )
+  }
+  return (
+    <p>
+      Hold your cube so the corner at the back, bottom left has{' '}
+      <ColorName color={hold.down} /> underneath,{' '}
+      <ColorName color={hold.left} /> on the left and{' '}
+      <ColorName color={hold.back} /> at the back. That corner never moves: keep
+      your cube this way for every step.
+    </p>
   )
 }
 

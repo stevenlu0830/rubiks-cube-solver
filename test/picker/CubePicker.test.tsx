@@ -1,6 +1,11 @@
 import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { emptyState, solvedState } from '../../src/cube/state.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import {
+  emptyState,
+  solvedState,
+  STANDARD_SCHEME,
+} from '../../src/cube/state.ts'
 import { saveCube } from '../../src/editor/storage.ts'
 import { CubePicker } from '../../src/picker/CubePicker.tsx'
 
@@ -23,24 +28,29 @@ describe('CubePicker', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
   })
 
-  it('links the 3x3 to its solver', () => {
+  it('links each cube to its solver', () => {
     render(<CubePicker />)
-    const link = within(card('3x3')).getByRole('link')
-    expect(link).toHaveAttribute('href', '#/3x3')
-    expect(link).toHaveTextContent("3x3The classic Rubik's cube")
-  })
-
-  it('shows the 2x2 as coming soon, with nothing to tap', () => {
-    render(<CubePicker />)
-    const twoByTwo = card('2x2')
-    expect(twoByTwo).toHaveTextContent('Coming soon')
-    expect(within(twoByTwo).queryByRole('link')).toBeNull()
+    const threeByThree = within(card('3x3')).getByRole('link')
+    expect(threeByThree).toHaveAttribute('href', '#/3x3')
+    expect(threeByThree).toHaveTextContent("3x3The classic Rubik's cube")
+    const twoByTwo = within(card('2x2')).getByRole('link')
+    expect(twoByTwo).toHaveAttribute('href', '#/2x2')
+    expect(twoByTwo).toHaveTextContent('2x2The pocket cube')
+    expect(screen.queryByText('Coming soon')).toBeNull()
   })
 
   it('says when a 3x3 is part-painted and saved', () => {
     saveCube(solvedState())
     render(<CubePicker />)
     expect(card('3x3')).toHaveTextContent('In progress')
+    expect(card('2x2')).not.toHaveTextContent('In progress')
+  })
+
+  it('says when a 2x2 is part-painted and saved', () => {
+    saveCube(solvedState(STANDARD_SCHEME, PUZZLE_2X2))
+    render(<CubePicker />)
+    expect(card('2x2')).toHaveTextContent('In progress')
+    expect(card('3x3')).not.toHaveTextContent('In progress')
   })
 
   it("doesn't say so for a blank cube", () => {

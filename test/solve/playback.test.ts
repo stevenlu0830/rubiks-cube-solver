@@ -6,7 +6,8 @@ import {
   invertMoves,
   parseMoves,
 } from '../../src/cube/moves.ts'
-import { isSolved, solvedState } from '../../src/cube/state.ts'
+import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { isSolved, solvedState, STANDARD_SCHEME } from '../../src/cube/state.ts'
 import {
   cubeAt,
   currentStep,
@@ -26,7 +27,7 @@ const moves = invertMoves(scramble)
 
 const run = (actions: PlaybackAction[], state: Playback) =>
   actions.reduce(playbackReducer, state)
-const fresh = () => startPlayback(start, moves, 'green', 'white')
+const fresh = () => startPlayback(start, moves)
 const ready = () => run([{ type: 'ready' }], fresh())
 
 /** Presses Next (or Back) and lets the animation finish, checking it matches the jump in state. */
@@ -45,6 +46,24 @@ describe('playback', () => {
     expect(cubeAt(state)).toEqual(start)
     expect(state.ready).toBe(false)
     expect(run([{ type: 'next' }, { type: 'play' }], state)).toEqual(state)
+  })
+
+  it('says how to hold the cube: a 3x3 by its centres, a 2x2 by its fixed corner', () => {
+    expect(fresh().hold).toEqual({
+      by: 'centres',
+      front: 'green',
+      top: 'white',
+    })
+    const twoByTwo = applyMoves(
+      solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+      parseMoves("R U2 F'"),
+    )
+    expect(startPlayback(twoByTwo, parseMoves("F U2 R'")).hold).toEqual({
+      by: 'corner',
+      down: 'yellow',
+      left: 'orange',
+      back: 'blue',
+    })
   })
 
   it('plays the whole solution forwards and ends solved', () => {

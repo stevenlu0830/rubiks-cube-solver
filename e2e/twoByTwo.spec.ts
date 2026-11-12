@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { cornerCellsOf } from '../src/cube/cubies.ts'
+import { cornerCellsOf, CORNERS } from '../src/cube/cubies.ts'
 import { applyMoves, parseMoves } from '../src/cube/moves.ts'
 import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
 import {
@@ -82,29 +82,67 @@ test('has Undo and Reset but no Fill centres, and no Scan yet', async ({
   await expect(page.getByRole('button', { name: 'Scan' })).toHaveCount(0)
 })
 
-test('paints, swipes and solves a scrambled 2x2 with its own solver, listing the moves for the cube as seen', async ({
+test('picks the 2x2, paints a scrambled one, and plays its solution to the end, solved', async ({
   page,
 }) => {
-  await page.goto('./#/2x2')
+  await page.goto('./')
+  await page.getByRole('link', { name: /^2x2/ }).click()
+  await expect(
+    page.getByRole('heading', { name: '2x2 Cube Solver', level: 1 }),
+  ).toBeVisible()
   const painter = new CubePainter(page, PUZZLE_2X2)
   await painter.paint(SCRAMBLED_2X2) // ends with the cube turned round
   await page.getByRole('button', { name: 'Solve' }).click()
 
-  const status = page.getByRole('status')
-  await expect(status).toContainText('The shortest solution is')
-  const moves = parseMoves(
-    (await status.locator('.move-notation').textContent()) ?? '',
-  )
-  expect(moves.length).toBeGreaterThan(0)
-  expect(moves.length).toBeLessThanOrEqual(11)
-  // Done to the cube as it's shown on screen, the moves solve it.
+  // Held by the corner at the back, bottom left of the cube as it's shown.
   const shown = cubeAsShown(SCRAMBLED_2X2, painter.orientation)
-  expect(isSolved(applyMoves(shown, moves))).toBe(true)
+  const [down, back, left] = cornerCellsOf(PUZZLE_2X2)[
+    CORNERS.indexOf('DBL')
+  ].map((cell) => shown[cell])
+  await expect(page.getByLabel('How to hold your cube')).toContainText(
+    `Hold your cube so the corner at the back, bottom left has ${down} underneath, ${left} on the left and ${back} at the back.`,
+  )
+  await page.getByRole('button', { name: "I'm ready" }).click()
+
+  // The steps only turn the top, right and front faces, and done to the
+  // cube as it's shown, they solve it in at most 11 moves.
+  const moves = await page
+    .getByRole('list', { name: 'Steps' })
+    .locator('.move-notation')
+    .allTextContents()
+  expect(moves.length).toBeGreaterThan(1)
+  expect(moves.length).toBeLessThanOrEqual(11)
+  expect(moves.every((move) => /^[URF]['2]?$/.test(move))).toBe(true)
+  expect(isSolved(applyMoves(shown, parseMoves(moves.join(' '))))).toBe(true)
+
+  // One turn forward and back, each animated, with an arrow and the map.
+  await expect(page.getByText(/^Step 1 of \d+$/)).toBeVisible()
+  await expect(
+    page.getByRole('img', { name: 'Map of all six faces' }).locator('span'),
+  ).toHaveCount(24)
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByText(/^Step 2 of \d+$/)).toBeVisible()
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
+  await expect(page.getByText(/^Step 1 of \d+$/)).toBeVisible()
+
+  // Then the rest by itself, at double speed.
+  await page.getByRole('button', { name: /^Speed 1×/ }).click()
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Solved 🎉' })).toBeVisible({
+    timeout: 30_000,
+  })
+  await expect(page.getByText(`That's all ${moves.length} moves`)).toBeVisible()
 
   // The 2x2's solver ran, and the 3x3's (much bigger) one was never started.
   const workers = page.workers().map((worker) => worker.url())
   expect(workers.some((url) => url.includes('twoByTwo.worker'))).toBe(true)
   expect(workers.some((url) => url.includes('solver.worker'))).toBe(false)
+
+  // Solve another: a blank 2x2.
+  await page.getByRole('button', { name: 'Solve another cube' }).click()
+  await expect(
+    page.getByRole('button', { name: count('white', '0/4') }),
+  ).toBeVisible()
 })
 
 test('points out a 2x2 painted wrong: blank squares, then a twisted corner', async ({

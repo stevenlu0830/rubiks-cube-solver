@@ -13,13 +13,6 @@ import { CUBE_TYPES, type CubeType } from './cube/puzzle.ts'
  * the browser's Back button steps through hashes like any other page.
  */
 
-/**
- * The cubes that can be solved so far; the picker shows the others as
- * "Coming soon". Their pages still open from their address (e.g. #/2x2),
- * to try them out while they're being built.
- */
-export const READY_CUBES: readonly CubeType[] = ['3x3']
-
 export type Route = 'picker' | CubeType
 
 export const APP_NAME = "Rubik's Cube Solver"

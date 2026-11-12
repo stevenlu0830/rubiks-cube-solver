@@ -59,7 +59,7 @@ describe('App', () => {
     expect(document.title).toBe("3x3 · Rubik's Cube Solver")
   })
 
-  it('opens the 2x2 page at #/2x2, though the picker still says it is coming soon', () => {
+  it('opens the 2x2 solver straight away at #/2x2', () => {
     history.replaceState(null, '', '/#/2x2')
     render(<App />)
     expect(heading('2x2 Cube Solver')).toBeInTheDocument()

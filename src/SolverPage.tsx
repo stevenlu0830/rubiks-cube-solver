@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Quaternion } from 'three'
 import { PUZZLES, type CubeType } from './cube/puzzle.ts'
 import {
-  CENTER,
-  cellIndex,
   colorCounts,
   emptyState,
   type Color,
@@ -60,15 +58,12 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
  *
- * For a 2x2, scanning and stepping through the solution on the 3D cube are
- * still to come: its page has no Scan button, and Solve lists the moves.
+ * Scanning a 2x2 is still to come: its page has no Scan button.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
-  // Still to come for a 2x2: scanning, and stepping through its solution on
-  // the 3D cube (until then, Solve lists the moves).
+  // No scanning a 2x2 yet.
   const canScan = puzzle.name === '3x3'
-  const canPlay = puzzle.name === '3x3'
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -172,17 +167,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
     let result: Solve
     try {
       const moves = await solver.solve(toFaceletString(shown))
-      result = canPlay
-        ? {
-            stage: 'playing',
-            playback: startPlayback(
-              shown,
-              moves,
-              shown[cellIndex('F', CENTER)]!,
-              shown[cellIndex('U', CENTER)]!,
-            ),
-          }
-        : { stage: 'found', moves }
+      result = { stage: 'playing', playback: startPlayback(shown, moves) }
     } catch (error) {
       result = { stage: 'failed', message: solverErrorMessage(error) }
     }

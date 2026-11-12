@@ -1,5 +1,6 @@
 import { applyMoves, invertMove, type Move } from '../cube/moves.ts'
-import type { Color, CubeState } from '../cube/state.ts'
+import type { CubeState } from '../cube/state.ts'
+import { holdFor, type Hold } from './hold.ts'
 
 /**
  * Stepping through a solution, written as a reducer like the editor: each
@@ -16,9 +17,8 @@ export interface Playback {
   /** The cube as the user holds it, before any moves. */
   start: CubeState
   moves: Move[]
-  /** Centre colours facing the user and on top: how to hold the cube. */
-  front: Color
-  top: Color
+  /** How to hold the cube for every step, worked out from `start`. */
+  hold: Hold
   /** Whether the user has confirmed they're holding their cube that way. */
   ready: boolean
   /** How many moves are done; moves[step] is the one to do next. */
@@ -40,17 +40,12 @@ export type PlaybackAction =
   | { type: 'pause' }
   | { type: 'speed'; speed: Speed }
 
-export function startPlayback(
-  start: CubeState,
-  moves: Move[],
-  front: Color,
-  top: Color,
-): Playback {
+/** Ready to step through `moves`, starting from the cube as the user holds it. */
+export function startPlayback(start: CubeState, moves: Move[]): Playback {
   return {
     start,
     moves,
-    front,
-    top,
+    hold: holdFor(start),
     ready: false,
     step: 0,
     turning: null,

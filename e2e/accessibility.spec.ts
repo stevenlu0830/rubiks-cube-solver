@@ -39,7 +39,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 2x2 painting screen, a problem, and its solution', async ({
+    test('the 2x2 painting screen, a problem, and its solve screen', async ({
       page,
     }) => {
       await page.goto('./#/2x2')
@@ -64,8 +64,13 @@ for (const colorScheme of ['light', 'dark'] as const) {
       )
       await page.reload()
       await page.getByRole('button', { name: 'Solve' }).click()
-      await expect(page.getByRole('status')).toContainText('shortest solution')
+      await expect(page.getByLabel('How to hold your cube')).toContainText(
+        'the corner at the back, bottom left',
+      )
       await expectNoProblems(page)
+      await page.getByRole('button', { name: "I'm ready" }).click()
+      await expect(page.getByText(/^Step 1 of \d+$/)).toBeVisible()
+      await expectNoProblems(page) // a step, with the 2x2's map
     })
 
     test('the painting screen, its messages, the settings menu and the About window', async ({

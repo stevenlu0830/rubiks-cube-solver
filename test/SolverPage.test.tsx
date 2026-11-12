@@ -717,8 +717,10 @@ describe('SolverPage', () => {
         expect(solver.solve).not.toHaveBeenCalled()
       })
 
-      it('sends the cube as seen to the solver, then lists the moves', async () => {
-        const cube = applyMoves(SOLVED_2X2, parseMoves("R U2 F'"))
+      it('sends the cube as seen to the solver, then says to hold it by the corner that never moves', async () => {
+        // The scramble leaves the bottom left corner at the front alone: yellow
+        // underneath, orange on the left, green in front.
+        const cube = applyMoves(SOLVED_2X2, parseMoves("R U2 R' U"))
         const answer = deferred<Move[]>()
         solver.solve = vi.fn(() => answer.promise)
         renderWith(cube)
@@ -730,20 +732,59 @@ describe('SolverPage', () => {
         expect(screen.getByRole('status')).toHaveTextContent(
           'Finding a solution',
         )
-        expect(solver.solve).toHaveBeenCalledWith(
-          toFaceletString(cubeAsShown(cube, turned)),
-        )
+        const shown = cubeAsShown(cube, turned)
+        expect(solver.solve).toHaveBeenCalledWith(toFaceletString(shown))
         expect(vi.mocked(solver.solve).mock.calls[0][0]).toHaveLength(24)
 
         await act(async () => answer.resolve(parseMoves("F U2 R'")))
-        const status = screen.getByRole('status')
-        expect(status).toHaveTextContent(
-          "The shortest solution is 3 moves: F U2 R'",
+        // Seen from the right, that corner is at the back, bottom left: green
+        // is now on its left, and orange at the back.
+        expect(
+          screen.getByLabelText('How to hold your cube'),
+        ).toHaveTextContent(
+          'Hold your cube so the corner at the back, bottom left has yellow underneath, green on the left and orange at the back.',
         )
-        expect(status).toHaveTextContent('Hold your cube as shown')
-        // Still painting: no solve screen for a 2x2 yet.
-        expect(view.held).toBe(false)
-        expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+        expect(view.held).toBe(true)
+        expect(view.state).toEqual(shown)
+      })
+
+      it('steps through the solution with arrows and the map, to Solved, then starts another', async () => {
+        const scramble = parseMoves("R U2 F' R")
+        const solution = invertMoves(scramble)
+        solver.solve = () => Promise.resolve(solution)
+        renderWith(applyMoves(SOLVED_2X2, scramble))
+        await act(async () => click('Solve'))
+        click("I'm ready")
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument()
+        expect(view.hint).toBe(solution[0]) // the arrow on the 3D cube
+        const map = screen.getByRole('img', { name: 'Map of all six faces' })
+        expect(map.querySelectorAll('span')).toHaveLength(24)
+
+        for (const move of solution) {
+          click('Next')
+          expect(view.turning).toBe(move)
+          act(() => view.turnDone())
+        }
+        expect(
+          screen.getByRole('heading', { name: 'Solved 🎉' }),
+        ).toBeInTheDocument()
+        expect(isSolved(view.state)).toBe(true)
+
+        click('Solve another cube')
+        expect(view.state).toEqual(emptyState(PUZZLE_2X2))
+      })
+
+      it('says so when one move solves it', async () => {
+        solver.solve = () => Promise.resolve(parseMoves("U'"))
+        renderWith(applyMoves(SOLVED_2X2, parseMoves('U')))
+        await act(async () => click('Solve'))
+        click("I'm ready")
+        expect(screen.getByText('Step 1 of 1')).toBeInTheDocument()
+        click('Next')
+        act(() => view.turnDone())
+        expect(
+          screen.getByText("That's the only move: your cube is solved."),
+        ).toBeInTheDocument()
       })
 
       it('says so if the solver fails', async () => {
