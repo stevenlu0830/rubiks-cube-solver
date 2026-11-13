@@ -11,7 +11,8 @@ const TECH_STACK = [
   'Vite',
   'three.js',
   'React Three Fiber',
-  'cubejs (Kociemba solver)',
+  'cubejs (Kociemba solver, 3x3)',
+  'IDA* search (2x2)',
   'Web Workers',
   'Vitest',
   'Playwright',
@@ -58,8 +59,9 @@ export function InfoButton({
           </button>
         </div>
         <p>
-          Paint a 3D Rubik's Cube to match yours, or scan it with your camera.
-          Then follow animated, step-by-step moves to solve it, even offline.
+          Solve a 2x2 or 3x3 Rubik's Cube: paint a 3D cube to match yours, or
+          scan it with your camera. Then follow animated, step-by-step moves to
+          solve it, even offline.
         </p>
 
         <h3>Tech stack</h3>

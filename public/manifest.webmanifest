@@ -1,7 +1,7 @@
 {
   "name": "Rubik's Cube Solver",
   "short_name": "Cube Solver",
-  "description": "Paint your scrambled Rubik's cube, then follow the solution step by step.",
+  "description": "Paint or scan your scrambled 2x2 or 3x3 Rubik's cube, then follow the solution step by step.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

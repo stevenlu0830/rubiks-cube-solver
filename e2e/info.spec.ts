@@ -9,6 +9,7 @@ test('the ⓘ button opens a window about the app in the middle of the screen', 
 
   await page.getByRole('button', { name: 'About this app' }).click()
   await expect(about).toBeVisible()
+  await expect(about).toContainText("a 2x2 or 3x3 Rubik's Cube")
   await expect(about).toContainText('scan it with your camera')
   await expect(about.getByRole('listitem').first()).toBeVisible() // tech stack
   for (const name of ['GitHub', 'LinkedIn', 'Email', 'Personal Profile']) {

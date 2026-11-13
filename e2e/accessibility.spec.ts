@@ -3,8 +3,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { applyMoves, parseMoves } from '../src/cube/moves.ts'
 import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
 import { solvedState, STANDARD_SCHEME } from '../src/cube/state.ts'
-import { savedCube, SCRAMBLED } from './cubes.ts'
-import { fakeCamera } from './fakeCamera.ts'
+import { STICKER_COLORS } from '../src/view/colors.ts'
+import { savedCube, SCRAMBLED, SCRAMBLED_2X2 } from './cubes.ts'
+import { fakeCamera, scanEverySide, showSide } from './fakeCamera.ts'
 
 /**
  * Automatic accessibility checks (axe), including text contrast, on every
@@ -31,15 +32,21 @@ for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`${colorScheme} mode`, () => {
     test.use({ colorScheme })
 
-    test('the page for picking a cube', async ({ page }) => {
-      // A saved cube, so the 3x3 card shows "In progress" too.
+    test('the page for picking a cube, and its About window', async ({
+      page,
+    }) => {
+      // A saved cube of each, so both cards show "In progress" too.
       await page.addInitScript(savedCube, SCRAMBLED)
+      await page.addInitScript(savedCube, SCRAMBLED_2X2)
       await page.goto('./')
-      await expect(page.getByText('In progress')).toBeVisible()
+      await expect(page.getByText('In progress')).toHaveCount(2)
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'About this app' }).click()
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
       await expectNoProblems(page)
     })
 
-    test('the 2x2 painting screen, a problem, and its solve screen', async ({
+    test('the 2x2 painting screen, its messages, the settings menu and the About window', async ({
       page,
     }) => {
       await page.goto('./#/2x2')
@@ -50,19 +57,36 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Solve' }).click() // all blank
       await expect(page.getByRole('status')).toContainText('still blank')
       await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Settings' }).click()
+      await expectNoProblems(page)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: 'About this app' }).click()
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
+      await expectNoProblems(page)
+    })
 
-      await page.evaluate(
-        (cube) =>
-          localStorage.setItem(
-            'rubiks-cube-solver/cube-2x2',
-            JSON.stringify(cube),
-          ),
+    test('the 2x2 "already solved" message', async ({ page }) => {
+      await page.addInitScript(
+        savedCube,
+        solvedState(STANDARD_SCHEME, PUZZLE_2X2),
+      )
+      await page.goto('./#/2x2')
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByRole('status')).toContainText('already solved')
+      await expectNoProblems(page)
+    })
+
+    test('the 2x2 solve screen, from holding the cube to Solved', async ({
+      page,
+    }) => {
+      await page.addInitScript(
+        savedCube,
         applyMoves(
           solvedState(STANDARD_SCHEME, PUZZLE_2X2),
           parseMoves("R U2 F' R"),
         ),
       )
-      await page.reload()
+      await page.goto('./#/2x2')
       await page.getByRole('button', { name: 'Solve' }).click()
       await expect(page.getByLabel('How to hold your cube')).toContainText(
         'the corner at the back, bottom left',
@@ -71,6 +95,16 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: "I'm ready" }).click()
       await expect(page.getByText(/^Step 1 of \d+$/)).toBeVisible()
       await expectNoProblems(page) // a step, with the 2x2's map
+
+      const steps = page
+        .getByRole('list', { name: 'Steps' })
+        .getByRole('button')
+      await steps.last().click()
+      await page.getByRole('button', { name: 'Next', exact: true }).click()
+      await expect(
+        page.getByRole('heading', { name: 'Solved 🎉' }),
+      ).toBeVisible()
+      await expectNoProblems(page)
     })
 
     test('the painting screen, its messages, the settings menu and the About window', async ({
@@ -112,14 +146,48 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 2x2 scan screen, and a photo', async ({ page }) => {
+    test('the 2x2 scan screen, a photo, a side scanned twice, and fixing a square', async ({
+      page,
+    }) => {
       await page.addInitScript(fakeCamera)
       await page.goto('./#/2x2')
       await page.getByRole('button', { name: 'Scan' }).click()
       await expect(page.locator('.scan-guide > span')).toHaveCount(4)
       await expectNoProblems(page)
-      await page.getByRole('button', { name: 'Take photo' }).click()
+      await showSide(
+        page,
+        (['red', 'green', 'orange', 'white'] as const).map(
+          (color) => STICKER_COLORS[color],
+        ),
+      )
+      await expect(page.getByText('1 of 6 sides')).toBeVisible() // Auto photo
       await expect(page.locator('.scan-dot')).toHaveCount(4)
+      await expectNoProblems(page)
+
+      // The same side again: a warning.
+      await page.getByRole('button', { name: 'Next side ›' }).click()
+      await page.getByRole('button', { name: 'Take photo' }).click()
+      await expect(page.locator('.scan-instruction')).toContainText(
+        "which you've already scanned",
+      )
+      await expectNoProblems(page)
+
+      await page.getByRole('button', { name: /^top left:/ }).click()
+      await expect(
+        page.getByRole('group', { name: 'Colour for this square' }),
+      ).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('a 2x2 side held turned, and its Fix it button', async ({ page }) => {
+      await page.addInitScript(fakeCamera)
+      await page.goto('./#/2x2')
+      await page.getByRole('button', { name: 'Scan' }).click()
+      await scanEverySide(page, SCRAMBLED_2X2, { firstSideTurned: 1 })
+      await expect(page.locator('.scan-instruction')).toContainText(
+        /The \w+ side looks turned\. Fix it\?/,
+      )
+      await expect(page.getByRole('button', { name: 'Fix it' })).toBeVisible()
       await expectNoProblems(page)
     })
 

@@ -1,5 +1,12 @@
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { Quaternion } from 'three'
+import { puzzleOf } from '../src/cube/puzzle.ts'
+import type { CubeState } from '../src/cube/state.ts'
+import { turnCells } from '../src/scan/turnedSides.ts'
 import { shownPart, type Rect } from '../src/scan/viewfinder.ts'
+import { STICKER_COLORS } from '../src/view/colors.ts'
+import type { SwipeDirection } from '../src/view/gestures.ts'
+import { frontCells, turnBySwipe } from '../src/view/orientation.ts'
 
 /**
  * Runs in the page before it loads: swaps the camera for a drawing, so
@@ -138,4 +145,50 @@ export async function showSide(page: Page, colors: string[]) {
     },
     [area, colors] as const,
   )
+}
+
+/**
+ * What each instruction asks a person to do with their real cube, as
+ * swipes: turns about their own left-right and up-down, whichever way the
+ * camera faces.
+ */
+export const INSTRUCTIONS: [RegExp, SwipeDirection[]][] = [
+  [/^Turn your cube to the left/, ['left']],
+  [/^Turn your cube to the right/, ['right']],
+  [/^Tip the top of your cube away from you/, ['up']],
+  [/^Tip the top of your cube towards you/, ['down']],
+  [/^Turn your cube around/, ['left', 'left']],
+]
+
+/**
+ * Scans all six sides of `cube` with the fake camera (whose camera is a
+ * phone's back camera), holding the pretend real cube the same way as the
+ * 3D one to start with and turning it as each "Next side" instruction says.
+ * Auto photo takes each photo. `firstSideTurned`: hold the first side this
+ * many quarter turns round, as if by mistake.
+ */
+export async function scanEverySide(
+  page: Page,
+  cube: CubeState,
+  { firstSideTurned = 0 }: { firstSideTurned?: number } = {},
+) {
+  const puzzle = puzzleOf(cube)
+  let holding = new Quaternion()
+  for (let side = 1; side <= 6; side++) {
+    const colors = frontCells(holding, puzzle).map(
+      (cell) => STICKER_COLORS[cube[cell]!],
+    )
+    await showSide(
+      page,
+      side === 1 ? turnCells(colors, firstSideTurned) : colors,
+    )
+    await expect(page.getByText(`${side} of 6 sides`)).toBeVisible()
+    await expect(page.locator('.scan-dot')).toHaveCount(puzzle.cellsPerFace)
+    if (side === 6) return
+
+    await page.getByRole('button', { name: 'Next side ›' }).click()
+    const said = await page.locator('.scan-instruction').textContent()
+    const [, swipes] = INSTRUCTIONS.find(([pattern]) => pattern.test(said!))!
+    holding = swipes.reduce(turnBySwipe, holding)
+  }
 }
