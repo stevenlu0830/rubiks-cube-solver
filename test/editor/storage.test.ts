@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   emptyState,
   solvedState,
@@ -81,5 +81,42 @@ describe('saving and loading a 2x2', () => {
       JSON.stringify(emptyState()),
     )
     expect(loadCube(localStorage, PUZZLE_2X2)).toBeNull()
+  })
+})
+
+describe('saving and loading a 4x4', () => {
+  beforeEach(() => localStorage.clear())
+  const fourByFour = () => {
+    const cube = [...solvedState(STANDARD_SCHEME, PUZZLE_4X4)]
+    cube[50] = null
+    return cube
+  }
+
+  it('gets back exactly what was saved', () => {
+    saveCube(fourByFour())
+    expect(loadCube(localStorage, PUZZLE_4X4)).toEqual(fourByFour())
+  })
+
+  it('keeps it apart from the 2x2 and 3x3, so none wipes another', () => {
+    const threeByThree = [...solvedState()]
+    const twoByTwo = [...solvedState(STANDARD_SCHEME, PUZZLE_2X2)]
+    saveCube(threeByThree)
+    saveCube(twoByTwo)
+    saveCube(fourByFour())
+    expect(loadCube()).toEqual(threeByThree)
+    expect(loadCube(localStorage, PUZZLE_2X2)).toEqual(twoByTwo)
+    expect(loadCube(localStorage, PUZZLE_4X4)).toEqual(fourByFour())
+    expect(localStorage.getItem('rubiks-cube-solver/cube-4x4')).toBe(
+      JSON.stringify(fourByFour()),
+    )
+  })
+
+  it('starts blank with nothing saved, or something saved that is not 96 cells', () => {
+    expect(loadCube(localStorage, PUZZLE_4X4)).toBeNull()
+    localStorage.setItem(
+      'rubiks-cube-solver/cube-4x4',
+      JSON.stringify(emptyState()),
+    )
+    expect(loadCube(localStorage, PUZZLE_4X4)).toBeNull()
   })
 })

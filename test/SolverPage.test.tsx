@@ -19,7 +19,7 @@ import {
   STANDARD_SCHEME,
   type CubeState,
 } from '../src/cube/state.ts'
-import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../src/cube/puzzle.ts'
 import { loadCube, saveCube } from '../src/editor/storage.ts'
 import { pauseMs } from '../src/solve/playback.ts'
 import { toFaceletString } from '../src/solver/facelets.ts'
@@ -79,6 +79,8 @@ vi.mock('../src/view/CubeView.tsx', () => ({
 // have. This stand-in lets each test decide what the solver answers.
 const solver = vi.hoisted(() => ({
   ready: true,
+  /** Which cubes' solvers the page asked for (started), in order. */
+  started: [] as string[],
   solve: (facelets: string): Promise<Move[]> => {
     void facelets
     return Promise.resolve([])
@@ -86,10 +88,13 @@ const solver = vi.hoisted(() => ({
 }))
 vi.mock('../src/solver/solver.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/solver/solver.ts')>()),
-  getSolver: () => ({
-    isReady: () => solver.ready,
-    solve: (facelets: string) => solver.solve(facelets),
-  }),
+  getSolver: (puzzle?: { name: string }) => {
+    solver.started.push(puzzle?.name ?? '3x3')
+    return {
+      isReady: () => solver.ready,
+      solve: (facelets: string) => solver.solve(facelets),
+    }
+  },
 }))
 
 /** A promise the test resolves or rejects itself, to look at the app mid-solve. */
@@ -111,6 +116,7 @@ describe('SolverPage', () => {
   beforeEach(() => {
     localStorage.clear()
     solver.ready = true
+    solver.started = []
     solver.solve = () => Promise.resolve(parseMoves('R U'))
   })
 
@@ -846,6 +852,84 @@ describe('SolverPage', () => {
       expect(view.state).toEqual(saved)
       expect(
         screen.getByRole('button', { name: 'green, 1/4' }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  describe('a 4x4', () => {
+    afterEach(() => removeFakeCamera())
+
+    it('says which cube it is for, with a blank 4x4 of 96 squares', () => {
+      render(<SolverPage cube="4x4" />)
+      expect(
+        screen.getByRole('heading', { name: '4x4 Cube Solver' }),
+      ).toBeInTheDocument()
+      expect(view.state).toEqual(emptyState(PUZZLE_4X4))
+    })
+
+    it('paints squares, counting each colour out of 16', () => {
+      render(<SolverPage cube="4x4" />)
+      expect(
+        screen.getByRole('button', { name: 'white, 0/16' }),
+      ).toBeInTheDocument()
+      tap(0)
+      tap(95)
+      expect(view.state[0]).toBe('white')
+      expect(view.state[95]).toBe('white')
+      expect(
+        screen.getByRole('button', { name: 'white, 2/16' }),
+      ).toBeInTheDocument()
+    })
+
+    it('turns round with a swipe', () => {
+      render(<SolverPage cube="4x4" />)
+      const turned = turnBySwipe(new Quaternion(), 'left')
+      act(() => view.swipeTo(turned))
+      expect(view.orientation).toEqual(turned)
+    })
+
+    it('has Undo and Reset, but no Fill centres: its centre squares move', () => {
+      render(<SolverPage cube="4x4" />)
+      tap(40)
+      click('Undo')
+      expect(view.state[40]).toBeNull()
+      tap(40)
+      click('Reset')
+      expect(view.state).toEqual(emptyState(PUZZLE_4X4))
+      expect(screen.queryByRole('button', { name: 'Fill centres' })).toBeNull()
+    })
+
+    it("can't be scanned or solved yet, and doesn't start a solver", () => {
+      fakeCamera()
+      render(<SolverPage cube="4x4" />)
+      expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
+      expect(
+        screen.getByRole('button', { name: 'Solving a 4x4 is coming soon' }),
+      ).toBeDisabled()
+      expect(solver.started).toEqual([])
+    })
+
+    it('keeps the painted 4x4 after a page refresh, apart from the other cubes', () => {
+      const { unmount } = render(<SolverPage cube="4x4" />)
+      tap(77)
+      unmount()
+      expect(loadCube(localStorage, PUZZLE_4X4)?.[77]).toBe('white')
+      expect(loadCube()).toBeNull()
+      expect(loadCube(localStorage, PUZZLE_2X2)).toBeNull()
+
+      render(<SolverPage cube="4x4" />)
+      expect(view.state[77]).toBe('white')
+    })
+
+    it('opens a 4x4 saved earlier', () => {
+      const saved = [...emptyState(PUZZLE_4X4)]
+      saved[60] = 'green'
+      saveCube(saved)
+      render(<SolverPage cube="4x4" />)
+      expect(view.state).toEqual(saved)
+      expect(
+        screen.getByRole('button', { name: 'green, 1/16' }),
       ).toBeInTheDocument()
     })
   })

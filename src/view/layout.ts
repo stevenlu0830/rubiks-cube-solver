@@ -8,8 +8,8 @@ import { perPuzzle, PUZZLE_3X3, type Puzzle } from '../cube/puzzle.ts'
  *
  * Units and axes match cube/geometry.ts (which also happen to be three.js's
  * defaults): neighbouring cubie centres are 1 apart, so a 3x3 spans -1.5
- * to 1.5 on each axis (a 2x2, -1 to 1), with x right, y up and z towards
- * the viewer.
+ * to 1.5 on each axis (a 2x2, -1 to 1; a 4x4, -2 to 2), with x right, y up
+ * and z towards the viewer.
  */
 
 type Tuple3 = [number, number, number]
@@ -81,7 +81,8 @@ function stickerLayout(cell: number, puzzle: Puzzle): StickerLayout {
 
 /**
  * The cubies that show, each with its stickers: 26 on a 3x3 (the hidden one
- * in the middle is skipped), 8 on a 2x2.
+ * in the middle is skipped), 8 on a 2x2, 56 on a 4x4 (the 8 hidden in the
+ * middle are skipped).
  */
 export const cubiesOf = perPuzzle((puzzle): readonly CubieLayout[] => {
   const byPosition = new Map<string, CubieLayout>()

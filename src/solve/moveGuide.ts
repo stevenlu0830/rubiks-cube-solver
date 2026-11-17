@@ -73,10 +73,16 @@ const OPPOSITE: Record<Direction, Direction> = {
   down: 'up',
 }
 
-/** The face a move turns, e.g. 'R' for "R'". */
+/**
+ * The face a face turn turns, e.g. 'R' for "R'". Not for a whole-cube turn,
+ * nor a 4x4's wide or inner-layer turns, which have no words here yet: an
+ * Rw described as R would send the user the wrong way.
+ */
 export function turnedFace(move: Move): Face {
   const face = move[0]
-  if (!(face in FACE_NAMES)) throw new Error(`${move} is not a face turn`)
+  if (!(face in FACE_NAMES) || move.includes('w')) {
+    throw new Error(`${move} is not a face turn`)
+  }
   return face as Face
 }
 

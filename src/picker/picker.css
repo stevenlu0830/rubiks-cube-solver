@@ -31,12 +31,15 @@
   border-radius: 16px;
   color: var(--text);
   text-decoration: none;
+}
+
+a.cube-card {
   cursor: pointer;
   /* Taps never trigger double-tap zoom, as for buttons (index.css). */
   touch-action: manipulation;
 }
 
-.cube-card:active {
+a.cube-card:active {
   background: var(--border);
 }
 
@@ -44,6 +47,11 @@
   flex: none;
   width: 72px;
   height: 80px;
+}
+
+/* Not ready yet: the picture is faded, the words stay easy to read. */
+.cube-card-soon .cube-icon {
+  opacity: 0.4;
 }
 
 .cube-card-text {

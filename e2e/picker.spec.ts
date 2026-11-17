@@ -52,6 +52,21 @@ test('goes to the 2x2 too, and says when one is in progress', async ({
   await expect(twoByTwo).toContainText('In progress')
 })
 
+test('shows the 4x4 as coming soon, though #/4x4 opens its page to try', async ({
+  page,
+}) => {
+  await page.goto('./')
+  const fourByFour = page.getByRole('listitem').filter({ hasText: '4x4' })
+  await expect(fourByFour).toContainText('Coming soon')
+  await expect(fourByFour.getByRole('link')).toHaveCount(0)
+
+  await page.goto('./#/4x4')
+  await expect(page).toHaveTitle("4x4 · Rubik's Cube Solver")
+  await expect(
+    page.getByRole('heading', { name: '4x4 Cube Solver', level: 1 }),
+  ).toBeVisible()
+})
+
 test('keeps a cube painted on an earlier visit, and says so on the picker', async ({
   page,
 }) => {

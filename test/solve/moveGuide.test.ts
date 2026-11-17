@@ -42,6 +42,12 @@ describe('describeMove', () => {
   it('refuses whole-cube turns, which never appear in a solution', () => {
     expect(() => turnedFace('x')).toThrow()
   })
+
+  it("refuses a 4x4's wide and inner-layer turns rather than describe them as face turns", () => {
+    expect(() => turnedFace('Rw')).toThrow('Rw is not a face turn')
+    expect(() => describeMove("Uw'")).toThrow()
+    expect(() => turnedFace('r2')).toThrow('r2 is not a face turn')
+  })
 })
 
 describe('TURN_GUIDES', () => {

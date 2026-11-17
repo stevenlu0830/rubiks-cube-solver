@@ -45,7 +45,7 @@ import { PlaybackControls } from './solve/PlaybackControls.tsx'
 import { SolveCard } from './solve/SolveCard.tsx'
 import { StepList } from './solve/StepList.tsx'
 import { toFaceletString } from './solver/facelets.ts'
-import { getSolver, solverErrorMessage } from './solver/solver.ts'
+import { getSolver, hasSolver, solverErrorMessage } from './solver/solver.ts'
 import { CubeView } from './view/CubeView.tsx'
 import { cubeAsShown, frontCells } from './view/orientation.ts'
 import './App.css'
@@ -57,9 +57,13 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
 /**
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
+ *
+ * A 4x4 can so far only be painted: checking, solving and scanning one are
+ * still to come, so its page has no Scan button and Solve is switched off.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
+  const solvable = hasSolver(puzzle)
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -112,8 +116,8 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
 
   // Start the solver's setup now, so it's ready by the time the cube is painted.
   useEffect(() => {
-    getSolver(puzzle)
-  }, [puzzle])
+    if (solvable) getSolver(puzzle)
+  }, [solvable, puzzle])
 
   // While playing, start the next turn after a short pause.
   const waitingToPlay =
@@ -146,6 +150,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
       : null
 
   async function handleSolve() {
+    if (!solvable) return
     const validation = validateCube(cube)
     if (!validation.valid || validation.solved) {
       setSolve({ cube, status: { stage: 'checked', validation } })
@@ -334,7 +339,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
               </button>
             </nav>
             <div className="main-actions">
-              {canOfferCamera() && (
+              {solvable && canOfferCamera() && (
                 <button
                   type="button"
                   className="scan-button"
@@ -348,14 +353,20 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
                   Scan
                 </button>
               )}
-              <button
-                type="button"
-                className="solve-button"
-                onClick={handleSolve}
-                disabled={status?.stage === 'solving'}
-              >
-                {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
-              </button>
+              {solvable ? (
+                <button
+                  type="button"
+                  className="solve-button"
+                  onClick={handleSolve}
+                  disabled={status?.stage === 'solving'}
+                >
+                  {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
+                </button>
+              ) : (
+                <button type="button" className="solve-button" disabled>
+                  Solving a {puzzle.name} is coming soon
+                </button>
+              )}
             </div>
           </>
         )}

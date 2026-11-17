@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dot,
   faceNormal,
+  layerFrom,
   outerLayer,
   quarterTurnClockwise,
   snapToGrid,
@@ -9,7 +10,7 @@ import {
   stickerIndexAt,
   stickersOf,
 } from '../../src/cube/geometry.ts'
-import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import { CENTER, cellIndex, FACES } from '../../src/cube/state.ts'
 
 describe('STICKERS', () => {
@@ -105,15 +106,72 @@ describe('stickersOf a 2x2', () => {
   })
 })
 
+describe('stickersOf a 4x4', () => {
+  const stickers = stickersOf(PUZZLE_4X4)
+
+  it('places 96 stickers at 96 different spots', () => {
+    const spots = new Set(
+      stickers.map(({ position, normal }) => `${position}|${normal}`),
+    )
+    expect(stickers).toHaveLength(96)
+    expect(spots.size).toBe(96)
+  })
+
+  it('puts the stickers on 56 cubies, 1.5 out from the middle on the outside', () => {
+    for (const { position, normal } of stickers) {
+      expect(dot(position, normal)).toBe(1.5)
+      for (const coordinate of position) {
+        expect([-1.5, -0.5, 0.5, 1.5]).toContain(coordinate)
+      }
+    }
+    const cubies = new Set(stickers.map(({ position }) => `${position}`))
+    expect(cubies.size).toBe(56)
+  })
+
+  it('reads each face left to right, top to bottom, as in the net', () => {
+    const at = (face: 'U' | 'F', n: number) =>
+      stickers[cellIndex(face, n, PUZZLE_4X4)].position
+    expect(at('U', 0)).toEqual([-1.5, 1.5, -1.5]) // top: back left
+    expect(at('U', 15)).toEqual([1.5, 1.5, 1.5]) // top: front right
+    expect(at('F', 0)).toEqual([-1.5, 1.5, 1.5]) // front: top left
+    expect(at('F', 1)).toEqual([-0.5, 1.5, 1.5]) // front: next along the top
+    expect(at('F', 4)).toEqual([-1.5, 0.5, 1.5]) // front: second row, left
+  })
+
+  it('finds every sticker again from where it is', () => {
+    stickers.forEach(({ position, normal }, cell) => {
+      expect(stickerIndexAt(position, normal, PUZZLE_4X4)).toBe(cell)
+    })
+  })
+})
+
 describe('outerLayer', () => {
-  it('is 1 out from the middle on a 3x3, and 0.5 on a 2x2', () => {
+  it('is 1 out from the middle on a 3x3, 0.5 on a 2x2 and 1.5 on a 4x4', () => {
     expect(outerLayer(PUZZLE_3X3)).toBe(1)
     expect(outerLayer(PUZZLE_2X2)).toBe(0.5)
+    expect(outerLayer(PUZZLE_4X4)).toBe(1.5)
+  })
+})
+
+describe('layerFrom', () => {
+  it("counts a 4x4's layers in from a face: 0 touching it, 3 touching the opposite face", () => {
+    expect(layerFrom('R', [1.5, 0.5, -0.5], PUZZLE_4X4)).toBe(0)
+    expect(layerFrom('R', [0.5, 0.5, -0.5], PUZZLE_4X4)).toBe(1)
+    expect(layerFrom('R', [-0.5, 0.5, -0.5], PUZZLE_4X4)).toBe(2)
+    expect(layerFrom('L', [-0.5, 0.5, -0.5], PUZZLE_4X4)).toBe(1)
+    expect(layerFrom('U', [-1.5, -1.5, 1.5], PUZZLE_4X4)).toBe(3)
+  })
+
+  it('works the same on a 3x3 and a 2x2', () => {
+    expect(layerFrom('F', [0, 0, 1], PUZZLE_3X3)).toBe(0)
+    expect(layerFrom('F', [0, 0, 0], PUZZLE_3X3)).toBe(1)
+    expect(layerFrom('B', [0, 0, 1], PUZZLE_3X3)).toBe(2)
+    expect(layerFrom('D', [0.5, 0.5, 0.5], PUZZLE_2X2)).toBe(1)
   })
 })
 
 describe('snapToGrid', () => {
-  it('rounds to the nearest half, for both cubes', () => {
+  it('rounds to the nearest half, for every cube', () => {
     expect(snapToGrid([0.4999999, -0.5000001, 1.0000002])).toEqual([
       0.5, -0.5, 1,
     ])

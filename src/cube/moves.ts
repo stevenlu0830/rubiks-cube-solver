@@ -1,13 +1,11 @@
 import {
-  dot,
   faceNormal,
-  outerLayer,
+  layerFrom,
   quarterTurnClockwise,
   stickerIndexAt,
   stickersOf,
-  type Vec3,
 } from './geometry.ts'
-import { perPuzzle, puzzleOf, type Puzzle } from './puzzle.ts'
+import { perPuzzle, PUZZLE_3X3, puzzleOf, type Puzzle } from './puzzle.ts'
 import { FACES, type Face } from './state.ts'
 
 /**
@@ -17,17 +15,87 @@ import { FACES, type Face } from './state.ts'
  * - x y z turn the whole cube the same way as R, U and F respectively. They
  *   change which side faces the user but don't scramble anything.
  * - A ' suffix means anticlockwise; a 2 suffix means a half turn.
+ *
+ * A 4x4 has two inner layers between each pair of opposite faces, so it
+ * also has:
+ * - Uw Dw Lw Rw Fw Bw ("wide") turn that face together with the inner
+ *   layer behind it: the outer two layers at once.
+ * - u d l r f b turn only the inner layer behind that face, the same way as
+ *   the face: r is the layer next to R, turning like R.
  */
 export type Axis = 'x' | 'y' | 'z'
-type BaseMove = Face | Axis
+type Wide = `${Face}w`
+type Inner = Lowercase<Face>
+type BaseMove = Face | Wide | Inner | Axis
 export type Move = `${BaseMove}${'' | "'" | '2'}`
 
-const BASE_MOVES: readonly BaseMove[] = [...FACES, 'x', 'y', 'z']
+const AXES: readonly Axis[] = ['x', 'y', 'z']
 const AXIS_FACE: Record<Axis, Face> = { x: 'R', y: 'U', z: 'F' }
 
-export const MOVES: readonly Move[] = BASE_MOVES.flatMap(
-  (base) => [base, `${base}'`, `${base}2`] as const,
-)
+/** Every cube's: its 6 faces, and the whole cube 3 ways. */
+const EVERY_CUBE: readonly BaseMove[] = [...FACES, ...AXES]
+/** Only a cube with inner layers to itself has these (a 4x4). */
+const LAYERS: readonly BaseMove[] = [
+  ...FACES.map((face): Wide => `${face}w`),
+  ...FACES.map((face) => face.toLowerCase() as Inner),
+]
+
+/** The moves this cube's turns are made from: R, Rw, r, x… */
+function basesOf(puzzle: Puzzle): readonly BaseMove[] {
+  return puzzle.size >= 4 ? [...EVERY_CUBE, ...LAYERS] : EVERY_CUBE
+}
+
+/** Each move a quarter turn clockwise, anticlockwise ('), and a half turn (2). */
+const withTurns = (bases: readonly BaseMove[]): Move[] =>
+  bases.flatMap((base) => [base, `${base}'`, `${base}2`] as const)
+
+/** The moves every cube has: 18 face turns and 9 whole-cube turns. */
+export const MOVES: readonly Move[] = withTurns(EVERY_CUBE)
+
+/** The moves only a 4x4 has: 18 wide turns and 18 inner-layer turns. */
+export const LAYER_MOVES: readonly Move[] = withTurns(LAYERS)
+
+/** Every move this cube can make: MOVES, plus LAYER_MOVES on a 4x4. */
+export function movesOf(puzzle: Puzzle): readonly Move[] {
+  return withTurns(basesOf(puzzle))
+}
+
+/** A move without its ' or 2: R, Rw, r or x. */
+function baseOf(move: Move): BaseMove {
+  return move.replace(/['2]$/, '') as BaseMove
+}
+
+/** The layers a move turns (see turnedLayers). */
+export interface LayerTurn {
+  /** The face the move is named after: it turns clockwise as seen looking at this face. */
+  face: Face
+  /**
+   * Which layers turn, counted in from that face (see layerFrom): 0 is the
+   * face itself, 1 the inner layer behind it.
+   */
+  layers: readonly number[]
+}
+
+/**
+ * Which face a move is named after and which of its layers turn: [0] for a
+ * face turn (R), [0, 1] for a wide turn (Rw), [1] for an inner layer (r).
+ * A whole-cube turn turns every layer: x turns all of them like R.
+ */
+export function turnedLayers(
+  move: Move,
+  puzzle: Puzzle = PUZZLE_3X3,
+): LayerTurn {
+  const base = baseOf(move)
+  if (base in AXIS_FACE) {
+    return {
+      face: AXIS_FACE[base as Axis],
+      layers: Array.from({ length: puzzle.size }, (_, layer) => layer),
+    }
+  }
+  const face = base[0].toUpperCase() as Face
+  const layers = base.endsWith('w') ? [0, 1] : base === face ? [0] : [1]
+  return { face, layers }
+}
 
 /**
  * A permutation p describes a move as "new cell j takes the colour of old
@@ -36,13 +104,13 @@ export const MOVES: readonly Move[] = BASE_MOVES.flatMap(
 type Permutation = readonly number[]
 
 function quarterTurn(base: BaseMove, puzzle: Puzzle): Permutation {
-  const wholeCube = base === 'x' || base === 'y' || base === 'z'
-  const axis: Vec3 = faceNormal(wholeCube ? AXIS_FACE[base] : base)
+  const { face, layers } = turnedLayers(base, puzzle)
+  const axis = faceNormal(face)
   const stickers = stickersOf(puzzle)
   const source = stickers.map((_, i) => i)
   stickers.forEach(({ position, normal }, i) => {
-    // A face turn only moves the layer of cubies touching that face.
-    if (!wholeCube && dot(position, axis) !== outerLayer(puzzle)) return
+    // Only the cubies in the turning layers move.
+    if (!layers.includes(layerFrom(face, position, puzzle))) return
     const j = stickerIndexAt(
       quarterTurnClockwise(position, axis),
       quarterTurnClockwise(normal, axis),
@@ -62,7 +130,7 @@ function then(first: Permutation, second: Permutation): Permutation {
 const permutationsOf = perPuzzle(
   (puzzle) =>
     new Map<Move, Permutation>(
-      BASE_MOVES.flatMap((base) => {
+      basesOf(puzzle).flatMap((base) => {
         const quarter = quarterTurn(base, puzzle)
         const half = then(quarter, quarter)
         return [
@@ -74,21 +142,23 @@ const permutationsOf = perPuzzle(
     ),
 )
 
-const MOVE_NAMES: ReadonlySet<string> = new Set(MOVES)
+const MOVE_NAMES: ReadonlySet<string> = new Set([...MOVES, ...LAYER_MOVES])
 
 export function isMove(token: string): token is Move {
   return MOVE_NAMES.has(token)
 }
 
 /**
- * Works on any array of cells, not only colours: 54 for a 3x3, or 24 for
- * a 2x2 (see puzzleOf). Tests use this with numbered cells to check every
- * cell lands exactly where it should.
+ * Works on any array of cells, not only colours: 54 for a 3x3, 24 for a
+ * 2x2 or 96 for a 4x4 (see puzzleOf). Tests use this with numbered cells
+ * to check every cell lands exactly where it should. Wide and inner-layer
+ * moves only work on a 4x4: a 2x2 or 3x3 has no inner layer to itself.
  */
 export function applyMove<T>(state: readonly T[], move: Move): T[] {
-  return permutationsOf(puzzleOf(state))
-    .get(move)!
-    .map((i) => state[i])
+  const puzzle = puzzleOf(state)
+  const permutation = permutationsOf(puzzle).get(move)
+  if (!permutation) throw new Error(`A ${puzzle.name} can't do ${move}`)
+  return permutation.map((i) => state[i])
 }
 
 export function applyMoves<T>(
@@ -112,7 +182,7 @@ export function invertMoves(moves: readonly Move[]): Move[] {
   return [...moves].reverse().map(invertMove)
 }
 
-/** Parses space-separated notation such as "R U R' U2". */
+/** Parses space-separated notation such as "R U R' U2" or "Rw2 r'". */
 export function parseMoves(text: string): Move[] {
   return text
     .split(/\s+/)

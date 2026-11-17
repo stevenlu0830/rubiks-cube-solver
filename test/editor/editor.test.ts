@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
@@ -193,6 +193,30 @@ describe('on a 2x2', () => {
   })
 
   it('has no centres to fill', () => {
+    expect(centersFilled(start().cube)).toBe(true)
+    expect(run([{ type: 'fillCenters' }], start())).toEqual(start())
+  })
+})
+
+describe('on a 4x4', () => {
+  const start = () => initialEditorState(emptyState(PUZZLE_4X4))
+
+  it('paints and clears cells, with Undo', () => {
+    const painted = run([{ type: 'paint', cell: 95, color: 'blue' }], start())
+    expect(painted.cube[95]).toBe('blue')
+    expect(painted.cube).toHaveLength(96)
+    expect(run([{ type: 'undo' }], painted).cube).toEqual(start().cube)
+  })
+
+  it('resets to 96 blank cells', () => {
+    const reset = run(
+      [{ type: 'paint', cell: 0, color: 'red' }, { type: 'reset' }],
+      start(),
+    )
+    expect(reset.cube).toEqual(emptyState(PUZZLE_4X4))
+  })
+
+  it('has no fixed centres to fill: its centre squares move', () => {
     expect(centersFilled(start().cube)).toBe(true)
     expect(run([{ type: 'fillCenters' }], start())).toEqual(start())
   })

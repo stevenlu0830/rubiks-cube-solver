@@ -13,16 +13,17 @@ import { COLORS, type CubeState } from '../cube/state.ts'
  * simply starts blank.
  *
  * Each cube is saved in its own place, so painting a 2x2 never wipes a 3x3
- * and the other way round.
+ * or a 4x4, and the other way round.
  */
 
 const STORAGE_KEYS: Readonly<Record<CubeType, string>> = {
   // The name from before the app had a 2x2, so cubes saved then still load.
   '3x3': 'rubiks-cube-solver/cube',
   '2x2': 'rubiks-cube-solver/cube-2x2',
+  '4x4': 'rubiks-cube-solver/cube-4x4',
 }
 
-/** Saves a 3x3 or 2x2 (told apart by how many cells it has) in its own place. */
+/** Saves a 2x2, 3x3 or 4x4 (told apart by how many cells it has) in its own place. */
 export function saveCube(
   cube: CubeState,
   storage: Storage = localStorage,

@@ -3,6 +3,7 @@ import {
   perPuzzle,
   PUZZLE_2X2,
   PUZZLE_3X3,
+  PUZZLE_4X4,
   PUZZLES,
   puzzleOf,
   puzzleOfSide,
@@ -31,9 +32,21 @@ describe('PUZZLES', () => {
     })
   })
 
+  it('describes a 4x4: 16 squares a face, 96 in all, 16 of each colour, and no fixed centres', () => {
+    expect(PUZZLE_4X4).toEqual({
+      name: '4x4',
+      size: 4,
+      cellsPerFace: 16,
+      cellCount: 96,
+      cellsPerColor: 16,
+      hasCenters: false,
+    })
+  })
+
   it('finds each by its name', () => {
     expect(PUZZLES['2x2']).toBe(PUZZLE_2X2)
     expect(PUZZLES['3x3']).toBe(PUZZLE_3X3)
+    expect(PUZZLES['4x4']).toBe(PUZZLE_4X4)
   })
 })
 
@@ -41,6 +54,7 @@ describe('puzzleOf', () => {
   it('tells the cube from how many cells it has', () => {
     expect(puzzleOf(Array(54))).toBe(PUZZLE_3X3)
     expect(puzzleOf(Array(24))).toBe(PUZZLE_2X2)
+    expect(puzzleOf(Array(96))).toBe(PUZZLE_4X4)
   })
 
   it('refuses any other number of cells', () => {
@@ -53,6 +67,7 @@ describe('puzzleOfSide', () => {
   it("tells the cube from one side's squares", () => {
     expect(puzzleOfSide(Array(9))).toBe(PUZZLE_3X3)
     expect(puzzleOfSide(Array(4))).toBe(PUZZLE_2X2)
+    expect(puzzleOfSide(Array(16))).toBe(PUZZLE_4X4)
     expect(() => puzzleOfSide(Array(5))).toThrow()
   })
 })

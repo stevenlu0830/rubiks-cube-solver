@@ -65,6 +65,14 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
+    test('the 4x4 painting screen', async ({ page }) => {
+      await page.goto('./#/4x4')
+      await expect(
+        page.getByRole('button', { name: 'white, 0/16' }),
+      ).toBeVisible()
+      await expectNoProblems(page)
+    })
+
     test('the 2x2 "already solved" message', async ({ page }) => {
       await page.addInitScript(
         savedCube,

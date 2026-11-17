@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import type { SolveRequest, SolverMessage } from '../../src/solver/protocol.ts'
 import {
   createSolver,
   getSolver,
+  hasSolver,
   SolverError,
   solverErrorMessage,
   type WorkerLike,
@@ -135,5 +136,30 @@ describe('getSolver', () => {
     expect(getSolver()).toBe(threeByThree) // a 3x3 unless told
     expect(started).toHaveLength(2)
     expect(started[1]).toContain('solver.worker')
+  })
+})
+
+describe('hasSolver', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('says a 2x2 and a 3x3 have a solver, and a 4x4 not yet', () => {
+    expect(hasSolver(PUZZLE_2X2)).toBe(true)
+    expect(hasSolver(PUZZLE_3X3)).toBe(true)
+    expect(hasSolver(PUZZLE_4X4)).toBe(false)
+  })
+
+  it("won't start a 4x4 solver, so no worker is started for nothing", () => {
+    const started = vi.fn()
+    vi.stubGlobal(
+      'Worker',
+      class extends FakeWorker {
+        constructor() {
+          super()
+          started()
+        }
+      },
+    )
+    expect(() => getSolver(PUZZLE_4X4)).toThrow("There's no 4x4 solver yet")
+    expect(started).not.toHaveBeenCalled()
   })
 })

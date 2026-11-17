@@ -108,7 +108,7 @@ export function screenSideOf(orientation: Quaternion, face: Face): ScreenSide {
  * on top right now, F4 whatever centre faces them, and so on. The solver is
  * given the cube this way, so its moves (R, U, …) mean the sides the user
  * actually sees, and the user can hold their real cube the same way. Works
- * for either cube (see puzzleOf).
+ * for any cube (see puzzleOf).
  */
 export function cubeAsShown<T>(
   cube: readonly T[],
@@ -136,9 +136,9 @@ const cellNumbers = perPuzzle((puzzle) =>
 )
 
 /**
- * The cells on the side facing the viewer (9 on a 3x3, 4 on a 2x2), in the
- * order a photo of that side reads them: row by row from the top left, as
- * seen on screen.
+ * The cells on the side facing the viewer (9 on a 3x3, 4 on a 2x2, 16 on
+ * a 4x4), in the order a photo of that side reads them: row by row from
+ * the top left, as seen on screen.
  */
 export function frontCells(
   orientation: Quaternion,

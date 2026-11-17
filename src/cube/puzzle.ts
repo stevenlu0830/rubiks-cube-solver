@@ -16,29 +16,36 @@
  *           D2 D3
  *
  * Cell U0 is index 0, R0 is 4, F0 is 8, D0 is 12, L0 is 16, B0 is 20.
+ *
+ * A 4x4 is the same again with 16 cells per face (U0 to U15, …), 96 in
+ * all. It has four centre squares on each face, but they move about as the
+ * inner layers turn, so like a 2x2 it has no fixed centre to say which
+ * colour a face is.
  */
 
-export const CUBE_TYPES = ['2x2', '3x3'] as const
+export const CUBE_TYPES = ['2x2', '3x3', '4x4'] as const
 export type CubeType = (typeof CUBE_TYPES)[number]
 
 export interface Puzzle {
   name: CubeType
-  /** Squares along each edge of a face: 2 or 3. */
-  size: 2 | 3
-  /** Squares on each face: 4 or 9. */
+  /** Squares along each edge of a face: 2, 3 or 4. */
+  size: 2 | 3 | 4
+  /** Squares on each face: 4, 9 or 16. */
   cellsPerFace: number
-  /** Squares on the whole cube: 24 or 54. */
+  /** Squares on the whole cube: 24, 54 or 96. */
   cellCount: number
-  /** How many squares of each colour a real cube has: one face's worth, 4 or 9. */
+  /** How many squares of each colour a real cube has: one face's worth, 4, 9 or 16. */
   cellsPerColor: number
   /**
-   * Whether each face has a centre square. Centres never move, so on a 3x3
-   * they say which colour each face is; a 2x2 has none.
+   * Whether each face has a single centre square, which never moves, so on
+   * a 3x3 the centres say which colour each face is. A 2x2 has none; a
+   * 4x4's four centre squares on each face move about, so it counts as
+   * having none too.
    */
   hasCenters: boolean
 }
 
-function puzzle(name: CubeType, size: 2 | 3): Puzzle {
+function puzzle(name: CubeType, size: Puzzle['size']): Puzzle {
   const cellsPerFace = size * size
   return {
     name,
@@ -52,15 +59,17 @@ function puzzle(name: CubeType, size: 2 | 3): Puzzle {
 
 export const PUZZLE_2X2 = puzzle('2x2', 2)
 export const PUZZLE_3X3 = puzzle('3x3', 3)
+export const PUZZLE_4X4 = puzzle('4x4', 4)
 
 export const PUZZLES: Readonly<Record<CubeType, Puzzle>> = {
   '2x2': PUZZLE_2X2,
   '3x3': PUZZLE_3X3,
+  '4x4': PUZZLE_4X4,
 }
 
 /**
  * Which cube a list of cells is for, told by how many there are: 24 for a
- * 2x2, 54 for a 3x3. Works on colours, cell numbers, anything.
+ * 2x2, 54 for a 3x3, 96 for a 4x4. Works on colours, cell numbers, anything.
  */
 export function puzzleOf(cells: { readonly length: number }): Puzzle {
   const found = Object.values(PUZZLES).find(
@@ -72,7 +81,8 @@ export function puzzleOf(cells: { readonly length: number }): Puzzle {
 
 /**
  * Which cube one side's worth of squares is from, told by how many there
- * are: 4 for a 2x2, 9 for a 3x3. Works on colours, cell numbers, anything.
+ * are: 4 for a 2x2, 9 for a 3x3, 16 for a 4x4. Works on colours, cell
+ * numbers, anything.
  */
 export function puzzleOfSide(squares: { readonly length: number }): Puzzle {
   return puzzleOf({ length: 6 * squares.length })

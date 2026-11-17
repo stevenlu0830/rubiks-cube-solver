@@ -73,7 +73,10 @@ const LOOK_EVERY_MS = 250
 /** With Auto photo on: how long a side must stay still and clear before its photo is taken. */
 const AUTO_PHOTO_MS = 500
 
-/** The squares of a side, by name, for screen readers: a 3x3's 9, or a 2x2's 4. */
+/**
+ * The squares of a side, by name, for screen readers: a 3x3's 9, a 2x2's
+ * 4, or a 4x4's 16 (scanning a 4x4 is still to come).
+ */
 const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
   3: [
     'top left',
@@ -87,6 +90,11 @@ const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
     'bottom right',
   ],
   2: ['top left', 'top right', 'bottom left', 'bottom right'],
+  4: ['top', 'upper middle', 'lower middle', 'bottom'].flatMap((row) =>
+    ['left', 'middle left', 'middle right', 'right'].map(
+      (column) => `${row} ${column}`,
+    ),
+  ),
 }
 
 interface ScannerProps {
