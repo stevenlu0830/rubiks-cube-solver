@@ -1,7 +1,12 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { Quaternion } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CORNER_CELLS, cornerCellsOf } from '../src/cube/cubies.ts'
+import {
+  CORNER_CELLS,
+  cornerCellsOf,
+  EDGES,
+  WING_CELLS,
+} from '../src/cube/cubies.ts'
 import {
   applyMove,
   applyMoves,
@@ -23,6 +28,7 @@ import { PUZZLE_2X2, PUZZLE_4X4 } from '../src/cube/puzzle.ts'
 import { loadCube, saveCube } from '../src/editor/storage.ts'
 import { pauseMs } from '../src/solve/playback.ts'
 import { toFaceletString } from '../src/solver/facelets.ts'
+import type { Solution } from '../src/solver/protocol.ts'
 import { SolverError } from '../src/solver/solver.ts'
 import { fakeCamera, removeFakeCamera } from './helpers/fakeCamera.ts'
 import {
@@ -81,7 +87,8 @@ const solver = vi.hoisted(() => ({
   ready: true,
   /** Which cubes' solvers the page asked for (started), in order. */
   started: [] as string[],
-  solve: (facelets: string): Promise<Move[]> => {
+  /** Just the moves, or for a 4x4 the moves and their stages. */
+  solve: (facelets: string): Promise<Move[] | Solution> => {
     void facelets
     return Promise.resolve([])
   },
@@ -92,7 +99,10 @@ vi.mock('../src/solver/solver.ts', async (importOriginal) => ({
     solver.started.push(puzzle?.name ?? '3x3')
     return {
       isReady: () => solver.ready,
-      solve: (facelets: string) => solver.solve(facelets),
+      solve: async (facelets: string): Promise<Solution> => {
+        const answer = await solver.solve(facelets)
+        return Array.isArray(answer) ? { moves: answer, stages: [] } : answer
+      },
     }
   },
 }))
@@ -899,15 +909,119 @@ describe('SolverPage', () => {
       expect(screen.queryByRole('button', { name: 'Fill centres' })).toBeNull()
     })
 
-    it("can't be scanned or solved yet, and doesn't start a solver", () => {
+    it("can't be scanned yet, and starts its own solver's setup straight away", () => {
       fakeCamera()
       render(<SolverPage cube="4x4" />)
       expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
-      expect(
-        screen.getByRole('button', { name: 'Solving a 4x4 is coming soon' }),
-      ).toBeDisabled()
-      expect(solver.started).toEqual([])
+      expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+      expect(solver.started).toEqual(['4x4'])
+    })
+
+    describe('Solve', () => {
+      const SOLVED_4X4 = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+      const renderWith = (cube: CubeState) => {
+        saveCube(cube)
+        render(<SolverPage cube="4x4" />)
+      }
+
+      it('asks for all 96 squares, pointing out the blank ones', () => {
+        render(<SolverPage cube="4x4" />)
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          '96 squares are still blank. Paint all 96 to match your cube.',
+        )
+        expect(view.highlight).toHaveLength(96)
+      })
+
+      it('says when the 4x4 is already solved', () => {
+        renderWith(SOLVED_4X4)
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent('already solved')
+      })
+
+      it('points at an edge piece painted the wrong way round, without asking the solver', () => {
+        solver.solve = vi.fn(() => Promise.resolve([]))
+        const cube = [...SOLVED_4X4]
+        const [first, second] = WING_CELLS[2 * EDGES.indexOf('UF')]
+        ;[cube[first], cube[second]] = [cube[second], cube[first]]
+        renderWith(cube)
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'There are two of the same white–green edge piece.',
+        )
+        expect(view.highlight).toHaveLength(4)
+        expect(solver.solve).not.toHaveBeenCalled()
+      })
+
+      it('sends the cube as seen to the solver, then lists the moves stage by stage', async () => {
+        const cube = applyMoves(SOLVED_4X4, parseMoves("r U Rw' F"))
+        const answer = deferred<Solution>()
+        solver.solve = vi.fn(() => answer.promise)
+        renderWith(cube)
+        const turned = turnBySwipe(new Quaternion(), 'up')
+        act(() => view.swipeTo(turned))
+
+        click('Solve')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'Finding a solution',
+        )
+        const shown = cubeAsShown(cube, turned)
+        expect(solver.solve).toHaveBeenCalledWith(toFaceletString(shown))
+        expect(vi.mocked(solver.solve).mock.calls[0][0]).toHaveLength(96)
+
+        await act(async () =>
+          answer.resolve({
+            moves: parseMoves("r' u R2 Rw2 B2 U2 F' U"),
+            stages: [
+              { name: 'centres', start: 0 },
+              { name: 'parity', start: 2 },
+              { name: 'finish', start: 6 },
+            ],
+          }),
+        )
+        const status = screen.getByRole('status')
+        expect(status).toHaveTextContent('A solution in 8 moves, in 3 stages:')
+        const stages = within(
+          screen.getByRole('list', { name: 'Solution' }),
+        ).getAllByRole('listitem')
+        expect(stages.map((stage) => stage.textContent)).toEqual([
+          "Centres (2 moves): r' u",
+          'Parity fix (4 moves): R2 Rw2 B2 U2',
+          "Finish like a 3x3 (2 moves): F' U",
+        ])
+        expect(status).toHaveTextContent(
+          'Step-by-step help for the 4x4 is coming soon.',
+        )
+        // Still painting: the 3D cube isn't held in place for stepping through.
+        expect(view.held).toBe(false)
+        expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+      })
+
+      it('says so when one move solves it', async () => {
+        solver.solve = () =>
+          Promise.resolve({
+            moves: parseMoves("R'"),
+            stages: [{ name: 'finish', start: 0 }],
+          })
+        renderWith(applyMoves(SOLVED_4X4, parseMoves('R')))
+        await act(async () => click('Solve'))
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'A solution in 1 move:',
+        )
+        expect(screen.getByRole('listitem')).toHaveTextContent(
+          "Finish like a 3x3 (1 move): R'",
+        )
+      })
+
+      it('says so if the solver fails', async () => {
+        solver.solve = () =>
+          Promise.reject(new SolverError('failed', 'no luck'))
+        renderWith(applyMoves(SOLVED_4X4, parseMoves('r U')))
+        await act(async () => click('Solve'))
+        expect(screen.getByRole('status')).toHaveTextContent(
+          "The solver couldn't solve this cube.",
+        )
+      })
     })
 
     it('keeps the painted 4x4 after a page refresh, apart from the other cubes', () => {

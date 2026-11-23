@@ -1,6 +1,5 @@
-import type { Move } from '../cube/moves.ts'
 import { PUZZLE_3X3, type CubeType, type Puzzle } from '../cube/puzzle.ts'
-import type { SolveRequest, SolverMessage } from './protocol.ts'
+import type { SolveRequest, Solution, SolverMessage } from './protocol.ts'
 
 /**
  * The page's side of the solver: starts the worker, sends it cubes, and
@@ -51,16 +50,18 @@ export interface WorkerLike {
 export interface Solver {
   /** True once the worker has finished setting up, so a solve will be quick. */
   isReady(): boolean
-  /** Face turns that solve the cube (see toFaceletString). Rejects with a SolverError. */
-  solve(facelets: string): Promise<Move[]>
+  /**
+   * The moves that solve the cube (see toFaceletString), and for a 4x4 its
+   * stages. Rejects with a SolverError.
+   */
+  solve(facelets: string): Promise<Solution>
 }
 
 /**
  * Starts each cube's solver worker. Each `new Worker(new URL(…))` must be
  * written out in full like this, so the build can find the worker's file.
- * The 4x4's solver is still to come.
  */
-const START_WORKER: Partial<Record<CubeType, () => WorkerLike>> = {
+const START_WORKER: Record<CubeType, () => WorkerLike> = {
   '3x3': () =>
     new Worker(new URL('./solver.worker.ts', import.meta.url), {
       type: 'module',
@@ -69,13 +70,12 @@ const START_WORKER: Partial<Record<CubeType, () => WorkerLike>> = {
     new Worker(new URL('./twoByTwo.worker.ts', import.meta.url), {
       type: 'module',
     }),
+  '4x4': () =>
+    new Worker(new URL('./fourByFour.worker.ts', import.meta.url), {
+      type: 'module',
+    }),
 }
-const startWorker = START_WORKER['3x3']!
-
-/** Whether this cube has a solver yet. */
-export function hasSolver(puzzle: Puzzle): boolean {
-  return START_WORKER[puzzle.name] !== undefined
-}
+const startWorker = START_WORKER['3x3']
 
 export function createSolver(
   makeWorker: () => WorkerLike = startWorker,
@@ -87,7 +87,7 @@ export function createSolver(
   const waiting = new Map<
     number,
     {
-      resolve: (moves: Move[]) => void
+      resolve: (solution: Solution) => void
       reject: (error: SolverError) => void
       timer: ReturnType<typeof setTimeout>
     }
@@ -106,8 +106,9 @@ export function createSolver(
       if (!request) return // e.g. it already timed out
       waiting.delete(message.id)
       clearTimeout(request.timer)
-      if (message.type === 'solution') request.resolve(message.moves)
-      else request.reject(new SolverError('failed', message.message))
+      if (message.type === 'solution') {
+        request.resolve({ moves: message.moves, stages: message.stages ?? [] })
+      } else request.reject(new SolverError('failed', message.message))
     }
     current.onerror = () =>
       stop(new SolverError('unavailable', 'The solver stopped working.'))
@@ -154,9 +155,7 @@ const shared = new Map<CubeType, Solver>()
  */
 export function getSolver(puzzle: Puzzle = PUZZLE_3X3): Solver {
   if (!shared.has(puzzle.name)) {
-    const start = START_WORKER[puzzle.name]
-    if (!start) throw new Error(`There's no ${puzzle.name} solver yet`)
-    shared.set(puzzle.name, createSolver(start))
+    shared.set(puzzle.name, createSolver(START_WORKER[puzzle.name]))
   }
   return shared.get(puzzle.name)!
 }

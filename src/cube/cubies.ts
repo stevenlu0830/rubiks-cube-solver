@@ -1,10 +1,18 @@
 import {
+  dot,
   faceNormal,
   outerLayer,
   stickerIndexAt,
+  stickersOf,
   type Vec3,
 } from './geometry.ts'
-import { perPuzzle, PUZZLE_3X3, puzzleOf, type Puzzle } from './puzzle.ts'
+import {
+  perPuzzle,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  puzzleOf,
+  type Puzzle,
+} from './puzzle.ts'
 import {
   CENTER,
   cellIndex,
@@ -23,7 +31,10 @@ import {
  * view, because the rules for a solvable cube (e.g. "corner twists must add
  * up to a multiple of 3") are about pieces, not stickers.
  *
- * A 2x2 has the same 8 corners, and no edges.
+ * A 2x2 has the same 8 corners, and no edges. A 4x4 has the same 8
+ * corners, but each of its 12 edges is two separate edge pieces (see
+ * WING_CELLS), and its centres are 24 pieces that move about (see
+ * centreCellsOf).
  *
  * Numbering and orientation follow Kociemba's cubie model. A piece's name
  * lists its faces starting with U or D (for corners) and going clockwise, so
@@ -96,6 +107,74 @@ export const CORNER_CELLS: readonly number[][] = cornerCellsOf(PUZZLE_3X3)
 export const EDGE_CELLS: readonly number[][] = EDGES.map((name) =>
   slotCells(name, PUZZLE_3X3),
 )
+
+/**
+ * The cells of the centre pieces: the squares that aren't on a corner or
+ * an edge. A 3x3 has 6, one in the middle of each face, which never move;
+ * a 4x4 has 24, four in the middle of each face, which do; a 2x2 has none.
+ */
+export const centreCellsOf = perPuzzle((puzzle): readonly number[] => {
+  const stickers = stickersOf(puzzle)
+  const onCubie = new Map<string, number>()
+  for (const { position } of stickers) {
+    onCubie.set(`${position}`, (onCubie.get(`${position}`) ?? 0) + 1)
+  }
+  return stickers.flatMap(({ position }, cell) =>
+    onCubie.get(`${position}`) === 1 ? [cell] : [],
+  )
+})
+
+/**
+ * A 4x4's 24 edge pieces (often called "wings"): two on each of the 12
+ * edges, in the order of EDGES, so pieces 2e and 2e + 1 are both on edge
+ * EDGES[e]. Each lists its two cells in the same order: first the one
+ * whose sticker turns clockwise into the other about the edge (see below).
+ *
+ * The two edge pieces of an edge are mirror images, and neither can be
+ * flipped round in place: turning the cube can take a piece to any edge
+ * slot, but it always arrives the same way round. So a piece's two colours,
+ * read in this order, say exactly which of the 24 it is: on a solved cube,
+ * the white–green edge has one piece reading white then green, and the
+ * other green then white.
+ */
+export const WING_CELLS: readonly (readonly [number, number])[] = (() => {
+  const outer = outerLayer(PUZZLE_4X4)
+  return EDGES.flatMap((name) => {
+    const [a, b] = ([...name] as Face[]).map(faceNormal)
+    // The direction the edge runs along: the axis neither face points down.
+    const along: Vec3 = [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ]
+    return [-0.5, 0.5].map((t): readonly [number, number] => {
+      const position: Vec3 = [0, 1, 2].map(
+        (k) => (a[k] + b[k]) * outer + along[k] * t,
+      ) as unknown as Vec3
+      const cellA = stickerIndexAt(position, a, PUZZLE_4X4)
+      const cellB = stickerIndexAt(position, b, PUZZLE_4X4)
+      // a × b is `along`, so face a's sticker comes first where the piece
+      // is on the + side of the edge's middle.
+      return dot(along, position) > 0 ? [cellA, cellB] : [cellB, cellA]
+    })
+  })
+})()
+
+/**
+ * Which of the 24 edge pieces (see WING_CELLS) is in each edge slot of a
+ * fully painted 4x4, told by its two colours in order: -1 where they match
+ * no real edge piece. Like a 2x2, a 4x4 has no fixed centres, so the
+ * standard colours are assumed (see faceColorsOf).
+ */
+export function wingsOf(cube: CubeState): number[] {
+  const solved = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+  const key = (cells: readonly number[], state: CubeState) =>
+    cells.map((cell) => state[cell]).join()
+  const pieceOf = new Map(
+    WING_CELLS.map((cells, piece) => [key(cells, solved), piece]),
+  )
+  return WING_CELLS.map((cells) => pieceOf.get(key(cells, cube)) ?? -1)
+}
 
 export function solvedCubies(): CubieCube {
   return {

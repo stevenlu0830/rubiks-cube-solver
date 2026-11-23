@@ -4,17 +4,21 @@ import {
   CORNER_CELLS,
   cornerCellsOf,
   EDGE_CELLS,
+  EDGES,
   fromCubies,
   solvedCubies,
+  WING_CELLS,
   type CubieCube,
 } from '../../src/cube/cubies.ts'
 import {
   applyMoves,
   MOVES,
+  movesOf,
   parseMoves,
   randomScramble,
 } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { FLIP_FIX, SWAP_FIX } from '../../src/solver/fourByFour.ts'
 import {
   CENTER,
   cellIndex,
@@ -374,6 +378,163 @@ describe('a 2x2', () => {
       expect(result.cells).toEqual(
         Array.from({ length: 24 }, (_, cell) => cell),
       )
+    }
+  })
+})
+
+describe('a 4x4', () => {
+  const SOLVED_4X4 = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+  const CORNERS_4X4 = cornerCellsOf(PUZZLE_4X4)
+  const TURNS = movesOf(PUZZLE_4X4).filter((move) => !/^[xyz]/.test(move))
+  const scrambled4x4 = (seed: number) => {
+    const random = seededRandom(seed)
+    return applyMoves(
+      SOLVED_4X4,
+      Array.from(
+        { length: 60 },
+        () => TURNS[Math.floor(random() * TURNS.length)],
+      ),
+    )
+  }
+
+  it('reports a solved 4x4 as already solved, whichever way it was painted', () => {
+    expect(validateCube(SOLVED_4X4)).toEqual({ valid: true, solved: true })
+    expect(validateCube(applyMoves(SOLVED_4X4, parseMoves("x y2 z'")))).toEqual(
+      { valid: true, solved: true },
+    )
+  })
+
+  it('passes 100 scrambled 4x4s as valid, held any of the 24 ways', () => {
+    const turns = MOVES.filter((move) => /^[xyz]/.test(move))
+    const random = seededRandom(78)
+    for (let seed = 1; seed <= 100; seed++) {
+      const held = applyMoves(scrambled4x4(seed), [
+        turns[Math.floor(random() * turns.length)],
+        turns[Math.floor(random() * turns.length)],
+      ])
+      expect(validateCube(held)).toEqual({ valid: true, solved: false })
+    }
+  })
+
+  it("accepts the cases a 3x3 can't have, a flipped edge or two swapped pieces: turning a 4x4 can reach them", () => {
+    for (const moves of [
+      FLIP_FIX,
+      SWAP_FIX,
+      parseMoves('r'),
+      parseMoves("u f'"),
+    ]) {
+      expect(validateCube(applyMoves(SOLVED_4X4, moves))).toEqual({
+        valid: true,
+        solved: false,
+      })
+    }
+  })
+
+  it('asks for all 96 squares to be painted', () => {
+    const result = expectProblem(emptyState(PUZZLE_4X4), 'unpainted')
+    expect(result.cells).toHaveLength(96)
+    expect(result.message).toBe(
+      '96 squares are still blank. Paint all 96 to match your cube.',
+    )
+  })
+
+  it('asks for exactly 16 squares of each colour', () => {
+    const cube = [...SOLVED_4X4]
+    cube[5] = 'blue' // a white centre painted blue
+    const result = expectProblem(cube, 'color-count')
+    expect(result.message).toBe(
+      'Each colour needs exactly 16 squares, but white has 15 and blue has 17.',
+    )
+    expect(result.cells).toHaveLength(17)
+  })
+
+  /** The cell of an edge piece (see WING_CELLS) that's this colour on a solved cube. */
+  const cellOf = (piece: number, color: string) =>
+    WING_CELLS[piece].find((cell) => SOLVED_4X4[cell] === color)!
+  const UF = 2 * EDGES.indexOf('UF')
+
+  it('catches an edge piece with the same colour on both sides', () => {
+    // White–green's green swapped with white–red's white: white–green
+    // becomes white twice (white–red becomes green–red, a real piece).
+    const UR = 2 * EDGES.indexOf('UR')
+    const result = expectProblem(
+      swapCells(SOLVED_4X4, cellOf(UF, 'green'), cellOf(UR, 'white')),
+      'edges',
+    )
+    expect(result.message).toBe(
+      "An edge piece is white on both sides, so it can't exist.",
+    )
+    expect(result.cells).toEqual(sorted([...WING_CELLS[UF]]))
+  })
+
+  it('catches edge pieces with colours from opposite faces, or one colour twice', () => {
+    // White–green's green swapped with yellow–green's yellow.
+    const DF = 2 * EDGES.indexOf('DF')
+    const result = expectProblem(
+      swapCells(SOLVED_4X4, cellOf(UF, 'green'), cellOf(DF, 'yellow')),
+      'edges',
+    )
+    expect(result.message).toMatch(
+      /^An edge piece has (white and yellow|yellow and white), which are on opposite sides of the cube, so it can't exist\. \(2 edge pieces have problems; all are highlighted\.\)$/,
+    )
+    expect(result.cells).toEqual(sorted([...WING_CELLS[UF], ...WING_CELLS[DF]]))
+  })
+
+  it('catches an edge piece painted the wrong way round, as its mirror-image twin appearing twice', () => {
+    const [first, second] = WING_CELLS[UF]
+    const result = expectProblem(swapCells(SOLVED_4X4, first, second), 'edges')
+    expect(result.message).toBe(
+      "There are two of the same white–green edge piece. A 4x4's two white–green edge pieces are mirror images, so one of these is probably painted the wrong way round. Check the highlighted edge pieces.",
+    )
+    expect(result.cells).toEqual(
+      sorted([...WING_CELLS[UF], ...WING_CELLS[UF + 1]]),
+    )
+  })
+
+  it('catches an edge piece that appears more than twice, so another is missing', () => {
+    // Both white–red pieces painted as copies of the first white–green one:
+    // three of it. The colours are made up elsewhere, to keep 16 of each.
+    const cube = [...SOLVED_4X4]
+    const UR = 2 * EDGES.indexOf('UR')
+    for (const piece of [UR, UR + 1]) {
+      WING_CELLS[piece].forEach((cell, i) => {
+        cube[cell] = SOLVED_4X4[WING_CELLS[UF][i]]
+      })
+    }
+    cube[cellOf(UF + 1, 'green')] = 'red'
+    cube[cellIndex('F', 5, PUZZLE_4X4)] = 'red' // a green centre
+    const result = expectProblem(cube, 'edges')
+    expect(result.message).toBe(
+      'The white–green edge piece appears more than once, so another edge piece is missing. Check the highlighted edge pieces.',
+    )
+    expect(result.cells).toEqual(
+      sorted([...WING_CELLS[UF], ...WING_CELLS[UR], ...WING_CELLS[UR + 1]]),
+    )
+  })
+
+  it('catches a corner whose colours are in mirror-image order', () => {
+    const [, urfRight, urfFront] = CORNERS_4X4[0]
+    const result = expectProblem(
+      swapCells(SOLVED_4X4, urfRight, urfFront),
+      'corners',
+    )
+    expect(result.message).toContain('mirror-image')
+    expect(result.cells).toEqual(sorted(CORNERS_4X4[0]))
+  })
+
+  it('catches one twisted corner, held any way, and highlights all corners', () => {
+    const [up, right, front] = CORNERS_4X4[0]
+    const twisted = [...SOLVED_4X4]
+    twisted[up] = SOLVED_4X4[front]
+    twisted[right] = SOLVED_4X4[up]
+    twisted[front] = SOLVED_4X4[right]
+    for (const turns of ['', 'x', "y2 z'"]) {
+      const result = expectProblem(
+        applyMoves(twisted, parseMoves(turns)),
+        'twist',
+      )
+      expect(result.message).toContain('A corner is twisted')
+      expect(result.cells).toHaveLength(24)
     }
   })
 })

@@ -4,7 +4,7 @@ import { applyMoves, parseMoves } from '../src/cube/moves.ts'
 import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
 import { solvedState, STANDARD_SCHEME } from '../src/cube/state.ts'
 import { STICKER_COLORS } from '../src/view/colors.ts'
-import { savedCube, SCRAMBLED, SCRAMBLED_2X2 } from './cubes.ts'
+import { savedCube, SCRAMBLED, SCRAMBLED_2X2, SCRAMBLED_4X4 } from './cubes.ts'
 import { fakeCamera, scanEverySide, showSide } from './fakeCamera.ts'
 
 /**
@@ -65,11 +65,24 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 4x4 painting screen', async ({ page }) => {
+    test('the 4x4 painting screen, a problem, and a solution listed by stage', async ({
+      page,
+    }) => {
       await page.goto('./#/4x4')
       await expect(
         page.getByRole('button', { name: 'white, 0/16' }),
       ).toBeVisible()
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Solve' }).click() // all blank
+      await expect(page.getByRole('status')).toContainText('still blank')
+      await expectNoProblems(page)
+
+      await page.addInitScript(savedCube, SCRAMBLED_4X4)
+      await page.reload()
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByRole('list', { name: 'Solution' })).toBeVisible({
+        timeout: 30_000,
+      })
       await expectNoProblems(page)
     })
 

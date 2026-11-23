@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
+  centreCellsOf,
   CORNER_CELLS,
   cornerCellsOf,
   CORNERS,
@@ -10,13 +11,16 @@ import {
   fromCubies,
   solvedCubies,
   toCubies,
+  WING_CELLS,
+  wingsOf,
   type CubieCube,
 } from '../../src/cube/cubies.ts'
 import { STICKERS, stickersOf, type Vec3 } from '../../src/cube/geometry.ts'
-import { PUZZLE_2X2, PUZZLE_3X3 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   applyMove,
   applyMoves,
+  movesOf,
   parseMoves,
   randomScramble,
   type Move,
@@ -297,5 +301,99 @@ describe('on a 2x2', () => {
     const cube = [...SOLVED_2X2]
     cube[7] = null
     expect(toCubies(cube)).toBeNull()
+  })
+})
+
+describe('centreCellsOf', () => {
+  it("finds a 3x3's 6 centres, a 4x4's 24 and a 2x2's none", () => {
+    expect(centreCellsOf(PUZZLE_3X3)).toEqual(
+      FACES.map((face) => cellIndex(face, CENTER)),
+    )
+    expect(centreCellsOf(PUZZLE_2X2)).toEqual([])
+    expect(centreCellsOf(PUZZLE_4X4)).toEqual(
+      FACES.flatMap((face) =>
+        [5, 6, 9, 10].map((n) => cellIndex(face, n, PUZZLE_4X4)),
+      ),
+    )
+  })
+})
+
+describe('on a 4x4', () => {
+  const SOLVED_4X4 = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+  const NUMBERED = Array.from({ length: 96 }, (_, i) => i)
+  const stickers = stickersOf(PUZZLE_4X4)
+
+  it('has 24 edge pieces, two on each edge, covering all 48 edge squares once', () => {
+    expect(WING_CELLS).toHaveLength(24)
+    const cells = WING_CELLS.flat()
+    expect(new Set(cells).size).toBe(48)
+    WING_CELLS.forEach((pair, piece) => {
+      const faces = pair.map((cell) => FACES[Math.floor(cell / 16)])
+      expect(faces.toSorted().join('')).toBe(
+        [...EDGES[piece >> 1]].toSorted().join(''),
+      )
+      // Both cells on the same cubie, which is on no corner and no centre.
+      expect(stickers[pair[0]].position).toEqual(stickers[pair[1]].position)
+    })
+    const corners = cornerCellsOf(PUZZLE_4X4).flat()
+    const centres = centreCellsOf(PUZZLE_4X4)
+    expect(
+      [...cells, ...corners, ...centres].toSorted((a, b) => a - b),
+    ).toEqual(NUMBERED)
+  })
+
+  it("lists each piece's cells in an order no move can change: a piece can never be flipped in place", () => {
+    const firsts = new Set(WING_CELLS.map(([first]) => first))
+    for (const move of movesOf(PUZZLE_4X4)) {
+      const from = applyMove(NUMBERED, move)
+      for (const first of firsts) expect(firsts).toContain(from[first])
+    }
+  })
+
+  it("reads the white–green edge's two pieces as mirror images: white then green, and green then white", () => {
+    const uf = EDGES.indexOf('UF')
+    const read = (piece: number) =>
+      WING_CELLS[piece].map((cell) => SOLVED_4X4[cell]).join(' then ')
+    expect([read(2 * uf), read(2 * uf + 1)].toSorted()).toEqual([
+      'green then white',
+      'white then green',
+    ])
+    const readings = WING_CELLS.map((_, piece) => read(piece))
+    expect(new Set(readings).size).toBe(24)
+  })
+
+  it('reads a solved 4x4 as every edge piece in its own slot', () => {
+    expect(wingsOf(SOLVED_4X4)).toEqual(Array.from({ length: 24 }, (_, i) => i))
+  })
+
+  it('finds all 24 edge pieces, once each, after any moves', () => {
+    const all = movesOf(PUZZLE_4X4)
+    const random = seededRandom(41)
+    for (let run = 0; run < 20; run++) {
+      const moves = Array.from(
+        { length: 40 },
+        () => all[Math.floor(random() * all.length)],
+      )
+      expect(
+        wingsOf(applyMoves(SOLVED_4X4, moves)).toSorted((a, b) => a - b),
+      ).toEqual(Array.from({ length: 24 }, (_, i) => i))
+    }
+  })
+
+  it('marks an edge piece whose colours match no real one as -1', () => {
+    const cube = [...SOLVED_4X4]
+    const [first, second] = WING_CELLS[5]
+    cube[first] = cube[second] // the same colour on both sides
+    expect(wingsOf(cube)[5]).toBe(-1)
+  })
+
+  it('reads its corners like a 2x2, assuming the standard colours', () => {
+    const moves = randomScramble(30, seededRandom(42))
+    const fourByFour = toCubies(applyMoves(SOLVED_4X4, moves))!
+    const twoByTwo = toCubies(
+      applyMoves(solvedState(STANDARD_SCHEME, PUZZLE_2X2), moves),
+    )!
+    expect(fourByFour).toEqual(twoByTwo)
+    expect(faceColorsOf(SOLVED_4X4)).toBe(STANDARD_SCHEME)
   })
 })

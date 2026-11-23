@@ -4,7 +4,6 @@ import type { SolveRequest, SolverMessage } from '../../src/solver/protocol.ts'
 import {
   createSolver,
   getSolver,
-  hasSolver,
   SolverError,
   solverErrorMessage,
   type WorkerLike,
@@ -61,8 +60,8 @@ describe('createSolver', () => {
     expect(a.facelets).toBe('first cube')
     latest().reply({ type: 'solution', id: b.id, moves: ['U'] })
     latest().reply({ type: 'solution', id: a.id, moves: ['R', "F'"] })
-    await expect(first).resolves.toEqual(['R', "F'"])
-    await expect(second).resolves.toEqual(['U'])
+    await expect(first).resolves.toEqual({ moves: ['R', "F'"], stages: [] })
+    await expect(second).resolves.toEqual({ moves: ['U'], stages: [] })
   })
 
   it('gives up after the time limit and starts afresh on the next try', async () => {
@@ -75,7 +74,7 @@ describe('createSolver', () => {
     const retry = solver.solve('cube')
     expect(workers).toHaveLength(2)
     latest().reply({ type: 'solution', id: latest().sent[0].id, moves: ['R'] })
-    await expect(retry).resolves.toEqual(['R'])
+    await expect(retry).resolves.toEqual({ moves: ['R'], stages: [] })
   })
 
   it('fails every waiting request when the worker crashes', async () => {
@@ -139,27 +138,41 @@ describe('getSolver', () => {
   })
 })
 
-describe('hasSolver', () => {
-  afterEach(() => vi.unstubAllGlobals())
-
-  it('says a 2x2 and a 3x3 have a solver, and a 4x4 not yet', () => {
-    expect(hasSolver(PUZZLE_2X2)).toBe(true)
-    expect(hasSolver(PUZZLE_3X3)).toBe(true)
-    expect(hasSolver(PUZZLE_4X4)).toBe(false)
+describe('a 4x4 solution', () => {
+  it('passes on where each stage starts', async () => {
+    let worker!: FakeWorker
+    const solver = createSolver(() => (worker = new FakeWorker()))
+    const solving = solver.solve('a 4x4')
+    const stages = [
+      { name: 'centres', start: 0 },
+      { name: 'finish', start: 2 },
+    ] as const
+    worker.reply({
+      type: 'solution',
+      id: worker.sent[0].id,
+      moves: ['r', 'u', 'R'],
+      stages: [...stages],
+    })
+    await expect(solving).resolves.toEqual({
+      moves: ['r', 'u', 'R'],
+      stages,
+    })
   })
 
-  it("won't start a 4x4 solver, so no worker is started for nothing", () => {
-    const started = vi.fn()
+  it("starts the 4x4's own worker", () => {
+    const started: string[] = []
     vi.stubGlobal(
       'Worker',
       class extends FakeWorker {
-        constructor() {
+        constructor(url: URL) {
           super()
-          started()
+          started.push(String(url))
         }
       },
     )
-    expect(() => getSolver(PUZZLE_4X4)).toThrow("There's no 4x4 solver yet")
-    expect(started).not.toHaveBeenCalled()
+    getSolver(PUZZLE_4X4)
+    expect(started).toHaveLength(1)
+    expect(started[0]).toContain('fourByFour.worker')
+    vi.unstubAllGlobals()
   })
 })

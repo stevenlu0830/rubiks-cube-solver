@@ -5,6 +5,8 @@ import {
   EDGES,
   faceColorsOf,
   toCubies,
+  WING_CELLS,
+  wingsOf,
 } from './cubies.ts'
 import { puzzleOf } from './puzzle.ts'
 import {
@@ -33,6 +35,13 @@ import {
  * ones about centres and edges, which it doesn't have. With no centres to
  * say which colours are opposite, a 2x2 is assumed to have the standard
  * colours (see faceColorsOf).
+ *
+ * A 4x4 (96 cells) is checked like a 2x2 with edges: its 24 edge pieces
+ * must each be real and appear once, as must its corners, and the corner
+ * twists must add up. That's all. Any arrangement of a 4x4's edge pieces
+ * and centres can be reached by turning, even ones that would be a flipped
+ * edge or two swapped pieces on a 3x3 (its "parity" cases): the solver
+ * fixes those, so they aren't painting mistakes.
  */
 
 export type Problem =
@@ -68,6 +77,7 @@ const OPPOSITE: Record<Face, Face> = {
 export function validateCube(cube: CubeState): Validation {
   const puzzle = puzzleOf(cube)
   const isThreeByThree = puzzle.name === '3x3'
+  const isFourByFour = puzzle.name === '4x4'
   const fail = (
     problem: Problem,
     message: string,
@@ -91,7 +101,7 @@ export function validateCube(cube: CubeState): Validation {
     )
   }
 
-  // 2. Nine cells of each colour (four on a 2x2).
+  // 2. Nine cells of each colour (four on a 2x2, sixteen on a 4x4).
   const { cellsPerColor } = puzzle
   const counts = colorCounts(cube)
   const wrongCounts = COLORS.filter((color) => counts[color] !== cellsPerColor)
@@ -129,20 +139,19 @@ export function validateCube(cube: CubeState): Validation {
     colors.some((a) => colors.some((b) => faceOf(b) === OPPOSITE[faceOf(a)]))
   const cubies = toCubies(cube)! // can't be null: every cell is painted and the centres differ
   const cornerCells = cornerCellsOf(puzzle)
+  const badEdgeReason = ([a, b]: Color[]) =>
+    a === b
+      ? `is ${a} on both sides`
+      : `has ${a} and ${b}, which are on opposite sides of the cube`
 
   // 4. Every edge's two colours belong together, and each of the 12 edges
   //    appears once. (A 2x2 has no edges.)
   const edgeCells = isThreeByThree ? EDGE_CELLS : []
   const badEdges = edgeCells.filter((_, slot) => cubies.ep[slot] === -1)
   if (badEdges.length > 0) {
-    const [a, b] = colorsAt(badEdges[0])
-    const reason =
-      a === b
-        ? `An edge is ${a} on both sides`
-        : `An edge has ${a} and ${b}, which are on opposite sides of the cube`
     return fail(
       'edges',
-      `${reason}, so it can't exist.${andMore(badEdges.length, 'edge')}`,
+      `An edge ${badEdgeReason(colorsAt(badEdges[0]))}, so it can't exist.${andMore(badEdges.length, 'edge')}`,
       badEdges.flat(),
     )
   }
@@ -153,6 +162,35 @@ export function validateCube(cube: CubeState): Validation {
       `The ${pieceName(EDGES[cubies.ep[repeatedEdges[0]]])} edge appears more than once, so another edge is missing. Check the highlighted edges.`,
       repeatedEdges.flatMap((slot) => edgeCells[slot]),
     )
+  }
+
+  // 4 on a 4x4: every edge piece's two colours belong together, and each of
+  //    the 24 appears once. The two pieces of an edge are mirror images, so
+  //    one painted the wrong way round shows up as its twin appearing twice.
+  if (isFourByFour) {
+    const wings = wingsOf(cube)
+    const badWings = WING_CELLS.filter((_, slot) => wings[slot] === -1)
+    if (badWings.length > 0) {
+      return fail(
+        'edges',
+        `An edge piece ${badEdgeReason(colorsAt([...badWings[0]]))}, so it can't exist.${andMore(badWings.length, 'edge piece')}`,
+        badWings.flat(),
+      )
+    }
+    const repeatedWings = repeatedSlots(wings)
+    if (repeatedWings.length > 0) {
+      const piece = wings[repeatedWings[0]]
+      const name = pieceName(EDGES[piece >> 1])
+      // Both of this edge's pieces, as painted: twins, if just one is the wrong way round.
+      const twins = wings.filter((other) => other >> 1 === piece >> 1)
+      return fail(
+        'edges',
+        twins.length === 2
+          ? `There are two of the same ${name} edge piece. A 4x4's two ${name} edge pieces are mirror images, so one of these is probably painted the wrong way round. Check the highlighted edge pieces.`
+          : `The ${name} edge piece appears more than once, so another edge piece is missing. Check the highlighted edge pieces.`,
+        repeatedWings.flatMap((slot) => WING_CELLS[slot]),
+      )
+    }
   }
 
   // 5. Every corner's three colours form a real corner, in the right clockwise
@@ -184,7 +222,8 @@ export function validateCube(cube: CubeState): Validation {
   // 6–8. Every piece is real and present, but a real cube can't reach every
   //      arrangement of them by turning: these three rules must also hold.
   //      A 2x2 only has the first: with no edges, any arrangement of its
-  //      corners can be reached, even two swapped.
+  //      corners can be reached, even two swapped. So does a 4x4 (see the
+  //      top of this file).
   if (sum(cubies.co) % 3 !== 0) {
     return fail(
       'twist',
