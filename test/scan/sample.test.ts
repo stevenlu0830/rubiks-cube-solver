@@ -63,6 +63,22 @@ describe('readSquares', () => {
     expect(inspectSquares(pixels, 2)).toHaveLength(4)
   })
 
+  it("reads a 4x4's side as 16 squares of 30 pixels, and sees the plastic round each", () => {
+    // Thin plastic between the stickers: under 2 pixels each side.
+    const colors = Array.from({ length: 16 }, (_, n) => NINE[n % 9])
+    const pixels = picture(GRAB_SIZE, GRAB_SIZE, (x, y) => {
+      const size = GRAB_SIZE / 4
+      const [across, down] = [(x % size) / size, (y % size) / size]
+      const nearEdge = Math.min(across, down, 1 - across, 1 - down) < 0.05
+      return nearEdge
+        ? [20, 20, 20]
+        : colors[Math.floor(y / size) * 4 + Math.floor(x / size)]
+    })
+    const squares = inspectSquares(pixels, 4)
+    expect(squares.map(({ color }) => color)).toEqual(colors)
+    for (const { edge } of squares) expect(edge).toBeGreaterThan(0.75)
+  })
+
   it('works when the size is not a multiple of 3', () => {
     const pixels = picture(100, 100, (x, y) => NINE[whereIn(100, x, y).square])
     expect(readSquares(pixels)).toEqual(NINE)

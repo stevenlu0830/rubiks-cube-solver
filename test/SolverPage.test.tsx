@@ -18,6 +18,7 @@ import {
 import {
   CENTER,
   cellIndex,
+  COLORS,
   emptyState,
   isSolved,
   solvedState,
@@ -909,12 +910,54 @@ describe('SolverPage', () => {
       expect(screen.queryByRole('button', { name: 'Fill centres' })).toBeNull()
     })
 
-    it("can't be scanned yet, and starts its own solver's setup straight away", () => {
-      fakeCamera()
+    it("starts its own solver's setup straight away", () => {
       render(<SolverPage cube="4x4" />)
-      expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
       expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
       expect(solver.started).toEqual(['4x4'])
+    })
+
+    it('reads all six sides with the camera, outlining the 16 squares facing you, ready to solve', async () => {
+      const camera = fakeCamera()
+      const asked: string[] = []
+      solver.solve = (facelets) => {
+        asked.push(facelets)
+        return Promise.resolve({
+          moves: parseMoves('R U'),
+          stages: [{ name: 'finish', start: 0 }],
+        })
+      }
+      const scrambled = applyMoves(
+        solvedState(STANDARD_SCHEME, PUZZLE_4X4),
+        parseMoves("R U2 Rw' u F' r2 B"),
+      )
+      render(<SolverPage cube="4x4" />)
+      await act(async () => click('Scan'))
+      expect(view.highlight).toEqual(frontCells(new Quaternion(), PUZZLE_4X4))
+      for (let side = 0; side < 6; side++) {
+        // The real cube, turned the way the 3D cube shows, in front of the camera.
+        camera.show(
+          frontCells(view.orientation!, PUZZLE_4X4).map(
+            (cell) => scrambled[cell]!,
+          ),
+        )
+        click('Take photo')
+        click(side < 5 ? 'Next side ›' : 'Done')
+      }
+
+      expect(
+        screen.queryByRole('region', { name: 'Scan your cube' }),
+      ).toBeNull()
+      expect(view.state).toEqual(scrambled)
+      for (const color of COLORS) {
+        expect(
+          screen.getByRole('button', { name: `${color}, 16/16` }),
+        ).toBeInTheDocument()
+      }
+      await act(async () => click('Solve'))
+      expect(asked).toEqual([
+        toFaceletString(cubeAsShown(scrambled, view.orientation!)),
+      ])
+      expect(screen.getByLabelText('How to hold your cube')).toBeInTheDocument()
     })
 
     describe('Solve', () => {

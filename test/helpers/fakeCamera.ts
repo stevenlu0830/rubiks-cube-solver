@@ -31,8 +31,9 @@ interface FakeCameraOptions {
  * The test environment can't play video or draw it on a canvas either, so
  * those are faked too: `show` sets the colours a photo will read (sticker
  * colour names, or exact [red, green, blue] colours: 9 for a side of a 3x3,
- * 4 for a 2x2), each framed in black plastic like a real cube, optionally
- * with a patch of glare covering part of the middle of every square.
+ * 4 for a 2x2, 16 for a 4x4), each framed in black plastic like a real
+ * cube, optionally with a patch of glare covering part of the middle of
+ * every square.
  */
 export function fakeCamera({
   facing = 'environment',
@@ -84,9 +85,10 @@ export function fakeCamera({
   )
 
   /**
-   * Puts a side with these colours (row by row from the top left, 9 or 4 of
-   * them) in front of the camera. With `plastic: false`, there's no black between the
-   * squares: a flat picture, like a poster, rather than a cube.
+   * Puts a side with these colours (row by row from the top left: 9, 4 or
+   * 16 of them) in front of the camera. With `plastic: false`, there's no
+   * black between the squares: a flat picture, like a poster, rather than a
+   * cube.
    */
   const show = (
     colors: readonly (Color | Rgb)[],

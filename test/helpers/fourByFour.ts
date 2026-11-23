@@ -1,7 +1,24 @@
 import { WING_CELLS } from '../../src/cube/cubies.ts'
-import { movesOf, type Move } from '../../src/cube/moves.ts'
+import {
+  applyMoves,
+  movesOf,
+  parseMoves,
+  type Move,
+} from '../../src/cube/moves.ts'
 import { PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
-import { cellIndex, FACES, type CubeState } from '../../src/cube/state.ts'
+import {
+  cellIndex,
+  FACES,
+  solvedState,
+  STANDARD_SCHEME,
+  type CubeState,
+} from '../../src/cube/state.ts'
+
+/** A 4x4 scrambled by turns of every kind, as in the end-to-end tests. */
+export const SCRAMBLED_4X4 = applyMoves(
+  solvedState(STANDARD_SCHEME, PUZZLE_4X4),
+  parseMoves("R U2 F' Rw u2 L D Fw' r B2 Dw b2 R' U f L2"),
+)
 
 /** Every turn a 4x4 can make but the whole-cube ones: face, wide and inner-layer turns. */
 export const FOUR_BY_FOUR_TURNS = movesOf(PUZZLE_4X4).filter(

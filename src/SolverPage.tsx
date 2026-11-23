@@ -57,12 +57,9 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
 /**
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
- *
- * Scanning a 4x4 is still to come, so its page has no Scan button.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
-  const canScan = puzzle.name !== '4x4'
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -340,7 +337,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
               </button>
             </nav>
             <div className="main-actions">
-              {canScan && canOfferCamera() && (
+              {canOfferCamera() && (
                 <button
                   type="button"
                   className="scan-button"

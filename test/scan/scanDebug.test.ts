@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { centreCellsOf, WING_CELLS } from '../../src/cube/cubies.ts'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   FACES,
@@ -20,6 +21,7 @@ import {
   saveRecordedScan,
   type RecordedScan,
 } from '../../src/scan/scanDebug.ts'
+import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 
 const GREEN: Rgb = [0, 155, 72]
 const WHITE: Rgb = [255, 255, 255]
@@ -69,6 +71,25 @@ describe('recordScan', () => {
     )
     expect(scan.cube).toBe('2x2')
     expect(scan.sides.F!.colors).toEqual(Array(4).fill('green'))
+  })
+
+  it('says when it was a 4x4', () => {
+    const cells = Array.from({ length: 16 }, (_, n) =>
+      cellIndex('F', n, PUZZLE_4X4),
+    )
+    const rgb = Array<Rgb>(16).fill(WHITE)
+    const named = new Map<number, Classified>(
+      cells.map((cell) => [cell, { color: 'white', unsure: false }]),
+    )
+    const scan = recordScan(
+      'scan-3',
+      'warm bulb',
+      { F: { cells, rgb, readings: rgb.map(rgbToLab) } },
+      named,
+    )
+    expect(scan.cube).toBe('4x4')
+    expect(scan.sides.F!.colors).toEqual(Array(16).fill('white'))
+    expect(scan.sides.F!.cells).toEqual(cells)
   })
 })
 
@@ -181,5 +202,43 @@ describe('checkRecordedScans on a 2x2', () => {
         ['2x2', 'orange', 'red'],
       ]),
     )
+  })
+})
+
+describe('checkRecordedScans on a 4x4', () => {
+  it('names the squares exactly as the app does, settling close calls too', () => {
+    // A red edge piece and an orange centre that look like each other.
+    const red = WING_CELLS.flat().find((cell) => SCRAMBLED_4X4[cell] === 'red')!
+    const orange = centreCellsOf(PUZZLE_4X4).find(
+      (cell) => SCRAMBLED_4X4[cell] === 'orange',
+    )!
+    const brand = (color: Color): Rgb =>
+      [1, 3, 5].map((i) =>
+        parseInt(STICKER_COLORS[color].slice(i, i + 2), 16),
+      ) as unknown as Rgb
+    const sides: RecordedScan['sides'] = {}
+    for (const face of FACES) {
+      const cells = Array.from({ length: 16 }, (_, n) =>
+        cellIndex(face, n, PUZZLE_4X4),
+      )
+      sides[face] = {
+        rgb: cells.map((cell) =>
+          cell === red
+            ? [228, 78, 32]
+            : cell === orange
+              ? [205, 48, 45]
+              : brand(SCRAMBLED_4X4[cell]!),
+        ),
+        colors: cells.map((cell) => SCRAMBLED_4X4[cell]!),
+        cells,
+      }
+    }
+    const scan: RecordedScan = {
+      id: 'scan-4x4',
+      cube: '4x4',
+      light: 'warm bulb',
+      sides,
+    }
+    expect(checkRecordedScans([scan])).toEqual({ squares: 96, misreads: [] })
   })
 })

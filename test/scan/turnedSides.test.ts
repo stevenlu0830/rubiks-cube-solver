@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, puzzleOf } from '../../src/cube/puzzle.ts'
+import { cornerCellsOf } from '../../src/cube/cubies.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, puzzleOf } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   FACES,
@@ -18,6 +19,7 @@ import {
   turnSides,
   type SideTurns,
 } from '../../src/scan/turnedSides.ts'
+import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 
 const SCRAMBLED = applyMoves(
   solvedState(),
@@ -208,4 +210,52 @@ describe('on a 2x2', () => {
       expect(painted(turned.sides, renamed)).toEqual(SCRAMBLED_2X2)
     },
   )
+})
+
+describe('on a 4x4', () => {
+  it('turns a photo of 16 squares a quarter turn clockwise', () => {
+    const squares = Array.from({ length: 16 }, (_, n) => n)
+    // The top row shows what was the left column, from the bottom up.
+    expect(turnCells(squares, 1).slice(0, 4)).toEqual([12, 8, 4, 0])
+    expect(turnCells(squares, 2)).toEqual(squares.toReversed())
+    expect(turnCells(squares, 4)).toEqual(squares)
+  })
+
+  it('finds nothing to fix in a 4x4 scanned right', () => {
+    const { sides, named } = scan(SCRAMBLED_4X4)
+    expect(findTurnedSides(sides, named)).toBeNull()
+  })
+
+  it.each(
+    FACES.flatMap((face) => [1, 2, 3].map((turns) => [face, turns] as const)),
+  )(
+    'finds side %s of a 4x4 photographed %i quarter turn(s) round, and turns it back',
+    (face, turns) => {
+      const { sides, named } = scan(SCRAMBLED_4X4, { [face]: turns })
+      const found = findTurnedSides(sides, named)
+      expect(found).toEqual({ [face]: turns })
+      const turned = turnSides(sides, {}, found!)
+      const renamed = new Map<number, Classified>()
+      for (const side of FACES) {
+        sides[side]!.cells.forEach((cell, n) =>
+          renamed.set(turned.sides[side]!.cells[n], named.get(cell)!),
+        )
+      }
+      expect(painted(turned.sides, renamed)).toEqual(SCRAMBLED_4X4)
+    },
+  )
+
+  it('is quick enough to run after every photo', () => {
+    // The worst case: a twisted corner, so all 4,096 ways fail. Most fail
+    // the quick test of the corners, so few need the whole check.
+    const { sides, named } = scan(SCRAMBLED_4X4)
+    const [corner] = cornerCellsOf(PUZZLE_4X4)
+    const colors = corner.map((cell) => named.get(cell)!.color)
+    corner.forEach((cell, i) =>
+      named.set(cell, { color: colors[(i + 1) % 3], unsure: false }),
+    )
+    const start = performance.now()
+    expect(findTurnedSides(sides, named)).toBeNull()
+    expect(performance.now() - start).toBeLessThan(100)
+  })
 })

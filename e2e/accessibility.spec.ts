@@ -1,9 +1,11 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { applyMoves, parseMoves } from '../src/cube/moves.ts'
-import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
+import { Quaternion } from 'three'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../src/cube/puzzle.ts'
 import { solvedState, STANDARD_SCHEME } from '../src/cube/state.ts'
 import { STICKER_COLORS } from '../src/view/colors.ts'
+import { frontCells } from '../src/view/orientation.ts'
 import { savedCube, SCRAMBLED, SCRAMBLED_2X2, SCRAMBLED_4X4 } from './cubes.ts'
 import { fakeCamera, scanEverySide, showSide } from './fakeCamera.ts'
 
@@ -219,6 +221,31 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: /^top left:/ }).click()
       await expect(
         page.getByRole('group', { name: 'Colour for this square' }),
+      ).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('the 4x4 scan screen, a photo, and fixing a square', async ({
+      page,
+    }) => {
+      await page.addInitScript(fakeCamera)
+      await page.goto('./#/4x4')
+      await page.getByRole('button', { name: 'Scan' }).click()
+      await expect(page.locator('.scan-guide > span')).toHaveCount(16)
+      await expectNoProblems(page)
+      await showSide(
+        page,
+        frontCells(new Quaternion(), PUZZLE_4X4).map(
+          (cell) => STICKER_COLORS[SCRAMBLED_4X4[cell]!],
+        ),
+      )
+      await expect(page.getByText('1 of 6 sides')).toBeVisible() // Auto photo
+      await expect(page.locator('.scan-dot')).toHaveCount(16)
+      await expectNoProblems(page)
+
+      await page.getByRole('button', { name: /^row 2, column 3:/ }).click()
+      await expect(
+        page.getByText('Pick the colour of the square in row 2, column 3:'),
       ).toBeVisible()
       await expectNoProblems(page)
     })

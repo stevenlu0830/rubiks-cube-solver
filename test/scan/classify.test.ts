@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyMoves, randomScramble } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   COLORS,
@@ -11,6 +11,7 @@ import {
   type CubeState,
 } from '../../src/cube/state.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
+import { randomTurns } from '../helpers/fourByFour.ts'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
   classifySides as classifyWithDoubts,
@@ -341,5 +342,93 @@ describe('classifySides on a 2x2', () => {
     const clear = classifyWithDoubts(readings)[2][0]
     expect(clear.unsure).toBe(false)
     expect(clear.secondChoice!.cost).toBeGreaterThan(20)
+  })
+})
+
+describe('classifySides on a 4x4', () => {
+  const random = seededRandom(44)
+  const SOLVED_4X4 = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+  const scrambled = () => applyMoves(SOLVED_4X4, randomTurns(50, random))
+
+  /** Dim light: everything much darker, blue a little less so. */
+  const dim = ([r, g, b]: Rgb): Rgb => [
+    Math.round(r * 0.45),
+    Math.round(g * 0.45),
+    Math.round(b * 0.5),
+  ]
+
+  /** A 4x4's six sides photographed, 16 squares each, some in shadow and some brightly lit. */
+  function photographFourByFour(
+    cube: CubeState,
+    light: (rgb: Rgb) => Rgb = (rgb) => rgb,
+  ) {
+    const colors = FACES.map((face) =>
+      Array.from(
+        { length: 16 },
+        (_, n) => cube[cellIndex(face, n, PUZZLE_4X4)]!,
+      ),
+    )
+    const readings = colors.map((side, s) =>
+      side.map((color, n) =>
+        lab(shade(light(BRAND[color]), [0.7, 0.85, 1, 1.15][(s + n) % 4])),
+      ),
+    )
+    return { colors, readings }
+  }
+
+  it('names every square in ordinary light, with no fixed centres to go by', () => {
+    for (let run = 0; run < 10; run++) {
+      const { colors, readings } = photographFourByFour(scrambled())
+      expect(classifySides(readings)).toEqual(colors)
+    }
+  })
+
+  it('gives no colour more than 16 squares', () => {
+    const red = lab(BRAND.red)
+    const named = classifySides([Array(16).fill(red), Array(16).fill(red)])
+    expect(named.flat().filter((color) => color === 'red')).toHaveLength(16)
+  })
+
+  it('learns what the colours look like from its very first side', () => {
+    // 16 squares are enough to learn from: in dim light, typical photo
+    // colours alone get far more of the first side wrong.
+    let wrongAlone = 0
+    let wrongLearned = 0
+    for (let run = 0; run < 20; run++) {
+      const { colors, readings } = photographFourByFour(scrambled(), dim)
+      wrongAlone += readings[0].filter(
+        (square, n) => nearestColor(square) !== colors[0][n],
+      ).length
+      wrongLearned += classifySides([readings[0]])[0].filter(
+        (color, n) => color !== colors[0][n],
+      ).length
+      // With all six in, every square is right.
+      expect(classifySides(readings)).toEqual(colors)
+    }
+    expect(wrongLearned).toBeLessThan(0.75 * wrongAlone)
+  })
+
+  it('names nearly every square right in warm light, once all six sides are in', () => {
+    // Warm light makes about a third of the squares look like another
+    // colour on their own. Learning from the squares puts all but 1 in 40
+    // right, and most cubes entirely; the check before solving settles
+    // many of the rest (see closeCalls.ts).
+    let wrongAlone = 0
+    let wrongNamed = 0
+    let cubesRight = 0
+    const runs = 20
+    for (let run = 0; run < runs; run++) {
+      const { colors, readings } = photographFourByFour(scrambled(), warm)
+      wrongAlone += readings
+        .flat()
+        .filter((square, i) => nearestColor(square) !== colors.flat()[i]).length
+      const named = classifySides(readings).flat()
+      const wrong = named.filter((color, i) => color !== colors.flat()[i])
+      wrongNamed += wrong.length
+      if (wrong.length === 0) cubesRight++
+    }
+    expect(wrongAlone / (runs * 96)).toBeGreaterThan(0.25)
+    expect(wrongNamed / (runs * 96)).toBeLessThan(0.03)
+    expect(cubesRight).toBeGreaterThanOrEqual(0.75 * runs)
   })
 })

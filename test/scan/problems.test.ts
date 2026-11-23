@@ -74,6 +74,14 @@ describe('looksLikeSide', () => {
     expect(looksLikeSide(squares(0.9, 0, 0.1, 0.7))).toBe(false)
   })
 
+  it("needs 12 of a 4x4's 16 squares to look like stickers", () => {
+    const framed = (count: number) =>
+      squares(...Array.from({ length: 16 }, (_, n) => (n < count ? 0.8 : 0.1)))
+    expect(looksLikeSide(framed(16))).toBe(true)
+    expect(looksLikeSide(framed(12))).toBe(true)
+    expect(looksLikeSide(framed(11))).toBe(false)
+  })
+
   it("doesn't see a cube in a wall or a table", () => {
     expect(looksLikeSide(squares(...Array<number>(9).fill(0.05)))).toBe(false)
   })

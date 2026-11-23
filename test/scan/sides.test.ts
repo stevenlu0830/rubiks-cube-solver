@@ -1,7 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { centreCellsOf, WING_CELLS } from '../../src/cube/cubies.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   cellIndex,
@@ -15,6 +16,7 @@ import {
 } from '../../src/cube/state.ts'
 import { validateCube } from '../../src/cube/validate.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
+import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 import { allOrientations } from '../helpers/orientations.ts'
 import type { SwipeDirection } from '../../src/view/gestures.ts'
 import {
@@ -239,6 +241,105 @@ describe('on a 2x2', () => {
       }
       expect(repeatedSide(sides, 'R')).toBeNull()
     })
+  })
+})
+
+describe('on a 4x4', () => {
+  const BRAND = Object.fromEntries(
+    COLORS.map((color) => {
+      const hex = STICKER_COLORS[color]
+      return [color, [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))]
+    }),
+  ) as unknown as Record<Color, Rgb>
+  const cellsOf = (face: Face) =>
+    Array.from({ length: 16 }, (_, n) => cellIndex(face, n, PUZZLE_4X4))
+
+  /** Photos of every side of `cube`, each square read as `readAs` says, or its colour. */
+  function scanOf(
+    cube: CubeState,
+    readAs: Record<number, Rgb> = {},
+  ): ScannedSides {
+    const sides: ScannedSides = {}
+    for (const face of FACES) {
+      const cells = cellsOf(face)
+      const rgb = cells.map((cell) => readAs[cell] ?? BRAND[cube[cell]!])
+      sides[face] = { cells, rgb, readings: rgb.map(rgbToLab) }
+    }
+    return sides
+  }
+  const colorsOf = (named: ReturnType<typeof readScannedCube>) =>
+    Array.from({ length: 96 }, (_, cell) => named.get(cell)!.color)
+
+  it('names every square of a full scan, by cell', () => {
+    expect(colorsOf(readScannedCube(scanOf(SCRAMBLED_4X4)))).toEqual(
+      SCRAMBLED_4X4,
+    )
+  })
+
+  it('settles a red edge piece and an orange centre read the wrong way round', () => {
+    // "16 of each" is happy either way, but read as they look, the edge
+    // piece is a copy of another. Nothing shows the centre is wrong but
+    // the count.
+    const red = WING_CELLS.flat().find((cell) => SCRAMBLED_4X4[cell] === 'red')!
+    const orange = centreCellsOf(PUZZLE_4X4).find(
+      (cell) => SCRAMBLED_4X4[cell] === 'orange',
+    )!
+    const scan = scanOf(SCRAMBLED_4X4, {
+      [red]: [228, 78, 32],
+      [orange]: [205, 48, 45],
+    })
+    const alone = classifySides(FACES.map((face) => scan[face]!.readings))
+    expect(alone.flat()[red].color).toBe('orange')
+    expect(alone.flat()[orange].color).toBe('red')
+
+    const named = readScannedCube(scan)
+    expect(colorsOf(named)).toEqual(SCRAMBLED_4X4)
+    expect(named.get(red)?.unsure).toBe(true)
+    expect(named.get(orange)?.unsure).toBe(true)
+  })
+
+  it('leaves a side photographed turned for the turned-side fix', () => {
+    const scan = scanOf(SCRAMBLED_4X4)
+    scan.U = { ...scan.U!, cells: turnCells(scan.U!.cells, 3) }
+    const named = readScannedCube(scan)
+    expect(validateCube(colorsOf(named)).valid).toBe(false)
+    expect(findTurnedSides(scan, named)).toEqual({ U: 1 })
+  })
+
+  it('is quick enough to run on every look through the camera', () => {
+    // A twisted corner, which no search can fix, and a red and an orange
+    // that look alike, which keep "16 of each" in more ways.
+    const [up, right, front] = [
+      cellIndex('U', 15, PUZZLE_4X4),
+      cellIndex('R', 0, PUZZLE_4X4),
+      cellIndex('F', 3, PUZZLE_4X4),
+    ]
+    const readAs: Record<number, Rgb> = {
+      [up]: BRAND[SCRAMBLED_4X4[right]!],
+      [right]: BRAND[SCRAMBLED_4X4[front]!],
+      [front]: BRAND[SCRAMBLED_4X4[up]!],
+    }
+    for (const cell of centreCellsOf(PUZZLE_4X4)) {
+      if (SCRAMBLED_4X4[cell] === 'red') readAs[cell] = [215, 60, 45]
+      if (SCRAMBLED_4X4[cell] === 'orange') readAs[cell] = [225, 72, 38]
+    }
+    const scan = scanOf(SCRAMBLED_4X4, readAs)
+    const start = performance.now()
+    readScannedCube(scan)
+    expect(performance.now() - start).toBeLessThan(150)
+  })
+
+  it('spots a second photo of a side, held any way round', () => {
+    const scan = scanOf(SCRAMBLED_4X4)
+    for (const turns of [0, 1, 2, 3]) {
+      const again = turnCells(scan.F!.rgb, turns)
+      const sides = {
+        F: scan.F,
+        R: { ...scan.R!, rgb: again, readings: again.map(rgbToLab) },
+      }
+      expect(repeatedSide(sides, 'R'), `${turns} turns`).toBe('F')
+    }
+    expect(repeatedSide({ F: scan.F, R: scan.R }, 'R')).toBeNull()
   })
 })
 

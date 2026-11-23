@@ -21,8 +21,8 @@ export const LIGHTS = [
 export type Light = (typeof LIGHTS)[number]
 
 /**
- * One side: the camera's colours (9 on a 3x3, 4 on a 2x2), and what they
- * really are, in photo order.
+ * One side: the camera's colours (9 on a 3x3, 4 on a 2x2, 16 on a 4x4),
+ * and what they really are, in photo order.
  */
 export interface RecordedSide {
   rgb: Rgb[]
@@ -153,8 +153,8 @@ export function checkRecordedScans(scans: readonly RecordedScan[]): {
 
 /**
  * The colours the app names recorded sides now, in photo order. With the
- * cells each square went on, it's exactly what the app does (on a 2x2 that
- * includes settling close calls with the check before solving); older
+ * cells each square went on, it's exactly what the app does (on a 2x2 or
+ * 4x4 that includes settling close calls with the check before solving); older
  * recordings without them get the colours named, without that step.
  */
 function nameAfresh(

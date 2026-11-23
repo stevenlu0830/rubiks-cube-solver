@@ -167,13 +167,24 @@ export const WING_CELLS: readonly (readonly [number, number])[] = (() => {
  * standard colours are assumed (see faceColorsOf).
  */
 export function wingsOf(cube: CubeState): number[] {
-  const solved = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
-  const key = (cells: readonly number[], state: CubeState) =>
-    cells.map((cell) => state[cell]).join()
-  const pieceOf = new Map(
-    WING_CELLS.map((cells, piece) => [key(cells, solved), piece]),
+  return WING_CELLS.map(
+    ([a, b]) => wingPieces().get(`${cube[a]},${cube[b]}`) ?? -1,
   )
-  return WING_CELLS.map((cells) => pieceOf.get(key(cells, cube)) ?? -1)
+}
+
+/**
+ * Each edge piece by its two colours in order, as "white,green": worked
+ * out once, as scanning checks thousands of cubes in a row.
+ */
+let wingPieceMap: Map<string, number> | null = null
+function wingPieces(): Map<string, number> {
+  if (!wingPieceMap) {
+    const solved = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+    wingPieceMap = new Map(
+      WING_CELLS.map(([a, b], piece) => [`${solved[a]},${solved[b]}`, piece]),
+    )
+  }
+  return wingPieceMap
 }
 
 export function solvedCubies(): CubieCube {

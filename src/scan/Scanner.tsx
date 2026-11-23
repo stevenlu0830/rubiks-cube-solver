@@ -75,7 +75,8 @@ const AUTO_PHOTO_MS = 500
 
 /**
  * The squares of a side, by name, for screen readers: a 3x3's 9, a 2x2's
- * 4, or a 4x4's 16 (scanning a 4x4 is still to come).
+ * 4, or a 4x4's 16. A 4x4 has too many to name by words alone, so they go
+ * by row and column, counted from the top left.
  */
 const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
   3: [
@@ -90,11 +91,18 @@ const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
     'bottom right',
   ],
   2: ['top left', 'top right', 'bottom left', 'bottom right'],
-  4: ['top', 'upper middle', 'lower middle', 'bottom'].flatMap((row) =>
-    ['left', 'middle left', 'middle right', 'right'].map(
-      (column) => `${row} ${column}`,
-    ),
+  4: Array.from(
+    { length: 16 },
+    (_, n) => `row ${Math.floor(n / 4) + 1}, column ${(n % 4) + 1}`,
   ),
+}
+
+/**
+ * A square by its name, mid-sentence: "the top left square", or "the
+ * square in row 2, column 3".
+ */
+function theSquare(name: string): string {
+  return name.startsWith('row') ? `the square in ${name}` : `the ${name} square`
 }
 
 interface ScannerProps {
@@ -129,9 +137,9 @@ interface Look {
 
 /**
  * The scan screen, above the 3D cube: what the camera sees, with a grid
- * (3×3, or 2×2 for a 2x2) to line one side up in, and the buttons to
- * photograph each side in turn. The camera is on only while this is shown
- * and the app is on screen.
+ * (3×3, or 2×2 for a 2x2, 4×4 for a 4x4) to line one side up in, and the
+ * buttons to photograph each side in turn. The camera is on only while this
+ * is shown and the app is on screen.
  */
 export function Scanner({
   cube,
@@ -192,7 +200,8 @@ export function Scanner({
 
   /**
    * A side, to name it to the user: a 3x3's by its centre's colour ("the
-   * green side"); a 2x2's by where it is on screen now ("the left side").
+   * green side"); a 2x2's or 4x4's, with no centre to say, by where it is on
+   * screen now ("the left side").
    */
   function sideName(face: Face): string {
     return puzzle.hasCenters
@@ -325,7 +334,8 @@ export function Scanner({
         return `You've already scanned the ${sideName(repeat)} side. ${lineUpAgain}, then retake.`
       }
       if (repeat) {
-        // Two sides of a 2x2 can look alike, so it might not be a repeat.
+        // Two sides of a 2x2 (or, very rarely, a 4x4) can look alike, so
+        // it might not be a repeat.
         return `This looks like the ${sideName(repeat)} side, which you've already scanned. If it is, ${lowerFirst(lineUpAgain)}, then retake.`
       }
       if (turnedText) return turnedText
@@ -415,7 +425,7 @@ export function Scanner({
       </div>
       {picking !== null && pickingSquare >= 0 ? (
         <div className="scan-picker">
-          <p>Pick the colour of the {squareNames[pickingSquare]} square:</p>
+          <p>Pick the colour of {theSquare(squareNames[pickingSquare])}:</p>
           <Palette
             label="Colour for this square"
             selected={named.get(picking)!.color}
@@ -598,7 +608,7 @@ interface CameraHandle {
 
 interface CameraViewProps {
   ref: Ref<CameraHandle>
-  /** Squares along each edge of the guide: 3 for a 3x3, 2 for a 2x2. */
+  /** Squares along each edge of the guide: 3 for a 3x3, 2 for a 2x2, 4 for a 4x4. */
   size: number
   /** Hold the picture still, for a photo. */
   frozen: boolean

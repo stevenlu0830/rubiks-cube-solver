@@ -3,7 +3,12 @@ import { useEffect, useState } from 'react'
 import { Quaternion } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_3X3, type Puzzle } from '../../src/cube/puzzle.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  type Puzzle,
+} from '../../src/cube/puzzle.ts'
 import {
   CENTER,
   emptyState,
@@ -14,6 +19,7 @@ import {
 } from '../../src/cube/state.ts'
 import { PuzzleContext } from '../../src/puzzleContext.ts'
 import { fakeCamera, removeFakeCamera } from '../helpers/fakeCamera.ts'
+import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
 import type { SwipeDirection } from '../../src/view/gestures.ts'
 import {
@@ -910,6 +916,103 @@ describe('Scanner', () => {
         for (let i = 0; i < 3; i++) lookThrough()
         expect(screen.getByText('1 of 6 sides')).toBeInTheDocument()
         expect(dots()).toEqual(asCss(['red', 'white', 'green', 'blue']))
+      })
+    })
+
+    describe('a 4x4', () => {
+      const fourByFourCells = () => frontCells(app.orientation, PUZZLE_4X4)
+      /** The colours of whichever side of the scrambled 4x4 faces the camera. */
+      const sideColors = () =>
+        fourByFourCells().map((cell) => SCRAMBLED_4X4[cell]!)
+
+      it('shows a 4×4 guide, and live dots for its 16 squares', async () => {
+        render(<Harness puzzle={PUZZLE_4X4} />)
+        await cameraAnswers()
+        expect(guide()!.children).toHaveLength(16)
+        const side = sideColors()
+        camera.show(side)
+        lookThrough()
+        expect(dots('.scan-dots-live')).toEqual(asCss(side))
+      })
+
+      it('scans all six sides of a scrambled 4x4 in five quarter turns, then is done', async () => {
+        render(<Harness puzzle={PUZZLE_4X4} />)
+        await cameraAnswers()
+        for (let side = 1; side <= 6; side++) {
+          camera.show(sideColors())
+          click('Take photo')
+          expect(dots()).toHaveLength(16)
+          expect(screen.getByText(`${side} of 6 sides`)).toBeInTheDocument()
+          if (side < 6) click('Next side ›')
+        }
+        expect(app.turns).toHaveLength(5)
+        expect(app.cube).toEqual(SCRAMBLED_4X4)
+        expect(instruction()).toMatch(/^All six sides are in/)
+      })
+
+      it('names its squares by row and column', async () => {
+        render(<Harness puzzle={PUZZLE_4X4} />)
+        await cameraAnswers()
+        const side = sideColors()
+        camera.show(side)
+        click('Take photo')
+        const squares = within(
+          screen.getByRole('group', {
+            name: 'Colours read: tap a square to change it',
+          }),
+        ).getAllByRole('button')
+        expect(squares).toHaveLength(16)
+        expect(squares[0]).toHaveAccessibleName(`row 1, column 1: ${side[0]}`)
+        expect(squares[6]).toHaveAccessibleName(`row 2, column 3: ${side[6]}`)
+        expect(squares[15]).toHaveAccessibleName(`row 4, column 4: ${side[15]}`)
+        const rows = [0, 4, 8, 12].map((n) => side.slice(n, n + 4).join(', '))
+        expect(heard()).toMatch(
+          `Colours read, row by row: ${rows.join('; ')}. `,
+        )
+        fireEvent.click(squares[6])
+        expect(
+          screen.getByText('Pick the colour of the square in row 2, column 3:'),
+        ).toBeInTheDocument()
+      })
+
+      it('says which side looks turned by where it is, and turns it back', async () => {
+        render(<Harness puzzle={PUZZLE_4X4} />)
+        await cameraAnswers()
+        let turnedFace = null as ReturnType<typeof frontFace> | null
+        for (let side = 1; side <= 6; side++) {
+          let shows = fourByFourCells()
+          if (side === 3) {
+            // The real cube held half a turn round from the 3D one.
+            shows = turnCells(shows, 2)
+            turnedFace = frontFace(app.orientation)
+          }
+          camera.show(shows.map((cell) => SCRAMBLED_4X4[cell]!))
+          click('Take photo')
+          if (side < 6) click('Next side ›')
+        }
+        expect(app.cube).not.toEqual(SCRAMBLED_4X4)
+        const where = screenSideOf(app.orientation, turnedFace!)
+        expect(instruction()).toBe(`The ${where} side looks turned. Fix it?`)
+        click('Fix it')
+        expect(app.cube).toEqual(SCRAMBLED_4X4)
+      })
+
+      it('takes a photo by itself, with Auto photo on', async () => {
+        render(<Harness puzzle={PUZZLE_4X4} autoPhoto />)
+        await cameraAnswers()
+        const side = sideColors()
+        camera.show(side)
+        for (let i = 0; i < 3; i++) lookThrough()
+        expect(screen.getByText('1 of 6 sides')).toBeInTheDocument()
+        expect(dots()).toEqual(asCss(side))
+      })
+
+      it('only photographs a cube by itself, not a flat picture of colours', async () => {
+        render(<Harness puzzle={PUZZLE_4X4} autoPhoto />)
+        await cameraAnswers()
+        camera.show(sideColors(), { plastic: false })
+        for (let i = 0; i < 5; i++) lookThrough()
+        expect(screen.getByText('0 of 6 sides')).toBeInTheDocument()
       })
     })
 

@@ -5,7 +5,7 @@
  * colour looks like in a photo), and takes the name of the nearest one. The
  * references start as typical photo colours, then are learned from the
  * photos: each side's centre square on a 3x3, the squares themselves on a
- * 2x2. Your own cube, in your own light, is the best guide to what its
+ * 2x2 or 4x4. Your own cube, in your own light, is the best guide to what its
  * colours look like.
  */
 
@@ -117,7 +117,7 @@ export interface Classified {
   color: Color
   /**
    * True when it might well be another colour: another one was nearly as
-   * close, or the "9 of each" rule (4 on a 2x2) moved it off the colour it
+   * close, or the "9 of each" rule (4 on a 2x2, 16 on a 4x4) moved it off the colour it
    * looked most like. The app outlines these for the user to check.
    */
   unsure: boolean
@@ -139,21 +139,22 @@ const SURE_RATIO = 0.7
 /**
  * Names the colours of every side scanned so far. Each side is the readings
  * from one photo, row by row from the top left: 9 for a 3x3 (the centre is
- * reading 4), 4 for a 2x2. `fixed` gives the colours the user picked by
- * hand for some squares (null for the rest); those always stay as picked.
+ * reading 4), 4 for a 2x2, 16 for a 4x4. `fixed` gives the colours the user
+ * picked by hand for some squares (null for the rest); those always stay as
+ * picked.
  *
  * Every square is shared out among the colours so that no colour gets more
- * squares than a real cube has (9 on a 3x3, 4 on a 2x2), while each square
- * stays as close to its colour as possible overall. Squares that look like
- * nothing else keep their nearest colour; when, say, 11 squares look red on
- * a 3x3, the 2 least red of them go to the colour that's short, often
- * orange. With all six sides in, every colour ends up with exactly its
- * share.
+ * squares than a real cube has (9 on a 3x3, 4 on a 2x2, 16 on a 4x4), while
+ * each square stays as close to its colour as possible overall. Squares
+ * that look like nothing else keep their nearest colour; when, say, 11
+ * squares look red on a 3x3, the 2 least red of them go to the colour
+ * that's short, often orange. With all six sides in, every colour ends up
+ * with exactly its share.
  *
  * What each colour looks like (the references squares are compared with)
  * starts as typical photo colours, `start`, and is then learned from the
- * photos: on a 3x3 from the centres (see classifyByCenters), on a 2x2 from
- * the squares themselves (see classifyWithoutCenters).
+ * photos: on a 3x3 from the centres (see classifyByCenters), on a 2x2 or
+ * 4x4 from the squares themselves (see classifyWithoutCenters).
  */
 export function classifySides(
   sides: readonly (readonly Lab[])[],
@@ -218,17 +219,22 @@ function classifyByCenters(
 }
 
 /**
- * From this many sides on, a 2x2's colours are learned from its photos:
- * with fewer, most colours have only a square or two to learn from.
+ * From this many squares on, a 2x2's or 4x4's colours are learned from its
+ * photos: with fewer, most colours have only a square or two to learn from.
+ * That's 3 sides of a 2x2, but the first side of a 4x4: its 16 squares
+ * give about 2 or 3 of each colour. Tried on made-up photos of 4x4s in
+ * warm, dim and cool light, learning from the first side names the squares
+ * of the first few sides as well as waiting for a third, or better, and
+ * makes no difference once all six are in.
  */
-const LEARN_FROM_SIDES = 3
+const LEARN_FROM_SQUARES = 12
 
 /** How many times to learn the colours and share the squares out again. */
 const LEARNING_ROUNDS = 2
 
 /**
- * A 2x2's sides. With no centres to learn from, the squares are first
- * shared out by typical photo colours. Once a few sides are in, each
+ * A 2x2's or 4x4's sides. With no fixed centres to learn from, the squares
+ * are first shared out by typical photo colours. Once enough are in, each
  * colour's reference becomes the middle of the squares it got, and the
  * squares are shared out again by those: a better guide to your own cube in
  * your own light. Two rounds of that settle it.
@@ -243,7 +249,7 @@ function classifyWithoutCenters(
     side.map((color) => color && { color, unsure: false }),
   )
   let named = shareOut(sides, given, start, perColor)
-  if (sides.length >= LEARN_FROM_SIDES) {
+  if (sides.length * sides[0].length >= LEARN_FROM_SQUARES) {
     for (let round = 0; round < LEARNING_ROUNDS; round++) {
       named = shareOut(sides, given, learnedFrom(sides, named, start), perColor)
     }

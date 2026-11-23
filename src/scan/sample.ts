@@ -1,5 +1,6 @@
 /**
- * Reading the squares of one side from the camera: 9 on a 3x3, 4 on a 2x2.
+ * Reading the squares of one side from the camera: 9 on a 3x3, 4 on a 2x2,
+ * 16 on a 4x4.
  *
  * grabFrame copies the part of the camera's picture under the on-screen
  * guide into a small square of pixels. readSquares then works out one
@@ -21,7 +22,14 @@ export interface Pixels {
   readonly height: number
 }
 
-/** How many pixels across a grabbed picture is: 40 for each square of a 3x3, 60 of a 2x2. */
+/**
+ * How many pixels across a grabbed picture is: 40 for each square of a
+ * 3x3, 60 of a 2x2, 30 of a 4x4. That's plenty for a 4x4 too: tried on
+ * made-up pictures of a side, shrunk as a camera's would be, with thin
+ * plastic between the stickers, a little crooked and off-centre, its
+ * squares read and look framed as well as a 3x3's do at 40, and no better
+ * at 40 themselves.
+ */
 export const GRAB_SIZE = 120
 
 /**
@@ -87,7 +95,7 @@ export interface Square {
 
 /**
  * Each square in a picture of one side with `size` squares along each edge
- * (3 for a 3x3, 2 for a 2x2), row by row from the top left: on a 3x3 the
+ * (3 for a 3x3, 2 for a 2x2, 4 for a 4x4), row by row from the top left: on a 3x3 the
  * centre is number 4.
  */
 export function inspectSquares(pixels: Pixels, size = 3): Square[] {
