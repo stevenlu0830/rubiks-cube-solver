@@ -1,5 +1,6 @@
 import { applyMoves, invertMove, type Move } from '../cube/moves.ts'
 import type { CubeState } from '../cube/state.ts'
+import type { Stage } from '../solver/protocol.ts'
 import { holdFor, type Hold } from './hold.ts'
 
 /**
@@ -17,6 +18,11 @@ export interface Playback {
   /** The cube as the user holds it, before any moves. */
   start: CubeState
   moves: Move[]
+  /**
+   * A 4x4's solution comes in stages (centres, edges…), each with a
+   * checkpoint at its end where Play stops. A 2x2 or 3x3 has none.
+   */
+  stages: readonly Stage[]
   /** How to hold the cube for every step, worked out from `start`. */
   hold: Hold
   /** Whether the user has confirmed they're holding their cube that way. */
@@ -41,10 +47,15 @@ export type PlaybackAction =
   | { type: 'speed'; speed: Speed }
 
 /** Ready to step through `moves`, starting from the cube as the user holds it. */
-export function startPlayback(start: CubeState, moves: Move[]): Playback {
+export function startPlayback(
+  start: CubeState,
+  moves: Move[],
+  stages: readonly Stage[] = [],
+): Playback {
   return {
     start,
     moves,
+    stages,
     hold: holdFor(start),
     ready: false,
     step: 0,
@@ -92,7 +103,11 @@ export function playbackReducer(
         ...state,
         step,
         turning: null,
-        playing: state.playing && step < state.moves.length,
+        // Play stops at the end of each stage, for the user to check their cube.
+        playing:
+          state.playing &&
+          step < state.moves.length &&
+          !state.stages.some(({ start }) => start === step),
       }
     }
     case 'play':
@@ -125,6 +140,21 @@ export function cubeAt(state: Playback): CubeState {
  */
 export function currentStep(state: Playback): number {
   return state.turning ? Math.min(state.step, state.turning.to) : state.step
+}
+
+/** The stage that `step` is part of, if the solution has stages. */
+export function stageOf(state: Playback, step: number): Stage | null {
+  return state.stages.findLast(({ start }) => start <= step) ?? null
+}
+
+/**
+ * The stage just finished, while waiting at its checkpoint: every move of
+ * it done, and the next stage's first move not yet started. Null otherwise.
+ */
+export function finishedStage(state: Playback): Stage | null {
+  if (!state.ready || state.turning || isFinished(state)) return null
+  const next = state.stages.findIndex(({ start }) => start === state.step)
+  return next > 0 ? state.stages[next - 1] : null
 }
 
 /** True once every move has been done. */

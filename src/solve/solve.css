@@ -21,6 +21,13 @@
   margin-top: 2px;
 }
 
+/* The end of a stage: what to check, set apart from the next step. */
+.solve-card-checkpoint {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 .solve-card h2 {
   margin: 0 0 4px;
   font-size: 1.4rem;
@@ -123,6 +130,24 @@
   /* The step list scrolls; the rest of the page stays put. */
   touch-action: pan-y;
   overscroll-behavior: contain;
+}
+
+.step-stage ol {
+  padding: 0;
+  list-style: none;
+}
+
+.step-stage-name {
+  margin: 6px 8px 2px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.step-stage:first-child .step-stage-name {
+  margin-top: 2px;
 }
 
 .step-list button {

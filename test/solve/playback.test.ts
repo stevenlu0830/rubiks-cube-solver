@@ -11,14 +11,17 @@ import { isSolved, solvedState, STANDARD_SCHEME } from '../../src/cube/state.ts'
 import {
   cubeAt,
   currentStep,
+  finishedStage,
   isFinished,
   pauseMs,
   playbackReducer,
+  stageOf,
   startPlayback,
   turnDurationMs,
   type Playback,
   type PlaybackAction,
 } from '../../src/solve/playback.ts'
+import type { Stage } from '../../src/solver/protocol.ts'
 
 // A scrambled cube and a solution for it (the scramble undone).
 const scramble = parseMoves("R U2 F' L D B2 R'")
@@ -149,5 +152,65 @@ describe('playback', () => {
     expect(state.speed).toBe(2)
     expect(turnDurationMs(2)).toBeLessThan(turnDurationMs(1))
     expect(pauseMs(0.5)).toBeGreaterThan(pauseMs(1))
+  })
+})
+
+describe("a solution in stages (a 4x4's)", () => {
+  // The same 7 moves, as if in three stages: moves 0–1, 2–4 and 5–6.
+  const stages: Stage[] = [
+    { name: 'centres', start: 0 },
+    { name: 'edges', start: 2 },
+    { name: 'finish', start: 5 },
+  ]
+  const readyInStages = () =>
+    run([{ type: 'ready' }], startPlayback(start, moves, stages))
+  /** Lets each turn finish until playing stops. */
+  const playOut = (state: Playback) => {
+    let current = state
+    while (current.turning) {
+      current = playbackReducer(current, { type: 'turnDone' })
+      if (current.playing && !current.turning) {
+        current = playbackReducer(current, { type: 'next' })
+      }
+    }
+    return current
+  }
+
+  it('has none unless given them', () => {
+    expect(fresh().stages).toEqual([])
+    expect(stageOf(ready(), 3)).toBeNull()
+    expect(finishedStage(stepWith('next', ready()))).toBeNull()
+  })
+
+  it('says which stage each step is part of', () => {
+    const state = readyInStages()
+    expect(
+      [0, 1, 2, 4, 5, 6].map((step) => stageOf(state, step)?.name),
+    ).toEqual(['centres', 'centres', 'edges', 'edges', 'finish', 'finish'])
+  })
+
+  it('stops playing at the end of each stage, for a check, then carries on with Play', () => {
+    let state = playOut(run([{ type: 'play' }], readyInStages()))
+    expect(state.step).toBe(2)
+    expect(state.playing).toBe(false)
+    expect(finishedStage(state)?.name).toBe('centres')
+
+    state = playOut(run([{ type: 'play' }], state))
+    expect(state.step).toBe(5)
+    expect(finishedStage(state)?.name).toBe('edges')
+
+    state = playOut(run([{ type: 'play' }], state))
+    expect(isFinished(state)).toBe(true)
+    expect(isSolved(cubeAt(state))).toBe(true)
+  })
+
+  it('shows a stage as finished only while waiting at its end, not mid-turn or mid-stage', () => {
+    const state = readyInStages()
+    expect(finishedStage(state)).toBeNull() // nothing done yet
+    const atEnd = run([{ type: 'jump', step: 2 }], state)
+    expect(finishedStage(atEnd)?.name).toBe('centres')
+    expect(finishedStage(run([{ type: 'next' }], atEnd))).toBeNull() // turning
+    expect(finishedStage(run([{ type: 'jump', step: 3 }], state))).toBeNull()
+    expect(finishedStage(run([{ type: 'jump', step: 7 }], state))).toBeNull() // solved
   })
 })

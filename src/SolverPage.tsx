@@ -58,13 +58,11 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
  *
- * For a 4x4, scanning and stepping through the solution on the 3D cube are
- * still to come: its page has no Scan button, and Solve lists the moves.
+ * Scanning a 4x4 is still to come, so its page has no Scan button.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
   const canScan = puzzle.name !== '4x4'
-  const canPlay = puzzle.name !== '4x4'
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -168,9 +166,10 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
     let result: Solve
     try {
       const { moves, stages } = await solver.solve(toFaceletString(shown))
-      result = canPlay
-        ? { stage: 'playing', playback: startPlayback(shown, moves) }
-        : { stage: 'found', moves, stages }
+      result = {
+        stage: 'playing',
+        playback: startPlayback(shown, moves, stages),
+      }
     } catch (error) {
       result = { stage: 'failed', message: solverErrorMessage(error) }
     }

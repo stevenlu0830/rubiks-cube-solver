@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { PUZZLE_2X2 } from '../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../src/cube/puzzle.ts'
 import { cellIndex, emptyState } from '../src/cube/state.ts'
 import { CubePainter } from './cubePainter.ts'
 import { savedCube, SCRAMBLED } from './cubes.ts'
@@ -52,19 +52,28 @@ test('goes to the 2x2 too, and says when one is in progress', async ({
   await expect(twoByTwo).toContainText('In progress')
 })
 
-test('shows the 4x4 as coming soon, though #/4x4 opens its page to try', async ({
+test('goes to the 4x4 too, and says when one is in progress', async ({
   page,
 }) => {
   await page.goto('./')
   const fourByFour = page.getByRole('listitem').filter({ hasText: '4x4' })
-  await expect(fourByFour).toContainText('Coming soon')
-  await expect(fourByFour.getByRole('link')).toHaveCount(0)
+  await expect(fourByFour).not.toContainText('Coming soon')
+  await expect(fourByFour).not.toContainText('In progress')
 
-  await page.goto('./#/4x4')
+  await fourByFour.getByRole('link').click()
+  await expect(page).toHaveURL(/#\/4x4$/)
   await expect(page).toHaveTitle("4x4 · Rubik's Cube Solver")
   await expect(
     page.getByRole('heading', { name: '4x4 Cube Solver', level: 1 }),
   ).toBeVisible()
+
+  // Paint one square, then go back: the 4x4 is now in progress.
+  const oneSquare = [...emptyState(PUZZLE_4X4)]
+  oneSquare[cellIndex('F', 5, PUZZLE_4X4)] = 'red'
+  await new CubePainter(page, PUZZLE_4X4).paint(oneSquare)
+  await expect(page.getByRole('button', { name: 'red, 1/16' })).toBeVisible()
+  await page.getByRole('link', { name: '‹ Cubes' }).click()
+  await expect(fourByFour).toContainText('In progress')
 })
 
 test('keeps a cube painted on an earlier visit, and says so on the picker', async ({

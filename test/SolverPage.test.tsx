@@ -953,7 +953,7 @@ describe('SolverPage', () => {
         expect(solver.solve).not.toHaveBeenCalled()
       })
 
-      it('sends the cube as seen to the solver, then lists the moves stage by stage', async () => {
+      it('sends the cube as seen to the solver, then says to hold it so it looks just like the screen', async () => {
         const cube = applyMoves(SOLVED_4X4, parseMoves("r U Rw' F"))
         const answer = deferred<Solution>()
         solver.solve = vi.fn(() => answer.promise)
@@ -971,30 +971,90 @@ describe('SolverPage', () => {
 
         await act(async () =>
           answer.resolve({
-            moves: parseMoves("r' u R2 Rw2 B2 U2 F' U"),
+            moves: parseMoves("r' u R2 F' U"),
             stages: [
               { name: 'centres', start: 0 },
-              { name: 'parity', start: 2 },
-              { name: 'finish', start: 6 },
+              { name: 'finish', start: 2 },
             ],
           }),
         )
-        const status = screen.getByRole('status')
-        expect(status).toHaveTextContent('A solution in 8 moves, in 3 stages:')
-        const stages = within(
-          screen.getByRole('list', { name: 'Solution' }),
-        ).getAllByRole('listitem')
-        expect(stages.map((stage) => stage.textContent)).toEqual([
-          "Centres (2 moves): r' u",
-          'Parity fix (4 moves): R2 Rw2 B2 U2',
-          "Finish like a 3x3 (2 moves): F' U",
-        ])
-        expect(status).toHaveTextContent(
-          'Step-by-step help for the 4x4 is coming soon.',
+        const hold = screen.getByLabelText('How to hold your cube')
+        expect(hold).toHaveTextContent(
+          'Hold your cube so its top, front and right look just like the one on screen.',
         )
-        // Still painting: the 3D cube isn't held in place for stepping through.
-        expect(view.held).toBe(false)
-        expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+        expect(hold).toHaveTextContent("don't turn the whole cube")
+        expect(hold).toHaveTextContent(
+          'The 5 moves come in 2 stages, and Play stops after each for you to check your cube.',
+        )
+        expect(view.held).toBe(true)
+        expect(view.state).toEqual(shown)
+      })
+
+      it('plays the solution stage by stage, stopping at a checkpoint after each, to Solved', async () => {
+        // u' solves the centres; F' then solves the rest.
+        const cube = applyMoves(SOLVED_4X4, parseMoves('F u'))
+        solver.solve = () =>
+          Promise.resolve({
+            moves: parseMoves("u' F'"),
+            stages: [
+              { name: 'centres', start: 0 },
+              { name: 'finish', start: 1 },
+            ],
+          })
+        renderWith(cube)
+        await act(async () => click('Solve'))
+        click("I'm ready")
+
+        expect(screen.getByText('Step 1 of 2 · Centres')).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Turn only the second layer from the top anticlockwise (front stickers move right)',
+            { selector: '.solve-card *' },
+          ),
+        ).toBeInTheDocument()
+        expect(view.hint).toBe("u'") // the arrow on the 3D cube
+        const map = screen.getByRole('img', { name: 'Map of all six faces' })
+        expect(map.querySelectorAll('span')).toHaveLength(96)
+        expect(map.querySelector('[data-active]')).toBeNull() // no face turns
+
+        // The steps, under a heading for each stage, numbered right through.
+        const steps = screen.getByRole('list', { name: 'Steps' })
+        expect(
+          within(steps)
+            .getAllByRole('heading')
+            .map((heading) => heading.textContent),
+        ).toEqual(['Centres', 'Finish like a 3x3'])
+        expect(
+          within(
+            within(steps).getByRole('list', { name: 'Finish like a 3x3' }),
+          ).getByRole('button'),
+        ).toHaveTextContent(/^2F'/)
+
+        // Play stops at the end of the centres, for a check.
+        click('Play')
+        expect(view.turning).toBe("u'")
+        act(() => view.turnDone())
+        expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled()
+        const card = screen.getByText(/^Centres done\./).closest('p')!
+        expect(card).toHaveTextContent(
+          "Centres done. Each centre should now be one colour: white on top, green in front. They won't move from here.",
+        )
+        expect(
+          screen.getByText(/If yours doesn't match, tap ‹ Edit cube/),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText('Step 2 of 2 · Finish like a 3x3'),
+        ).toBeInTheDocument()
+        expect(map.querySelector('[data-active]')).not.toBeNull() // F turns
+
+        click('Play')
+        expect(view.turning).toBe("F'")
+        expect(screen.queryByText(/^Centres done\./)).toBeNull()
+        act(() => view.turnDone())
+        expect(
+          screen.getByRole('heading', { name: 'Solved 🎉' }),
+        ).toBeInTheDocument()
+        expect(isSolved(view.state)).toBe(true)
       })
 
       it('says so when one move solves it', async () => {
@@ -1005,12 +1065,15 @@ describe('SolverPage', () => {
           })
         renderWith(applyMoves(SOLVED_4X4, parseMoves('R')))
         await act(async () => click('Solve'))
-        expect(screen.getByRole('status')).toHaveTextContent(
-          'A solution in 1 move:',
-        )
-        expect(screen.getByRole('listitem')).toHaveTextContent(
-          "Finish like a 3x3 (1 move): R'",
-        )
+        click("I'm ready")
+        expect(
+          screen.getByText('Step 1 of 1 · Finish like a 3x3'),
+        ).toBeInTheDocument()
+        click('Next')
+        act(() => view.turnDone())
+        expect(
+          screen.getByText("That's the only move: your cube is solved."),
+        ).toBeInTheDocument()
       })
 
       it('says so if the solver fails', async () => {

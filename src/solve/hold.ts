@@ -12,10 +12,16 @@ import { CENTER, cellIndex, type Color, type CubeState } from '../cube/state.ts'
  * - A 2x2 has no centres. Its solutions only turn the top, right and front
  *   faces, so the corner at the back, bottom left never moves: it's held by
  *   that corner, and which colour of it goes where.
+ * - A 4x4 has nothing that stays put: its centres move, and its solutions
+ *   turn every face. So it's held by how it looks, its top, front and right
+ *   just like the screen, and kept that way round. Once its centres are
+ *   solved they stay put, and say which way round it is (see Checkpoint in
+ *   SolveCard.tsx).
  */
 export type Hold =
   | { by: 'centres'; front: Color; top: Color }
   | { by: 'corner'; down: Color; left: Color; back: Color }
+  | { by: 'view' }
 
 /** How to hold this cube (fully painted, as shown on screen) while solving it. */
 export function holdFor(cube: CubeState): Hold {
@@ -27,6 +33,7 @@ export function holdFor(cube: CubeState): Hold {
       top: cube[cellIndex('U', CENTER)]!,
     }
   }
+  if (puzzle.size > 2) return { by: 'view' }
   const [down, back, left] = cornerCellsOf(puzzle)[CORNERS.indexOf('DBL')].map(
     (cell) => cube[cell]!,
   )

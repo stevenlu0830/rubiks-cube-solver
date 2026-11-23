@@ -28,30 +28,26 @@ describe('CubePicker', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(3)
   })
 
-  it('links each cube that can be solved to its solver', () => {
+  it('links each cube to its solver', () => {
     render(<CubePicker />)
     const threeByThree = within(card('3x3')).getByRole('link')
     expect(threeByThree).toHaveAttribute('href', '#/3x3')
     expect(threeByThree).toHaveTextContent("3x3The classic Rubik's cube")
-    expect(card('3x3')).not.toHaveTextContent('Coming soon')
     const twoByTwo = within(card('2x2')).getByRole('link')
     expect(twoByTwo).toHaveAttribute('href', '#/2x2')
     expect(twoByTwo).toHaveTextContent('2x2The pocket cube')
-    expect(card('2x2')).not.toHaveTextContent('Coming soon')
+    const fourByFour = within(card('4x4')).getByRole('link')
+    expect(fourByFour).toHaveAttribute('href', '#/4x4')
+    expect(fourByFour).toHaveTextContent('4x4Four layers, no fixed centres')
+    expect(screen.queryByText('Coming soon')).toBeNull()
   })
 
-  it('shows the 4x4 as coming soon, with no link yet', () => {
-    render(<CubePicker />)
-    expect(card('4x4')).toHaveTextContent(
-      '4x4Four layers, no fixed centresComing soon',
-    )
-    expect(within(card('4x4')).queryByRole('link')).toBeNull()
-  })
-
-  it("doesn't say a 4x4 is in progress while it's coming soon, even with one saved", () => {
+  it('says when a 4x4 is part-painted and saved', () => {
     saveCube(solvedState(STANDARD_SCHEME, PUZZLE_4X4))
     render(<CubePicker />)
-    expect(card('4x4')).not.toHaveTextContent('In progress')
+    expect(card('4x4')).toHaveTextContent('In progress')
+    expect(card('3x3')).not.toHaveTextContent('In progress')
+    expect(card('2x2')).not.toHaveTextContent('In progress')
   })
 
   it('says when a 3x3 is part-painted and saved', () => {

@@ -57,8 +57,8 @@ export const HIGHLIGHT_MATERIAL = new MeshBasicMaterial({
 /**
  * Arrows showing which way the next turn goes: near-black with a white
  * outline, so they stand out on every sticker colour. Each reaches across a
- * whole row of stickers (3 on a 3x3, 2 on a 2x2), plus a quarter sticker
- * past the middle of the end ones.
+ * whole row of stickers (3 on a 3x3, 2 on a 2x2, 4 on a 4x4), plus a
+ * quarter sticker past the middle of the end ones.
  */
 export const arrowGeometriesOf = perPuzzle(({ size }) => {
   const reach = (size - 1) / 2 + 0.25

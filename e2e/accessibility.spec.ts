@@ -65,9 +65,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 4x4 painting screen, a problem, and a solution listed by stage', async ({
-      page,
-    }) => {
+    test('the 4x4 painting screen and a problem', async ({ page }) => {
       await page.goto('./#/4x4')
       await expect(
         page.getByRole('button', { name: 'white, 0/16' }),
@@ -76,13 +74,38 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Solve' }).click() // all blank
       await expect(page.getByRole('status')).toContainText('still blank')
       await expectNoProblems(page)
+    })
 
+    test('the 4x4 solve screen: holding the cube, a step, a checkpoint and Solved', async ({
+      page,
+    }) => {
       await page.addInitScript(savedCube, SCRAMBLED_4X4)
-      await page.reload()
+      await page.goto('./#/4x4')
       await page.getByRole('button', { name: 'Solve' }).click()
-      await expect(page.getByRole('list', { name: 'Solution' })).toBeVisible({
+      await expect(page.getByLabel('How to hold your cube')).toBeVisible({
         timeout: 30_000,
       })
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: "I'm ready" }).click()
+      await expect(page.getByText(/^Step 1 of \d+ · Centres$/)).toBeVisible()
+      await expectNoProblems(page) // a step, with the stages in the step list
+
+      // The first step of the next stage: the centres' checkpoint.
+      const edges = page
+        .getByRole('list', { name: 'Pair the edges' })
+        .getByRole('button')
+      await edges.first().click()
+      await expect(page.getByText(/^Centres done\./).first()).toBeVisible()
+      await expectNoProblems(page)
+
+      const steps = page
+        .getByRole('list', { name: 'Steps' })
+        .getByRole('button')
+      await steps.last().click()
+      await page.getByRole('button', { name: 'Next', exact: true }).click()
+      await expect(
+        page.getByRole('heading', { name: 'Solved 🎉' }),
+      ).toBeVisible()
       await expectNoProblems(page)
     })
 

@@ -13,7 +13,7 @@ import type { Puzzle } from '../cube/puzzle.ts'
 import type { CubeState } from '../cube/state.ts'
 import { canDraw3D } from '../device/webgl.ts'
 import { usePuzzle } from '../puzzleContext.ts'
-import { arrowPlacement } from './arrows.ts'
+import { arrowPlacements } from './arrows.ts'
 import {
   CAMERA_DIRECTION,
   CAMERA_FOV,
@@ -71,7 +71,7 @@ interface CubeViewProps {
   turnDurationMs?: number
   /** Called once `turn` has finished animating. */
   onTurnDone?: () => void
-  /** A face turn to point out with an arrow. */
+  /** A turn to point out with an arrow (two side by side for a 4x4's wide turn). */
   hint?: Move | null
   /** Write each sticker's colour letter on it (W, Y, G…), for colour-blind users. */
   letters?: boolean
@@ -384,15 +384,15 @@ function Cubie({ cubie, state, highlighted, spins }: CubieProps) {
   )
 }
 
-/** An arrow lying on the cube, showing which way the next face turn goes. */
+/** Arrows lying on the cube, showing which way the next turn goes. */
 function TurnArrow({ move, puzzle }: { move: Move; puzzle: Puzzle }) {
-  const { position, quaternion, doubleHeaded } = useMemo(
-    () => arrowPlacement(move, puzzle),
+  const placements = useMemo(
+    () => arrowPlacements(move, puzzle),
     [move, puzzle],
   )
   const arrows = arrowGeometriesOf(puzzle)
-  return (
-    <group position={position} quaternion={quaternion}>
+  return placements.map(({ position, quaternion, doubleHeaded }, i) => (
+    <group key={i} position={position} quaternion={quaternion}>
       <mesh
         geometry={doubleHeaded ? arrows.doubleOutline : arrows.singleOutline}
         material={ARROW_OUTLINE_MATERIAL}
@@ -403,7 +403,7 @@ function TurnArrow({ move, puzzle }: { move: Move; puzzle: Puzzle }) {
         material={ARROW_MATERIAL}
       />
     </group>
-  )
+  ))
 }
 
 /** Moves the camera back just far enough for the cube to fill the canvas, whatever its shape. */

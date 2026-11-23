@@ -37,23 +37,6 @@
   margin-top: 4px;
 }
 
-/* A long solution scrolls, leaving room for the cube. */
-.solution-stages {
-  max-height: 30dvh;
-  margin: 4px 0;
-  padding: 0 0 0 1.4em;
-  overflow-y: auto;
-  color: var(--text);
-}
-
-.solution-stages li + li {
-  margin-top: 4px;
-}
-
-.solution-stage-name {
-  font-weight: 600;
-}
-
 .solve-status-tip {
   color: var(--text-muted);
 }

@@ -6,7 +6,7 @@ import {
   parseMoves,
   randomScramble,
 } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   FACES,
@@ -102,6 +102,17 @@ describe('holdFor', () => {
         expect(faceColor(solved, 'L')).toEqual(new Set([hold.left]))
         expect(faceColor(solved, 'B')).toEqual(new Set([hold.back]))
       }
+    })
+  })
+
+  describe('a 4x4', () => {
+    it('is held by how it looks: nothing on it stays put to say which way round it is', () => {
+      const cube = applyMoves(
+        solvedState(STANDARD_SCHEME, PUZZLE_4X4),
+        parseMoves("Rw U2 f' L"),
+      )
+      expect(holdFor(cube)).toEqual({ by: 'view' })
+      expect(holdFor(cubeAsShown(cube, RIGHT_IN_FRONT))).toEqual({ by: 'view' })
     })
   })
 })
