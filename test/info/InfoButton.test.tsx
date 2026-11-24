@@ -20,7 +20,7 @@ describe('the About window', () => {
 
   it('says what the app does and what it is built with', () => {
     render(<InfoButton />)
-    expect(panel()).toHaveTextContent(/a 2x2 or 3x3 Rubik's Cube/)
+    expect(panel()).toHaveTextContent(/a 2x2, 3x3 or 4x4 Rubik's Cube/)
     expect(panel()).toHaveTextContent(/scan it with your camera/)
     const tech = within(panel()).getAllByRole('listitem', { hidden: true })
     expect(tech.map((item) => item.textContent)).toEqual(
@@ -31,6 +31,7 @@ describe('the About window', () => {
         'three.js',
         'cubejs (Kociemba solver, 3x3)',
         'IDA* search (2x2)',
+        'Reduction method (4x4)',
       ]),
     )
   })

@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import type { CubeType } from '../src/cube/puzzle.ts'
 import type { CubeState } from '../src/cube/state.ts'
-import { savedCube, SCRAMBLED, SCRAMBLED_2X2 } from './cubes.ts'
+import { savedCube, SCRAMBLED, SCRAMBLED_2X2, SCRAMBLED_4X4 } from './cubes.ts'
 
 const CUBES: [CubeType, CubeState][] = [
   ['3x3', SCRAMBLED],
   ['2x2', SCRAMBLED_2X2],
+  ['4x4', SCRAMBLED_4X4],
 ]
 
 for (const [cube, scrambled] of CUBES) {
@@ -35,11 +36,12 @@ for (const [cube, scrambled] of CUBES) {
       timeout: 30_000,
     })
     await page.getByRole('button', { name: "I'm ready" }).click()
-    await expect(page.getByText(/^Step 1 of \d+$/)).toBeVisible()
+    // A 4x4's steps also say their stage: "Step 1 of 73 · Centres".
+    await expect(page.getByText(/^Step 1 of \d+( · Centres)?$/)).toBeVisible()
   })
 }
 
-test("opens the 2x2's page with no internet, after only visiting the 3x3's", async ({
+test("opens the 2x2's and 4x4's pages with no internet, after only visiting the 3x3's", async ({
   page,
   context,
   browserName,
@@ -60,4 +62,11 @@ test("opens the 2x2's page with no internet, after only visiting the 3x3's", asy
     page.getByRole('heading', { name: '2x2 Cube Solver', level: 1 }),
   ).toBeVisible()
   await expect(page.getByRole('button', { name: 'white, 0/4' })).toBeVisible()
+
+  await page.goto('./#/4x4')
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: '4x4 Cube Solver', level: 1 }),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'white, 0/16' })).toBeVisible()
 })

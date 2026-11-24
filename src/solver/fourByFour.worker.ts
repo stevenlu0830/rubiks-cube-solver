@@ -3,8 +3,9 @@ import type { SolveRequest, SolverMessage } from './protocol.ts'
 
 /**
  * Runs the 4x4 solver on a background thread, like solver.worker.ts does
- * for the 3x3, so the page never waits on it. Its setup (a second or two)
- * starts straight away, while the user is still painting.
+ * for the 3x3, so the page never waits on it. Its setup (about a second,
+ * several on a slow phone) starts straight away, while the user is still
+ * painting or scanning.
  */
 
 const send = (message: SolverMessage) => self.postMessage(message)

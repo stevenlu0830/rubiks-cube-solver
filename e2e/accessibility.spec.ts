@@ -37,11 +37,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
     test('the page for picking a cube, and its About window', async ({
       page,
     }) => {
-      // A saved cube of each, so both cards show "In progress" too.
+      // A saved cube of each, so every card shows "In progress" too.
       await page.addInitScript(savedCube, SCRAMBLED)
       await page.addInitScript(savedCube, SCRAMBLED_2X2)
+      await page.addInitScript(savedCube, SCRAMBLED_4X4)
       await page.goto('./')
-      await expect(page.getByText('In progress')).toHaveCount(2)
+      await expect(page.getByText('In progress')).toHaveCount(3)
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'About this app' }).click()
       await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
@@ -67,7 +68,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 4x4 painting screen and a problem', async ({ page }) => {
+    test('the 4x4 painting screen, its messages, the settings menu and the About window', async ({
+      page,
+    }) => {
       await page.goto('./#/4x4')
       await expect(
         page.getByRole('button', { name: 'white, 0/16' }),
@@ -75,6 +78,23 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Solve' }).click() // all blank
       await expect(page.getByRole('status')).toContainText('still blank')
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Settings' }).click()
+      await expectNoProblems(page)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: 'About this app' }).click()
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('the 4x4 "already solved" message', async ({ page }) => {
+      await page.addInitScript(
+        savedCube,
+        solvedState(STANDARD_SCHEME, PUZZLE_4X4),
+      )
+      await page.goto('./#/4x4')
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByRole('status')).toContainText('already solved')
       await expectNoProblems(page)
     })
 

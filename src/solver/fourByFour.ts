@@ -30,9 +30,10 @@ import type { Solution, Stage, StageName } from './protocol.ts'
  *    outer face turns, which keep the centres and pairs together.
  *
  * Solutions are usually about 80 moves, at most about 100, and take a few
- * hundredths of a second after a one-off setup of a second or two. They're
- * not the shortest there are (no one knows how to find those quickly), but
- * every stage is short and follows on from the last.
+ * hundredths of a second after a one-off setup: about a second on a
+ * computer, several on a slow phone. They're not the shortest there are
+ * (no one knows how to find those quickly), but every stage is short and
+ * follows on from the last.
  *
  * The cube is a string of 96 face letters (see toFaceletString), and the
  * solution never turns the whole cube, so it works as long as the user
@@ -99,29 +100,34 @@ function centreSource(move: Move, slots: readonly number[]): number[] {
 }
 
 /**
- * Moves a set of slots, written as a bitmask (bit i set: slot i is in the
- * set), the way a move moves their centres. It's done 8 bits at a time with
- * prepared tables, as it runs millions of times while setting up.
+ * How a move moves a set of up to 24 slots, written as a bitmask (bit i
+ * set: slot i is in the set). It runs millions of times while setting up,
+ * so it's done a byte (8 bits) of the bitmask at a time, with a prepared
+ * table: entry 256b + bits says where the slots in `bits`, byte b of the
+ * set, go. Each move's 768 entries follow on from the last's, all in one
+ * list: several times quicker than a separate function for each move.
  */
-function maskTurner(source: readonly number[]): (mask: number) => number {
-  const chunks = Math.ceil(source.length / 8)
-  const tables = Array.from({ length: chunks }, (_, chunk) => {
-    const table = new Int32Array(256)
-    for (let bits = 0; bits < 256; bits++) {
-      source.forEach((from, to) => {
-        const bit = from - chunk * 8
-        if (bit >= 0 && bit < 8 && (bits >> bit) & 1) table[bits] |= 1 << to
-      })
-    }
-    return table
+function turnTables(sources: readonly (readonly number[])[]): Int32Array {
+  const tables = new Int32Array(sources.length * 768)
+  sources.forEach((source, move) => {
+    source.forEach((from, to) => {
+      const table = move * 768 + (from >> 3) * 256
+      for (let bits = 0; bits < 256; bits++) {
+        if ((bits >> (from & 7)) & 1) tables[table + bits] |= 1 << to
+      }
+    })
   })
-  return (mask) => {
-    let moved = 0
-    for (let chunk = 0; chunk < chunks; chunk++) {
-      moved |= tables[chunk][(mask >> (chunk * 8)) & 255]
-    }
-    return moved
-  }
+  return tables
+}
+
+/** The set of slots `mask` after move number `move` (see turnTables). */
+function turned(tables: Int32Array, move: number, mask: number): number {
+  const table = move * 768
+  return (
+    tables[table + (mask & 255)] |
+    tables[table + 256 + ((mask >> 8) & 255)] |
+    tables[table + 512 + ((mask >> 16) & 255)]
+  )
 }
 
 /** binomial[n][k]: how many ways to pick k things out of n. */
@@ -133,16 +139,58 @@ for (let n = 0; n <= 24; n++) {
   }
 }
 
-/** Numbers each set of k slots out of n 0, 1, 2… (the "combinatorial number system"). */
-function setNumber(mask: number): number {
+/** How many bits are set in each byte. */
+const BITS_IN = new Uint8Array(256)
+for (let bits = 1; bits < 256; bits++) {
+  BITS_IN[bits] = BITS_IN[bits >> 1] + (bits & 1)
+}
+
+/**
+ * Numbers a step's patterns 0, 1, 2… for their place in its `distance`
+ * list. Like turnTables, it goes a byte at a time: entry
+ * (17b + before) × 256 + bits is what byte b adds, when `before` bits
+ * (at most 16) are set in the bytes below it.
+ */
+type Numbering = Int32Array
+
+function byteNumbering(
+  adds: (byte: number, before: number, bits: number) => number,
+): Numbering {
+  const table = new Int32Array(3 * 17 * 256)
+  for (let byte = 0; byte < 3; byte++) {
+    for (let before = 0; before <= 16; before++) {
+      for (let bits = 0; bits < 256; bits++) {
+        table[(byte * 17 + before) * 256 + bits] = adds(byte, before, bits)
+      }
+    }
+  }
+  return table
+}
+
+/** A pattern's number (see byteNumbering). */
+function numberOf(table: Numbering, pattern: number): number {
+  const low = pattern & 255
+  const middle = (pattern >> 8) & 255
+  return (
+    table[low] +
+    table[(17 + BITS_IN[low]) * 256 + middle] +
+    table[(34 + BITS_IN[low] + BITS_IN[middle]) * 256 + ((pattern >> 16) & 255)]
+  )
+}
+
+/**
+ * Numbers each set of k slots out of n 0, 1, 2… (the "combinatorial number
+ * system"): the slots, lowest first, add up binomial[slot][1],
+ * binomial[slot][2]…
+ */
+const SET_NUMBERING = byteNumbering((byte, before, bits) => {
   let number = 0
-  let k = 0
-  for (let rest = mask; rest !== 0; rest &= rest - 1) {
-    const slot = 31 - Math.clz32(rest & -rest)
-    number += binomial[slot][++k]
+  let k = before
+  for (let bit = 0; bit < 8; bit++) {
+    if ((bits >> bit) & 1) number += binomial[byte * 8 + bit][++k]
   }
   return number
-}
+})
 
 /** The set of k slots out of n with this number. */
 function setFromNumber(number: number, n: number, k: number): number {
@@ -158,16 +206,16 @@ function setFromNumber(number: number, n: number, k: number): number {
 }
 
 /**
- * One step of solving the centres. Its "pattern" is a number saying where
+ * One step of solving the centres. Its "pattern" is a bitmask saying where
  * the centres it cares about are; `distance` says, for every pattern, the
  * fewest of its moves that reach the goal.
  */
 interface CentreStep {
   moves: readonly Move[]
-  /** Each move's effect on a pattern. */
-  turns: readonly ((pattern: number) => number)[]
-  /** The pattern's place in `distance`. */
-  index: (pattern: number) => number
+  /** Each move's effect on a pattern (see turnTables). */
+  turns: Int32Array
+  /** Each pattern's place in `distance`. */
+  numbering: Numbering
   /** Reads the pattern off a cube. */
   read: (cube: string) => number
   distance: Uint8Array
@@ -177,10 +225,10 @@ interface CentreStep {
 function maskOf(
   cube: string,
   slots: readonly number[],
-  has: (face: string) => boolean,
+  has: (face: string, i: number) => boolean,
 ): number {
   return slots.reduce(
-    (mask, slot, i) => (has(cube[CENTRES[slot]]) ? mask | (1 << i) : mask),
+    (mask, slot, i) => (has(cube[CENTRES[slot]], i) ? mask | (1 << i) : mask),
     0,
   )
 }
@@ -194,29 +242,35 @@ function maskOf(
 function distances(
   size: number,
   goal: number,
-  turns: readonly ((pattern: number) => number)[],
-  index: (pattern: number) => number,
-  fromIndex: (index: number) => number,
+  turns: Int32Array,
+  numbering: Numbering,
+  fromNumber: (number: number) => number,
 ): Uint8Array {
+  const moveCount = turns.length / 768
   const distance = new Uint8Array(size).fill(255)
-  distance[index(goal)] = 0
-  let frontier = [index(goal)]
-  for (let depth = 1; frontier.length > 0; depth++) {
-    const next: number[] = []
-    for (const at of frontier) {
-      const pattern = fromIndex(at)
-      for (const turnPattern of turns) {
-        const to = index(turnPattern(pattern))
+  // Every pattern found so far, by number, in the order found: those the
+  // same number of moves from the goal are side by side.
+  const found = new Int32Array(size)
+  found[0] = numberOf(numbering, goal)
+  distance[found[0]] = 0
+  let start = 0
+  let end = 1
+  for (let depth = 1; start < end; depth++) {
+    let next = end
+    for (let i = start; i < end; i++) {
+      const pattern = fromNumber(found[i])
+      for (let move = 0; move < moveCount; move++) {
+        const to = numberOf(numbering, turned(turns, move, pattern))
         if (distance[to] === 255) {
           distance[to] = depth
-          next.push(to)
+          found[next++] = to
         }
       }
     }
-    frontier = next
+    start = end
+    end = next
   }
-  if (distance.includes(255))
-    throw new Error('A centre position is unreachable')
+  if (end < size) throw new Error('A centre position is unreachable')
   return distance
 }
 
@@ -228,7 +282,7 @@ function distances(
 function topAndBottomStep(): CentreStep {
   const slots = CENTRES.map((_, slot) => slot)
   const moves = [...FACE_TURNS, ...INNER_TURNS]
-  const turns = moves.map((move) => maskTurner(centreSource(move, slots)))
+  const turns = turnTables(moves.map((move) => centreSource(move, slots)))
   const goal = [...slotOf('U'), ...slotOf('D')].reduce(
     (mask, slot) => mask | (1 << slot),
     0,
@@ -236,9 +290,9 @@ function topAndBottomStep(): CentreStep {
   return {
     moves,
     turns,
-    index: setNumber,
+    numbering: SET_NUMBERING,
     read: (cube) => maskOf(cube, slots, (face) => face === 'U' || face === 'D'),
-    distance: distances(binomial[24][8], goal, turns, setNumber, (number) =>
+    distance: distances(binomial[24][8], goal, turns, SET_NUMBERING, (number) =>
       setFromNumber(number, 24, 8),
     ),
   }
@@ -260,7 +314,7 @@ function sidesStep(): CentreStep {
     ...withTurns(['u', 'd']),
     ...(['r2', 'l2', 'f2', 'b2'] as const),
   ]
-  const turns = moves.map((move) => maskTurner(centreSource(move, SIDE_SLOTS)))
+  const turns = turnTables(moves.map((move) => centreSource(move, SIDE_SLOTS)))
   const goal = [...slotOf('R'), ...slotOf('L')].reduce(
     (mask, slot) => mask | (1 << SIDE_SLOTS.indexOf(slot)),
     0,
@@ -268,80 +322,65 @@ function sidesStep(): CentreStep {
   return {
     moves,
     turns,
-    index: setNumber,
+    numbering: SET_NUMBERING,
     read: (cube) =>
       maskOf(cube, SIDE_SLOTS, (face) => face === 'R' || face === 'L'),
-    distance: distances(binomial[16][8], goal, turns, setNumber, (number) =>
+    distance: distances(binomial[16][8], goal, turns, SET_NUMBERING, (number) =>
       setFromNumber(number, 16, 8),
     ),
   }
 }
 
-/** Each pair of opposite faces' 8 centre slots: U and D, R and L, F and B. */
+/**
+ * Each pair of opposite faces' 8 centre slots, U and D, R and L, F and B,
+ * one after another: a byte of a bitmask each.
+ */
 const AXIS_SLOTS = (
   [
     ['U', 'D'],
     ['R', 'L'],
     ['F', 'B'],
   ] as const
-).map(([a, b]) => [...slotOf(a), ...slotOf(b)])
+).flatMap(([a, b]) => [...slotOf(a), ...slotOf(b)])
 
 /** The 70 ways to choose 4 of 8 slots, numbered (-1 for any other bitmask). */
 const FOUR_OF_EIGHT = new Int32Array(256).fill(-1)
 const FOUR_OF_EIGHT_MASKS: number[] = []
 for (let mask = 0; mask < 256; mask++) {
-  if (popCount(mask) === 4) {
+  if (BITS_IN[mask] === 4) {
     FOUR_OF_EIGHT[mask] = FOUR_OF_EIGHT_MASKS.length
     FOUR_OF_EIGHT_MASKS.push(mask)
   }
 }
 
-function popCount(bits: number): number {
-  let count = 0
-  for (let rest = bits; rest !== 0; rest &= rest - 1) count++
-  return count
-}
-
 /**
  * Step 3: every centre onto its own face, keeping each pair of opposite
  * colours on its pair of faces: only half turns of inner layers. The
- * pattern packs three 8-bit masks, one for each pair of faces, of where its
- * first colour (U, R or F) is. 70 × 70 × 70 = 343,000 patterns, at most 11
- * moves.
+ * pattern is a byte for each pair of faces, of where its first colour (U,
+ * R or F) is. 70 × 70 × 70 = 343,000 patterns, at most 11 moves.
  */
 function ownFacesStep(): CentreStep {
   const moves = [
     ...FACE_TURNS,
     ...(['u2', 'd2', 'r2', 'l2', 'f2', 'b2'] as const),
   ]
-  const turns = moves.map((move) => {
-    const [a, b, c] = AXIS_SLOTS.map((slots) =>
-      maskTurner(centreSource(move, slots)),
-    )
-    return (pattern: number) =>
-      a(pattern & 255) |
-      (b((pattern >> 8) & 255) << 8) |
-      (c((pattern >> 16) & 255) << 16)
-  })
-  const index = (pattern: number) =>
-    FOUR_OF_EIGHT[pattern & 255] * 4900 +
-    FOUR_OF_EIGHT[(pattern >> 8) & 255] * 70 +
-    FOUR_OF_EIGHT[(pattern >> 16) & 255]
-  const fromIndex = (i: number) =>
-    FOUR_OF_EIGHT_MASKS[Math.floor(i / 4900)] |
-    (FOUR_OF_EIGHT_MASKS[Math.floor(i / 70) % 70] << 8) |
-    (FOUR_OF_EIGHT_MASKS[i % 70] << 16)
+  const turns = turnTables(moves.map((move) => centreSource(move, AXIS_SLOTS)))
+  const numbering = byteNumbering(
+    (byte, _, bits) => FOUR_OF_EIGHT[bits] * [4900, 70, 1][byte],
+  )
+  const fromNumber = (number: number) =>
+    FOUR_OF_EIGHT_MASKS[Math.floor(number / 4900)] |
+    (FOUR_OF_EIGHT_MASKS[Math.floor(number / 70) % 70] << 8) |
+    (FOUR_OF_EIGHT_MASKS[number % 70] << 16)
   // In each pair, the first face's 4 slots come first: 0b00001111.
   const goal = 15 | (15 << 8) | (15 << 16)
   return {
     moves,
     turns,
-    index,
+    numbering,
     read: (cube) =>
-      maskOf(cube, AXIS_SLOTS[0], (face) => face === 'U') |
-      (maskOf(cube, AXIS_SLOTS[1], (face) => face === 'R') << 8) |
-      (maskOf(cube, AXIS_SLOTS[2], (face) => face === 'F') << 16),
-    distance: distances(343000, goal, turns, index, fromIndex),
+      maskOf(cube, AXIS_SLOTS, (face, i) => face === 'URF'[i >> 3]),
+    distance: distances(343000, goal, turns, numbering, fromNumber),
   }
 }
 
@@ -349,14 +388,16 @@ function ownFacesStep(): CentreStep {
 function solveStep(step: CentreStep, cube: string): Move[] {
   const moves: Move[] = []
   let pattern = step.read(cube)
-  for (let left = step.distance[step.index(pattern)]; left > 0; left--) {
+  const { turns, numbering, distance } = step
+  for (let left = distance[numberOf(numbering, pattern)]; left > 0; left--) {
     // Any move one closer will do; the first found is taken.
-    const i = step.turns.findIndex(
-      (turnPattern) =>
-        step.distance[step.index(turnPattern(pattern))] === left - 1,
+    const move = step.moves.findIndex(
+      (_, move) =>
+        distance[numberOf(numbering, turned(turns, move, pattern))] ===
+        left - 1,
     )
-    pattern = step.turns[i](pattern)
-    moves.push(step.moves[i])
+    pattern = turned(turns, move, pattern)
+    moves.push(step.moves[move])
   }
   return moves
 }
@@ -710,7 +751,7 @@ interface Tables {
 
 let tables: Tables | undefined
 
-/** Builds the lookup tables. Takes a second or two: call once, early. */
+/** Builds the lookup tables. Takes about a second (more on a phone): call once, early. */
 export function initFourByFourSolver(): void {
   if (!tables) {
     tables = {
