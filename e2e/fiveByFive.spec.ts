@@ -25,6 +25,9 @@ const savedFiveByFive = async (page: Page) =>
 test('paints a scrambled 5x5 by tapping and swiping, and keeps it after a reload', async ({
   page,
 }) => {
+  // 150 taps, each redrawing the cube. On a CI machine, with no graphics
+  // chip to draw it, that alone takes over a minute: half again a 4x4's.
+  test.slow()
   await page.goto('./#/5x5')
   await expect(
     page.getByRole('heading', { name: '5x5 Cube Solver', level: 1 }),

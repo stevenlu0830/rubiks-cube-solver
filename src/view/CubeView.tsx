@@ -1,5 +1,6 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import {
+  memo,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -351,7 +352,16 @@ interface CubieProps {
   spins: readonly number[] | null
 }
 
-function Cubie({ cubie, state, highlighted, spins }: CubieProps) {
+/**
+ * One cubie and its stickers. Painting a square redraws only the cubie it's
+ * on (see sameCubie): on a 5x5, the other 97 are left as they are.
+ */
+const Cubie = memo(function Cubie({
+  cubie,
+  state,
+  highlighted,
+  spins,
+}: CubieProps) {
   return (
     <group position={cubie.position}>
       <mesh geometry={BODY_GEOMETRY} material={BODY_MATERIAL} />
@@ -381,6 +391,18 @@ function Cubie({ cubie, state, highlighted, spins }: CubieProps) {
         </mesh>
       ))}
     </group>
+  )
+}, sameCubie)
+
+/** True when nothing this cubie shows has changed: its stickers' colours, outlines and letters. */
+function sameCubie(before: CubieProps, after: CubieProps): boolean {
+  return (
+    before.cubie === after.cubie &&
+    before.highlighted === after.highlighted &&
+    before.spins === after.spins &&
+    before.cubie.stickers.every(
+      ({ cell }) => before.state[cell] === after.state[cell],
+    )
   )
 }
 
