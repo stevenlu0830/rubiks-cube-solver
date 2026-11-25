@@ -96,7 +96,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 5x5 painting screen, the settings menu and the About window', async ({
+    test('the 5x5 painting screen, its messages, the settings menu and the About window', async ({
       page,
     }) => {
       await page.goto('./#/5x5')
@@ -109,11 +109,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
         page.getByRole('button', { name: 'white, 1/25' }),
       ).toBeVisible()
       await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Check' }).click() // mostly blank
+      await expect(page.getByRole('status')).toContainText('still blank')
+      await expectNoProblems(page)
       await page.getByRole('button', { name: 'Settings' }).click()
       await expectNoProblems(page)
       await page.keyboard.press('Escape')
       await page.getByRole('button', { name: 'About this app' }).click()
       await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('the 5x5 "looks good" message', async ({ page }) => {
+      await page.addInitScript(savedCube, SCRAMBLED_5X5)
+      await page.goto('./#/5x5')
+      await page.getByRole('button', { name: 'Check' }).click()
+      await expect(page.getByRole('status')).toContainText('Looks good')
       await expectNoProblems(page)
     })
 

@@ -1,9 +1,14 @@
 import type { Validation } from '../cube/validate.ts'
+import { usePuzzle } from '../puzzleContext.ts'
+import { hasSolver } from '../solver/solver.ts'
 import './SolveStatus.css'
 
 /** How far pressing Solve has got, short of a solution (which opens the solve screen). */
 export type SolveStage =
-  /** The cube failed a check, or is already solved, so there's nothing to solve. */
+  /**
+   * The cube failed a check, or is already solved, so there's nothing to
+   * solve. Or Check was pressed on a cube with no solver yet (a 5x5).
+   */
   | { stage: 'checked'; validation: Validation }
   /** Waiting for the solver; `starting` if it's still doing its one-off setup. */
   | { stage: 'solving'; starting: boolean }
@@ -39,6 +44,7 @@ export function SolveStatus({ status, onClose }: SolveStatusProps) {
 }
 
 function StageMessage({ status }: { status: SolveStage }) {
+  const puzzle = usePuzzle()
   switch (status.stage) {
     case 'checked': {
       const { validation } = status
@@ -48,6 +54,9 @@ function StageMessage({ status }: { status: SolveStage }) {
             {validation.solved
               ? 'This cube is already solved!'
               : 'Looks good: this is a real, solvable cube.'}
+            {!validation.solved &&
+              !hasSolver(puzzle) &&
+              ` Solving a ${puzzle.name} is coming soon.`}
           </p>
         )
       }

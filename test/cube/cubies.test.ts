@@ -2,16 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
   centreCellsOf,
+  centreRingsOf,
   CORNER_CELLS,
   cornerCellsOf,
   CORNERS,
   EDGE_CELLS,
+  edgeCellsOf,
   EDGES,
   faceColorsOf,
   fromCubies,
   solvedCubies,
   toCubies,
   WING_CELLS,
+  wingCellsOf,
   wingsOf,
   type CubieCube,
 } from '../../src/cube/cubies.ts'
@@ -40,6 +43,8 @@ import {
   type ColorScheme,
   type CubeState,
 } from '../../src/cube/state.ts'
+
+const sorted = (cells: number[]) => cells.toSorted((a, b) => a - b)
 
 const cornerIndexes = (names: string) =>
   names.split(' ').map((name) => CORNERS.findIndex((c) => c === name))
@@ -310,7 +315,7 @@ describe('on a 2x2', () => {
 })
 
 describe('centreCellsOf', () => {
-  it("finds a 3x3's 6 centres, a 4x4's 24 and a 2x2's none", () => {
+  it("finds a 3x3's 6 centres, a 4x4's 24, a 5x5's 54 and a 2x2's none", () => {
     expect(centreCellsOf(PUZZLE_3X3)).toEqual(
       FACES.map((face) => centerCell(face)),
     )
@@ -318,6 +323,13 @@ describe('centreCellsOf', () => {
     expect(centreCellsOf(PUZZLE_4X4)).toEqual(
       FACES.flatMap((face) =>
         [5, 6, 9, 10].map((n) => cellIndex(face, n, PUZZLE_4X4)),
+      ),
+    )
+    expect(centreCellsOf(PUZZLE_5X5)).toEqual(
+      FACES.flatMap((face) =>
+        [6, 7, 8, 11, 12, 13, 16, 17, 18].map((n) =>
+          cellIndex(face, n, PUZZLE_5X5),
+        ),
       ),
     )
   })
@@ -429,5 +441,143 @@ describe('faceColorsOf a 5x5', () => {
     const repeated = [...SOLVED_5X5]
     repeated[centerCell('F', PUZZLE_5X5)] = 'white'
     expect(faceColorsOf(repeated)).toBeNull()
+  })
+})
+
+describe('edgeCellsOf', () => {
+  it("is a 3x3's edges, and none on a 2x2 or 4x4, which have no middle edge pieces", () => {
+    expect(edgeCellsOf(PUZZLE_3X3)).toBe(EDGE_CELLS)
+    expect(edgeCellsOf(PUZZLE_2X2)).toEqual([])
+    expect(edgeCellsOf(PUZZLE_4X4)).toEqual([])
+  })
+
+  it("finds a 5x5's 12 middle edge pieces, in the middle of each edge of each face", () => {
+    const edges = edgeCellsOf(PUZZLE_5X5)
+    expect(edges).toHaveLength(12)
+    expect(new Set(edges.flat()).size).toBe(24)
+    for (const cell of edges.flat())
+      expect([2, 10, 14, 22]).toContain(cell % 25)
+    // The up-front edge: the bottom middle of the top, the top middle of the front.
+    expect(edges[EDGES.indexOf('UF')]).toEqual([
+      cellIndex('U', 22, PUZZLE_5X5),
+      cellIndex('F', 2, PUZZLE_5X5),
+    ])
+  })
+})
+
+describe('wingCellsOf', () => {
+  it("is a 4x4's 24 edge pieces, and none on a 2x2 or 3x3", () => {
+    expect(wingCellsOf(PUZZLE_4X4)).toBe(WING_CELLS)
+    expect(wingCellsOf(PUZZLE_2X2)).toEqual([])
+    expect(wingCellsOf(PUZZLE_3X3)).toEqual([])
+  })
+
+  it("finds a 5x5's 24 outer edge pieces, either side of each middle one", () => {
+    const wings = wingCellsOf(PUZZLE_5X5)
+    expect(wings).toHaveLength(24)
+    expect(new Set(wings.flat()).size).toBe(48)
+    for (const cell of wings.flat()) {
+      expect([1, 3, 5, 9, 15, 19, 21, 23]).toContain(cell % 25)
+    }
+    const UF = 2 * EDGES.indexOf('UF')
+    expect(sorted([...wings[UF], ...wings[UF + 1]])).toEqual(
+      sorted([
+        cellIndex('U', 21, PUZZLE_5X5),
+        cellIndex('U', 23, PUZZLE_5X5),
+        cellIndex('F', 1, PUZZLE_5X5),
+        cellIndex('F', 3, PUZZLE_5X5),
+      ]),
+    )
+  })
+})
+
+describe('centreRingsOf', () => {
+  it("splits a 5x5's moving centre squares into two rings round each fixed centre", () => {
+    const rings = centreRingsOf(PUZZLE_5X5)
+    const onEachFace = (ns: number[]) =>
+      FACES.flatMap((face) => ns.map((n) => cellIndex(face, n, PUZZLE_5X5)))
+    expect(rings).toEqual([
+      // Diagonally next to the centre: the corners of the middle 3×3.
+      { kind: 'corner', cells: onEachFace([6, 8, 16, 18]) },
+      // Right beside it: the edges of the middle 3×3.
+      { kind: 'edge', cells: onEachFace([7, 11, 13, 17]) },
+    ])
+  })
+
+  it('gives a 4x4 one ring, its centres, and a 2x2 or 3x3 none', () => {
+    expect(centreRingsOf(PUZZLE_4X4)).toEqual([
+      { kind: 'corner', cells: centreCellsOf(PUZZLE_4X4) },
+    ])
+    expect(centreRingsOf(PUZZLE_2X2)).toEqual([])
+    expect(centreRingsOf(PUZZLE_3X3)).toEqual([])
+  })
+
+  it('never lets a turn move a square out of its ring, so each ring always has 4 of each colour', () => {
+    const NUMBERED = Array.from({ length: 150 }, (_, i) => i)
+    for (const { cells } of centreRingsOf(PUZZLE_5X5)) {
+      const ring = new Set(cells)
+      for (const move of movesOf(PUZZLE_5X5)) {
+        const after = applyMove(NUMBERED, move)
+        for (const cell of cells) expect(ring.has(after[cell]), move).toBe(true)
+      }
+    }
+  })
+})
+
+describe('on a 5x5', () => {
+  const SOLVED_5X5 = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
+  const TURNS = movesOf(PUZZLE_5X5).filter((move) => !/^[xyz]/.test(move))
+  const randomTurns = (seed: number) => {
+    const random = seededRandom(seed)
+    return Array.from(
+      { length: 60 },
+      () => TURNS[Math.floor(random() * TURNS.length)],
+    )
+  }
+
+  it('reads its corners and middle edge pieces exactly like a 3x3 turned by the same face turns', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const moves = randomTurns(seed)
+      // On a 3x3, Rw is just R, and an inner-layer turn does nothing.
+      const asThreeByThree = moves.flatMap((move) =>
+        /^[urfdlb]/.test(move) ? [] : [move.replace('w', '') as Move],
+      )
+      expect(toCubies(applyMoves(SOLVED_5X5, moves))).toEqual(
+        toCubies(applyMoves(solvedState(), asThreeByThree)),
+      )
+    }
+  })
+
+  it("moves its outer edge pieces exactly as a 4x4's move", () => {
+    const SOLVED_4X4 = solvedState(STANDARD_SCHEME, PUZZLE_4X4)
+    for (let seed = 21; seed <= 40; seed++) {
+      const moves = randomTurns(seed)
+      expect(wingsOf(applyMoves(SOLVED_5X5, moves))).toEqual(
+        wingsOf(applyMoves(SOLVED_4X4, moves)),
+      )
+    }
+  })
+
+  it('tells its outer edge pieces by the fixed centres, however the cube is held', () => {
+    const solvedPieces = wingCellsOf(PUZZLE_5X5).map((_, piece) => piece)
+    expect(wingsOf(SOLVED_5X5)).toEqual(solvedPieces)
+    expect(wingsOf(applyMoves(SOLVED_5X5, parseMoves("x y2 z'")))).toEqual(
+      solvedPieces,
+    )
+  })
+
+  it('tells an outer edge piece from its mirror-image twin by the order of its colours', () => {
+    const UF = 2 * EDGES.indexOf('UF')
+    const [first, second] = wingCellsOf(PUZZLE_5X5)[UF]
+    const cube = [...SOLVED_5X5]
+    cube[first] = SOLVED_5X5[second]
+    cube[second] = SOLVED_5X5[first]
+    expect(wingsOf(cube)[UF]).toBe(UF + 1)
+  })
+
+  it("can't tell any outer edge piece without six different centres", () => {
+    const cube = [...SOLVED_5X5]
+    cube[centerCell('U', PUZZLE_5X5)] = 'red'
+    expect(wingsOf(cube).every((piece) => piece === -1)).toBe(true)
   })
 })

@@ -58,8 +58,9 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
  *
- * A 5x5 can so far only be painted: checking, solving and scanning one are
- * still to come, so its page has no Scan button and Solve is switched off.
+ * A 5x5 can so far only be painted and checked: solving and scanning one
+ * are still to come, so its page has no Scan button, and Check in place of
+ * Solve.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
@@ -148,6 +149,13 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
     playback && playback.ready && !isFinished(playback)
       ? playback.moves[currentStep(playback)]
       : null
+
+  /** For a cube with no solver yet: says whether it's a real cube, and if not, what's wrong. */
+  function handleCheck() {
+    const validation = validateCube(cube)
+    setSolve({ cube, status: { stage: 'checked', validation } })
+    if (!validation.valid) feel('problem')
+  }
 
   async function handleSolve() {
     if (!solvable) return
@@ -366,8 +374,12 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
                   {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
                 </button>
               ) : (
-                <button type="button" className="solve-button" disabled>
-                  Solving a {puzzle.name} is coming soon
+                <button
+                  type="button"
+                  className="solve-button"
+                  onClick={handleCheck}
+                >
+                  Check
                 </button>
               )}
             </div>

@@ -6,6 +6,7 @@ import {
   cornerCellsOf,
   EDGES,
   WING_CELLS,
+  wingCellsOf,
 } from '../src/cube/cubies.ts'
 import {
   applyMove,
@@ -1209,15 +1210,73 @@ describe('SolverPage', () => {
       expect(view.state).toEqual(emptyState(PUZZLE_5X5))
     })
 
-    it("can't be scanned or solved yet, and doesn't start a solver", () => {
+    it("can't be scanned or solved yet, and doesn't start a solver, but has Check", () => {
       fakeCamera()
       render(<SolverPage cube="5x5" />)
       expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
-      expect(
-        screen.getByRole('button', { name: 'Solving a 5x5 is coming soon' }),
-      ).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Check' })).toBeEnabled()
       expect(solver.started).toEqual([])
+    })
+
+    describe('Check', () => {
+      const SOLVED_5X5 = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
+
+      it('says a real 5x5 looks good, and that solving one is coming soon', () => {
+        saveCube(applyMoves(SOLVED_5X5, parseMoves("R u' Fw2 l D2 b'")))
+        render(<SolverPage cube="5x5" />)
+        click('Check')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'Looks good: this is a real, solvable cube. Solving a 5x5 is coming soon.',
+        )
+        expect(view.highlight).toBeUndefined()
+        expect(solver.started).toEqual([])
+      })
+
+      it('says when the 5x5 is already solved', () => {
+        saveCube(SOLVED_5X5)
+        render(<SolverPage cube="5x5" />)
+        click('Check')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'This cube is already solved!',
+        )
+        expect(screen.getByRole('status')).not.toHaveTextContent('coming soon')
+      })
+
+      it('says what is wrong with a painting mistake, and outlines the squares to check', () => {
+        // An outer edge piece of the top-front edge painted the wrong way round.
+        const UF = 2 * EDGES.indexOf('UF')
+        const [first, second] = wingCellsOf(PUZZLE_5X5)[UF]
+        const cube = [...SOLVED_5X5]
+        cube[first] = SOLVED_5X5[second]
+        cube[second] = SOLVED_5X5[first]
+        saveCube(cube)
+        render(<SolverPage cube="5x5" />)
+        click('Check')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          "There are two of the same white–green outer edge piece. A 5x5's two white–green outer edge pieces are mirror images",
+        )
+        expect(screen.getByRole('status')).toHaveTextContent('outlined in pink')
+        expect(view.highlight).toEqual(
+          expect.arrayContaining([
+            ...wingCellsOf(PUZZLE_5X5)[UF],
+            ...wingCellsOf(PUZZLE_5X5)[UF + 1],
+          ]),
+        )
+
+        // Painting any square hides both: they were for the cube as it was.
+        tap(first)
+        expect(screen.queryByRole('status')).toBeNull()
+        expect(view.highlight).toBeUndefined()
+      })
+
+      it('asks for every square to be painted first', () => {
+        render(<SolverPage cube="5x5" />)
+        click('Check')
+        expect(screen.getByRole('status')).toHaveTextContent(
+          '150 squares are still blank. Paint all 150 to match your cube.',
+        )
+      })
     })
 
     it('keeps the painted 5x5 after a page refresh, apart from the other cubes', () => {

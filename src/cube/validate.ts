@@ -1,11 +1,13 @@
 import {
+  centreRingsOf,
+  type CentreRingKind,
   cornerCellsOf,
   CORNERS,
-  EDGE_CELLS,
+  edgeCellsOf,
   EDGES,
   faceColorsOf,
   toCubies,
-  WING_CELLS,
+  wingCellsOf,
   wingsOf,
 } from './cubies.ts'
 import { puzzleOf } from './puzzle.ts'
@@ -41,6 +43,14 @@ import {
  * and centres can be reached by turning, even ones that would be a flipped
  * edge or two swapped pieces on a 3x3 (its "parity" cases): the solver
  * fixes those, so they aren't painting mistakes.
+ *
+ * A 5x5 (150 cells) gets every check: it has fixed centres, middle edge
+ * pieces that behave just like a 3x3's edges, and a 4x4's outer edge
+ * pieces either side of them. Its corners and middle edges must follow all
+ * of a 3x3's rules, as nothing a 5x5 can do moves one without the other in
+ * a way a 3x3 can't. Its outer edge pieces and the squares round its
+ * centres can be in any arrangement, as on a 4x4, but each ring of those
+ * squares (see centreRingsOf) must have 4 of each colour.
  */
 
 export type Problem =
@@ -49,6 +59,8 @@ export type Problem =
   | 'centers'
   | 'edges'
   | 'corners'
+  /** A 5x5's squares round its centres: each ring needs 4 of each colour. */
+  | 'center-pieces'
   | 'twist'
   | 'flip'
   | 'swap'
@@ -75,8 +87,6 @@ const OPPOSITE: Record<Face, Face> = {
 
 export function validateCube(cube: CubeState): Validation {
   const puzzle = puzzleOf(cube)
-  const isThreeByThree = puzzle.name === '3x3'
-  const isFourByFour = puzzle.name === '4x4'
   const fail = (
     problem: Problem,
     message: string,
@@ -100,7 +110,7 @@ export function validateCube(cube: CubeState): Validation {
     )
   }
 
-  // 2. Nine cells of each colour (four on a 2x2, sixteen on a 4x4).
+  // 2. Nine cells of each colour (4 on a 2x2, 16 on a 4x4, 25 on a 5x5).
   const { cellsPerColor } = puzzle
   const counts = colorCounts(cube)
   const wrongCounts = COLORS.filter((color) => counts[color] !== cellsPerColor)
@@ -127,7 +137,7 @@ export function validateCube(cube: CubeState): Validation {
       )
     }
   }
-  // Can't be null: the centres differ (3x3), or are assumed (2x2).
+  // Can't be null: the centres differ (3x3, 5x5), or are assumed (2x2, 4x4).
   const scheme = faceColorsOf(cube)!
   const faceOf = (color: Color) => FACES.find((face) => scheme[face] === color)!
   const colorOf = (face: Face) => scheme[face]
@@ -144,13 +154,17 @@ export function validateCube(cube: CubeState): Validation {
       : `has ${a} and ${b}, which are on opposite sides of the cube`
 
   // 4. Every edge's two colours belong together, and each of the 12 edges
-  //    appears once. (A 2x2 has no edges.)
-  const edgeCells = isThreeByThree ? EDGE_CELLS : []
+  //    appears once. (A 2x2 and a 4x4 have no edges like this. On a 5x5
+  //    they're the middle piece of each edge.)
+  const edgeCells = edgeCellsOf(puzzle)
+  const hasWings = wingCellsOf(puzzle).length > 0
+  // On a 5x5, which of an edge's three pieces is meant.
+  const edge = hasWings ? 'middle edge piece' : 'edge'
   const badEdges = edgeCells.filter((_, slot) => cubies.ep[slot] === -1)
   if (badEdges.length > 0) {
     return fail(
       'edges',
-      `An edge ${badEdgeReason(colorsAt(badEdges[0]))}, so it can't exist.${andMore(badEdges.length, 'edge')}`,
+      `${hasWings ? 'A' : 'An'} ${edge} ${badEdgeReason(colorsAt(badEdges[0]))}, so it can't exist.${andMore(badEdges.length, edge)}`,
       badEdges.flat(),
     )
   }
@@ -158,21 +172,25 @@ export function validateCube(cube: CubeState): Validation {
   if (repeatedEdges.length > 0) {
     return fail(
       'edges',
-      `The ${pieceName(EDGES[cubies.ep[repeatedEdges[0]]])} edge appears more than once, so another edge is missing. Check the highlighted edges.`,
+      `The ${pieceName(EDGES[cubies.ep[repeatedEdges[0]]])} ${edge} appears more than once, so another ${edge} is missing. Check the highlighted ${edge}s.`,
       repeatedEdges.flatMap((slot) => edgeCells[slot]),
     )
   }
 
-  // 4 on a 4x4: every edge piece's two colours belong together, and each of
-  //    the 24 appears once. The two pieces of an edge are mirror images, so
-  //    one painted the wrong way round shows up as its twin appearing twice.
-  if (isFourByFour) {
+  // 4 on a 4x4 or 5x5: every outer edge piece's two colours belong
+  //    together, and each of the 24 appears once. The two of an edge are
+  //    mirror images, so one painted the wrong way round shows up as its
+  //    twin appearing twice.
+  if (hasWings) {
+    const wingCells = wingCellsOf(puzzle)
     const wings = wingsOf(cube)
-    const badWings = WING_CELLS.filter((_, slot) => wings[slot] === -1)
+    // A 5x5's are told apart from its middle edge pieces.
+    const wing = edgeCells.length > 0 ? 'outer edge piece' : 'edge piece'
+    const badWings = wingCells.filter((_, slot) => wings[slot] === -1)
     if (badWings.length > 0) {
       return fail(
         'edges',
-        `An edge piece ${badEdgeReason(colorsAt([...badWings[0]]))}, so it can't exist.${andMore(badWings.length, 'edge piece')}`,
+        `An ${wing} ${badEdgeReason(colorsAt([...badWings[0]]))}, so it can't exist.${andMore(badWings.length, wing)}`,
         badWings.flat(),
       )
     }
@@ -185,9 +203,9 @@ export function validateCube(cube: CubeState): Validation {
       return fail(
         'edges',
         twins.length === 2
-          ? `There are two of the same ${name} edge piece. A 4x4's two ${name} edge pieces are mirror images, so one of these is probably painted the wrong way round. Check the highlighted edge pieces.`
-          : `The ${name} edge piece appears more than once, so another edge piece is missing. Check the highlighted edge pieces.`,
-        repeatedWings.flatMap((slot) => WING_CELLS[slot]),
+          ? `There are two of the same ${name} ${wing}. A ${puzzle.name}'s two ${name} ${wing}s are mirror images, so one of these is probably painted the wrong way round. Check the highlighted ${wing}s.`
+          : `The ${name} ${wing} appears more than once, so another ${wing} is missing. Check the highlighted ${wing}s.`,
+        repeatedWings.flatMap((slot) => wingCells[slot]),
       )
     }
   }
@@ -218,11 +236,42 @@ export function validateCube(cube: CubeState): Validation {
     )
   }
 
+  // 5 on a 5x5: each ring of squares round the centres has 4 of each
+  //    colour. Once every other piece is right, each colour has 8 squares
+  //    left for the two rings, but nothing else says how they're shared.
+  //    (A 4x4's one ring always has 4 of each by now.)
+  const rings = centreRingsOf(puzzle)
+  if (rings.length > 1) {
+    const inRing = (kind: CentreRingKind) =>
+      rings
+        .find((ring) => ring.kind === kind)!
+        .cells.map((cell) => ({ cell, color: cube[cell]! }))
+    const [diagonal, beside] = [inRing('corner'), inRing('edge')]
+    const count = (ring: typeof diagonal, color: Color) =>
+      ring.filter((square) => square.color === color).length
+    const wrong = COLORS.filter(
+      (color) => count(diagonal, color) !== 4 || count(beside, color) !== 4,
+    )
+    if (wrong.length > 0) {
+      // In each ring, the squares of a colour it has too many of.
+      const tooMany = (ring: typeof diagonal) =>
+        ring.flatMap(({ cell, color }) =>
+          count(ring, color) > 4 ? [cell] : [],
+        )
+      return fail(
+        'center-pieces',
+        `Round the centres, each colour needs 4 squares diagonally next to a centre and 4 right beside one. But ${wrong.map((color) => `${color} has ${count(diagonal, color)} diagonal and ${count(beside, color)} beside`).join('; ')}. Check the highlighted squares.`,
+        [...tooMany(diagonal), ...tooMany(beside)],
+      )
+    }
+  }
+
   // 6–8. Every piece is real and present, but a real cube can't reach every
   //      arrangement of them by turning: these three rules must also hold.
   //      A 2x2 only has the first: with no edges, any arrangement of its
   //      corners can be reached, even two swapped. So does a 4x4 (see the
-  //      top of this file).
+  //      top of this file). A 5x5 has all three, on its corners and middle
+  //      edge pieces.
   if (sum(cubies.co) % 3 !== 0) {
     return fail(
       'twist',
@@ -230,12 +279,12 @@ export function validateCube(cube: CubeState): Validation {
       cornerCells.flat(),
     )
   }
-  if (!isThreeByThree) return { valid: true, solved: isSolved(cube) }
+  if (edgeCells.length === 0) return { valid: true, solved: isSolved(cube) }
   if (sum(cubies.eo) % 2 !== 0) {
     return fail(
       'flip',
-      'An edge is flipped: its two colours are the wrong way round. Check each edge against your cube.',
-      EDGE_CELLS.flat(),
+      `${hasWings ? 'A' : 'An'} ${edge} is flipped: its two colours are the wrong way round. Check each ${edge} against your cube.`,
+      edgeCells.flat(),
     )
   }
   if (swapParity(cubies.cp) !== swapParity(cubies.ep)) {

@@ -59,8 +59,17 @@ export function turnCells<T>(cells: readonly T[], quarterTurns: number): T[] {
   return turned
 }
 
-/** Problems that turning a side round can't fix: they're about colours, not where they are. */
-const NOT_ABOUT_TURNS = new Set(['unpainted', 'color-count', 'centers'])
+/**
+ * Problems that turning a side round can't fix: they're about colours, not
+ * where they are. (Turning a 5x5's side keeps each square round its centre
+ * in the same ring, see centreRingsOf.)
+ */
+const NOT_ABOUT_TURNS = new Set([
+  'unpainted',
+  'color-count',
+  'centers',
+  'center-pieces',
+])
 
 /**
  * The sides that look photographed turned, and how far to turn each back:

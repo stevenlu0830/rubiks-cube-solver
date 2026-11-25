@@ -11,10 +11,12 @@ import {
  * The cube in the solver's format: for each cell (in the usual U R F D L B
  * order), the letter of the face that cell's colour belongs on. A solved
  * 3x3 is "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"; a solved
- * 2x2 is "UUUURRRRFFFFDDDDLLLLBBBB". The cube must be fully painted and pass
+ * 2x2 is "UUUURRRRFFFFDDDDLLLLBBBB"; a solved 5x5 is 25 U's, 25 R's and so
+ * on, 150 letters in all. The cube must be fully painted and pass
  * validateCube.
  *
- * On a 3x3 the centres say which face each colour belongs on. A 2x2 has no
+ * On a 3x3 or 5x5 the fixed centres say which face each colour belongs on,
+ * whichever way the cube is held. A 2x2 has no
  * centres, so it's worked out from the back-bottom-left corner, which the
  * 2x2 solver never moves (see colorsKeepingCorner).
  */

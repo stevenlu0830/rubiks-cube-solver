@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
+  centreRingsOf,
   CORNER_CELLS,
   cornerCellsOf,
   EDGE_CELLS,
+  edgeCellsOf,
   EDGES,
   fromCubies,
   solvedCubies,
   WING_CELLS,
+  wingCellsOf,
   type CubieCube,
 } from '../../src/cube/cubies.ts'
 import {
@@ -17,7 +20,7 @@ import {
   parseMoves,
   randomScramble,
 } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import { FLIP_FIX, SWAP_FIX } from '../../src/solver/fourByFour.ts'
 import {
   centerCell,
@@ -535,6 +538,268 @@ describe('a 4x4', () => {
       )
       expect(result.message).toContain('A corner is twisted')
       expect(result.cells).toHaveLength(24)
+    }
+  })
+})
+
+describe('a 5x5', () => {
+  const SOLVED_5X5 = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
+  const CORNERS_5X5 = cornerCellsOf(PUZZLE_5X5)
+  const MIDDLE_EDGES = edgeCellsOf(PUZZLE_5X5)
+  const OUTER_EDGES = wingCellsOf(PUZZLE_5X5)
+  const ringOf = (kind: 'corner' | 'edge') =>
+    centreRingsOf(PUZZLE_5X5).find((ring) => ring.kind === kind)!.cells
+  const TURNS = movesOf(PUZZLE_5X5).filter((move) => !/^[xyz]/.test(move))
+  const scrambled5x5 = (seed: number) => {
+    const random = seededRandom(seed)
+    return applyMoves(
+      SOLVED_5X5,
+      Array.from(
+        { length: 60 },
+        () => TURNS[Math.floor(random() * TURNS.length)],
+      ),
+    )
+  }
+  /** Exchanges two pieces, sticker for sticker, so each arrives the same way round. */
+  const swapPieces = (
+    cube: CubeState,
+    a: readonly number[],
+    b: readonly number[],
+  ) => {
+    const next = [...cube]
+    a.forEach((cell, i) => {
+      next[cell] = cube[b[i]]
+      next[b[i]] = cube[cell]
+    })
+    return next
+  }
+  const UF = EDGES.indexOf('UF')
+  const UR = EDGES.indexOf('UR')
+  /** The cell of a piece that's this colour on a solved cube. */
+  const cellOf = (cells: readonly number[], color: string) =>
+    cells.find((cell) => SOLVED_5X5[cell] === color)!
+
+  it('reports a solved 5x5 as already solved, whichever way it was painted', () => {
+    expect(validateCube(SOLVED_5X5)).toEqual({ valid: true, solved: true })
+    expect(validateCube(applyMoves(SOLVED_5X5, parseMoves("x y2 z'")))).toEqual(
+      { valid: true, solved: true },
+    )
+  })
+
+  it('passes 100 scrambled 5x5s as valid, held any of the 24 ways', () => {
+    const turns = MOVES.filter((move) => /^[xyz]/.test(move))
+    const random = seededRandom(79)
+    for (let seed = 1; seed <= 100; seed++) {
+      const held = applyMoves(scrambled5x5(seed), [
+        turns[Math.floor(random() * turns.length)],
+        turns[Math.floor(random() * turns.length)],
+      ])
+      expect(validateCube(held)).toEqual({ valid: true, solved: false })
+    }
+  })
+
+  it('accepts any colour scheme, because the centres decide which face is which', () => {
+    const scheme: ColorScheme = {
+      U: 'blue',
+      R: 'white',
+      F: 'red',
+      D: 'green',
+      L: 'yellow',
+      B: 'orange',
+    }
+    const moves = parseMoves("R u' Fw2 l D2 b'")
+    expect(validateCube(solvedState(scheme, PUZZLE_5X5))).toEqual({
+      valid: true,
+      solved: true,
+    })
+    expect(
+      validateCube(applyMoves(solvedState(scheme, PUZZLE_5X5), moves)),
+    ).toEqual({ valid: true, solved: false })
+  })
+
+  it("accepts an edge's two outer pieces swapped, which turning a 5x5 can reach though a 3x3 has nothing like it", () => {
+    const cube = swapPieces(
+      SOLVED_5X5,
+      OUTER_EDGES[2 * UF],
+      OUTER_EDGES[2 * UF + 1],
+    )
+    expect(validateCube(cube)).toEqual({ valid: true, solved: false })
+  })
+
+  it('accepts the squares round the centres in any arrangement with 4 of each colour in each ring', () => {
+    // A white and a red square diagonally next to their centres swapped.
+    const diagonal = ringOf('corner')
+    const white = diagonal.find((cell) => SOLVED_5X5[cell] === 'white')!
+    const red = diagonal.find((cell) => SOLVED_5X5[cell] === 'red')!
+    expect(validateCube(swapCells(SOLVED_5X5, white, red))).toEqual({
+      valid: true,
+      solved: false,
+    })
+  })
+
+  it('accepts two swapped corners plus two swapped middle edge pieces, which a real cube can reach', () => {
+    const cube = swapPieces(
+      swapPieces(SOLVED_5X5, CORNERS_5X5[0], CORNERS_5X5[1]),
+      MIDDLE_EDGES[0],
+      MIDDLE_EDGES[1],
+    )
+    expect(validateCube(cube)).toEqual({ valid: true, solved: false })
+  })
+
+  it('asks for all 150 squares to be painted', () => {
+    const result = expectProblem(emptyState(PUZZLE_5X5), 'unpainted')
+    expect(result.cells).toHaveLength(150)
+    expect(result.message).toBe(
+      '150 squares are still blank. Paint all 150 to match your cube.',
+    )
+  })
+
+  it('asks for exactly 25 squares of each colour', () => {
+    const cube = [...SOLVED_5X5]
+    cube[0] = 'blue' // a white corner square painted blue
+    const result = expectProblem(cube, 'color-count')
+    expect(result.message).toBe(
+      'Each colour needs exactly 25 squares, but white has 24 and blue has 26.',
+    )
+    expect(result.cells).toHaveLength(26)
+  })
+
+  it('asks for six different centres, the middle square of each face', () => {
+    const upCenter = centerCell('U', PUZZLE_5X5)
+    const rightCenter = centerCell('R', PUZZLE_5X5)
+    // The white centre swapped with a red square: still 25 of each.
+    const cube = swapCells(SOLVED_5X5, upCenter, cellIndex('R', 0, PUZZLE_5X5))
+    const result = expectProblem(cube, 'centers')
+    expect(result.message).toBe(
+      'More than one centre is red. The six centres must all be different colours.',
+    )
+    expect(result.cells).toEqual(sorted([upCenter, rightCenter]))
+  })
+
+  it('catches a middle edge piece with the same colour on both sides', () => {
+    // White–green's green swapped with white–red's white.
+    const result = expectProblem(
+      swapCells(
+        SOLVED_5X5,
+        cellOf(MIDDLE_EDGES[UF], 'green'),
+        cellOf(MIDDLE_EDGES[UR], 'white'),
+      ),
+      'edges',
+    )
+    expect(result.message).toBe(
+      "A middle edge piece is white on both sides, so it can't exist.",
+    )
+    expect(result.cells).toEqual(sorted(MIDDLE_EDGES[UF]))
+  })
+
+  it('catches a middle edge piece that appears twice', () => {
+    // White–red painted as a second white–green, with a green square
+    // round a centre painted red to keep 25 of each colour.
+    const cube = [...SOLVED_5X5]
+    cube[cellOf(MIDDLE_EDGES[UR], 'red')] = 'green'
+    cube[ringOf('edge').find((cell) => cube[cell] === 'green')!] = 'red'
+    const result = expectProblem(cube, 'edges')
+    expect(result.message).toBe(
+      'The white–green middle edge piece appears more than once, so another middle edge piece is missing. Check the highlighted middle edge pieces.',
+    )
+    expect(result.cells).toEqual(
+      sorted([...MIDDLE_EDGES[UF], ...MIDDLE_EDGES[UR]]),
+    )
+  })
+
+  it('catches an outer edge piece with the same colour on both sides', () => {
+    const result = expectProblem(
+      swapCells(
+        SOLVED_5X5,
+        cellOf(OUTER_EDGES[2 * UF], 'green'),
+        cellOf(OUTER_EDGES[2 * UR], 'white'),
+      ),
+      'edges',
+    )
+    expect(result.message).toBe(
+      "An outer edge piece is white on both sides, so it can't exist.",
+    )
+    expect(result.cells).toEqual(sorted([...OUTER_EDGES[2 * UF]]))
+  })
+
+  it('catches an outer edge piece painted the wrong way round, as its mirror-image twin appearing twice', () => {
+    const [first, second] = OUTER_EDGES[2 * UF]
+    const result = expectProblem(swapCells(SOLVED_5X5, first, second), 'edges')
+    expect(result.message).toBe(
+      "There are two of the same white–green outer edge piece. A 5x5's two white–green outer edge pieces are mirror images, so one of these is probably painted the wrong way round. Check the highlighted outer edge pieces.",
+    )
+    expect(result.cells).toEqual(
+      sorted([...OUTER_EDGES[2 * UF], ...OUTER_EDGES[2 * UF + 1]]),
+    )
+  })
+
+  it('catches a corner whose colours are in mirror-image order', () => {
+    const [, urfRight, urfFront] = CORNERS_5X5[0]
+    const result = expectProblem(
+      swapCells(SOLVED_5X5, urfRight, urfFront),
+      'corners',
+    )
+    expect(result.message).toContain('mirror-image')
+    expect(result.cells).toEqual(sorted(CORNERS_5X5[0]))
+  })
+
+  it('catches a ring round the centres without 4 of each colour, outlining the squares it has too many of', () => {
+    // A white square diagonally next to its centre swapped with a red one
+    // right beside its centre: every piece is still real.
+    const diagonal = ringOf('corner')
+    const beside = ringOf('edge')
+    const white = diagonal.find((cell) => SOLVED_5X5[cell] === 'white')!
+    const red = beside.find((cell) => SOLVED_5X5[cell] === 'red')!
+    const cube = swapCells(SOLVED_5X5, white, red)
+    const result = expectProblem(cube, 'center-pieces')
+    expect(result.message).toBe(
+      'Round the centres, each colour needs 4 squares diagonally next to a centre and 4 right beside one. But white has 3 diagonal and 5 beside; red has 5 diagonal and 3 beside. Check the highlighted squares.',
+    )
+    // The 5 red diagonal squares and the 5 white beside ones, the swapped pair among them.
+    expect(result.cells).toEqual(
+      sorted([
+        ...diagonal.filter((cell) => cube[cell] === 'red'),
+        ...beside.filter((cell) => cube[cell] === 'white'),
+      ]),
+    )
+    expect(result.cells).toHaveLength(10)
+    expect(result.cells).toEqual(expect.arrayContaining([white, red]))
+  })
+
+  it('catches one twisted corner, held any way, and highlights all corners', () => {
+    const [up, right, front] = CORNERS_5X5[0]
+    const twisted = [...SOLVED_5X5]
+    twisted[up] = SOLVED_5X5[front]
+    twisted[right] = SOLVED_5X5[up]
+    twisted[front] = SOLVED_5X5[right]
+    for (const turns of ['', 'x', "y2 z'"]) {
+      const result = expectProblem(
+        applyMoves(twisted, parseMoves(turns)),
+        'twist',
+      )
+      expect(result.message).toContain('A corner is twisted')
+      expect(result.cells).toHaveLength(24)
+    }
+  })
+
+  it('catches one flipped middle edge piece, as a 3x3 would, and highlights them all', () => {
+    const [up, front] = MIDDLE_EDGES[UF]
+    const result = expectProblem(swapCells(SOLVED_5X5, up, front), 'flip')
+    expect(result.message).toBe(
+      'A middle edge piece is flipped: its two colours are the wrong way round. Check each middle edge piece against your cube.',
+    )
+    expect(result.cells).toEqual(sorted(MIDDLE_EDGES.flat()))
+  })
+
+  it('catches two swapped corners, or two swapped middle edge pieces, as a 3x3 would', () => {
+    for (const cube of [
+      swapPieces(SOLVED_5X5, CORNERS_5X5[0], CORNERS_5X5[1]),
+      swapPieces(SOLVED_5X5, MIDDLE_EDGES[UF], MIDDLE_EDGES[UR]),
+    ]) {
+      const result = expectProblem(cube, 'swap')
+      expect(result.message).toBe(
+        'Two pieces seem to have swapped places. Check every piece against your cube.',
+      )
     }
   })
 })
