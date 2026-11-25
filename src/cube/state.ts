@@ -2,7 +2,8 @@ import { PUZZLE_3X3, puzzleOf, type Puzzle } from './puzzle.ts'
 
 /**
  * The cube as coloured cells: the app's single source of truth. A 3x3 has
- * 54 cells, as below; a 2x2 has 24, in the same order (see puzzle.ts).
+ * 54 cells, as below; a 2x2 has 24, a 4x4 96 and a 5x5 150, in the same
+ * order (see puzzle.ts).
  *
  * Faces come in the order U R F D L B (Up, Right, Front, Down, Left, Back),
  * 9 cells each, which is the order the Kociemba solver expects. Each face is
@@ -38,7 +39,7 @@ export type Color = (typeof COLORS)[number]
 /** A cell's colour, or null while the user hasn't painted it yet. */
 export type Cell = Color | null
 
-/** All the cells (54 on a 3x3, 24 on a 2x2), indexed as described at the top of this file. */
+/** All the cells (54 on a 3x3, 24 on a 2x2, 96 on a 4x4, 150 on a 5x5), indexed as described at the top of this file. */
 export type CubeState = readonly Cell[]
 
 /** Which colour each face's centre has. */
@@ -70,8 +71,17 @@ export const OPPOSITE_COLOR: Readonly<Record<Color, Color>> = {
 /** How many cells of each colour a real 3x3 has (see Puzzle for any cube). */
 export const CELLS_PER_COLOR = PUZZLE_3X3.cellsPerColor
 
-/** Position of the centre cell within a 3x3's face (0–8). A 2x2 has none. */
-export const CENTER = 4
+/**
+ * Position of the centre square within a face, counted along each row (see
+ * above), on a cube that has one that never moves (see Puzzle.hasCenters):
+ * 4 of a 3x3's 0–8, 12 of a 5x5's 0–24. A 2x2 or 4x4 has none.
+ */
+export function centerOf(puzzle: Puzzle = PUZZLE_3X3): number {
+  if (!puzzle.hasCenters) {
+    throw new Error(`A ${puzzle.name} has no centre square that stays put`)
+  }
+  return (puzzle.cellsPerFace - 1) / 2
+}
 
 /** The index of cell `n` (counted along each row, see above) of a face. */
 export function cellIndex(
@@ -80,6 +90,11 @@ export function cellIndex(
   puzzle: Puzzle = PUZZLE_3X3,
 ): number {
   return FACES.indexOf(face) * puzzle.cellsPerFace + n
+}
+
+/** The index of a face's centre square (see centerOf): U4 on a 3x3, U12 on a 5x5. */
+export function centerCell(face: Face, puzzle: Puzzle = PUZZLE_3X3): number {
+  return cellIndex(face, centerOf(puzzle), puzzle)
 }
 
 /** A cube with no cells painted: what the user starts from. */

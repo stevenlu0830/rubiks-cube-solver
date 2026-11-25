@@ -5,6 +5,7 @@ import {
   PUZZLE_2X2,
   PUZZLE_3X3,
   PUZZLE_4X4,
+  PUZZLE_5X5,
   type Puzzle,
 } from '../../src/cube/puzzle.ts'
 import { cellIndex, type Face } from '../../src/cube/state.ts'
@@ -224,5 +225,62 @@ describe('on a 4x4', () => {
   it('makes every front sticker at least 44px across on a 375px-wide phone', () => {
     const front = stickerWidths(PUZZLE_4X4, 'F', 375, 527)
     expect(Math.min(...front)).toBeGreaterThanOrEqual(44)
+  })
+})
+
+describe('on a 5x5', () => {
+  it('is 5 cubies across, so half its size is 2.5', () => {
+    expect(cubeHalfSize(PUZZLE_5X5)).toBe(2.5)
+  })
+
+  it.each([0.45, 1, 1.8])(
+    'fits the whole cube on a %s-wide screen, as large as the margin allows',
+    (aspect) => {
+      const camera = new PerspectiveCamera(CAMERA_FOV, aspect, 0.1, 100)
+      const distance = fitCameraDistance(
+        CAMERA_DIRECTION,
+        CAMERA_FOV,
+        aspect,
+        CAMERA_MARGIN,
+        cubeHalfSize(PUZZLE_5X5),
+      )
+      camera.position.copy(CAMERA_DIRECTION).multiplyScalar(distance)
+      camera.lookAt(0, 0, 0)
+      camera.updateMatrixWorld()
+      let furthest = 0
+      for (const x of [-2.5, 2.5]) {
+        for (const y of [-2.5, 2.5]) {
+          for (const z of [-2.5, 2.5]) {
+            const corner = new Vector3(x, y, z).project(camera)
+            furthest = Math.max(
+              furthest,
+              Math.abs(corner.x),
+              Math.abs(corner.y),
+            )
+          }
+        }
+      }
+      expect(furthest).toBeCloseTo(1 - CAMERA_MARGIN)
+    },
+  )
+
+  it('moves the camera further back than for a 4x4, so the cube looks as big', () => {
+    const fit = (puzzle: Puzzle) =>
+      fitCameraDistance(
+        CAMERA_DIRECTION,
+        CAMERA_FOV,
+        0.6,
+        CAMERA_MARGIN,
+        cubeHalfSize(puzzle),
+      )
+    expect(fit(PUZZLE_5X5)).toBeGreaterThan(fit(PUZZLE_4X4))
+  })
+
+  // With 5 to a row, the stickers can't all be the 44 pixels a 4x4's are on
+  // the same phone: the smallest come to about 35, still well over the 24
+  // that WCAG 2.2 asks of anything to tap (its "target size" rule).
+  it('makes every front sticker at least 35px across on a 375px-wide phone', () => {
+    const front = stickerWidths(PUZZLE_5X5, 'F', 375, 527)
+    expect(Math.min(...front)).toBeGreaterThanOrEqual(35)
   })
 })

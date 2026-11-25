@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
-  CENTER,
-  cellIndex,
+  centerCell,
   colorCounts,
   COLORS,
   emptyState,
@@ -156,7 +155,7 @@ describe('fillCenters', () => {
   it('paints the six centres in the standard scheme and nothing else', () => {
     const { cube } = run([{ type: 'fillCenters' }])
     for (const face of FACES) {
-      expect(cube[cellIndex(face, CENTER)]).toBe(STANDARD_SCHEME[face])
+      expect(cube[centerCell(face)]).toBe(STANDARD_SCHEME[face])
     }
     expect(cube.filter((cell) => cell !== null)).toHaveLength(6)
     expect(centersFilled(cube)).toBe(true)
@@ -219,5 +218,34 @@ describe('on a 4x4', () => {
   it('has no fixed centres to fill: its centre squares move', () => {
     expect(centersFilled(start().cube)).toBe(true)
     expect(run([{ type: 'fillCenters' }], start())).toEqual(start())
+  })
+})
+
+describe('on a 5x5', () => {
+  const start = () => initialEditorState(emptyState(PUZZLE_5X5))
+
+  it('paints and clears cells, with Undo', () => {
+    const painted = run([{ type: 'paint', cell: 149, color: 'blue' }], start())
+    expect(painted.cube[149]).toBe('blue')
+    expect(painted.cube).toHaveLength(150)
+    expect(run([{ type: 'undo' }], painted).cube).toEqual(start().cube)
+  })
+
+  it('resets to 150 blank cells', () => {
+    const reset = run(
+      [{ type: 'paint', cell: 0, color: 'red' }, { type: 'reset' }],
+      start(),
+    )
+    expect(reset.cube).toEqual(emptyState(PUZZLE_5X5))
+  })
+
+  it('fills the six fixed centres, the middle square of each face, and nothing else', () => {
+    expect(centersFilled(start().cube)).toBe(false)
+    const { cube } = run([{ type: 'fillCenters' }], start())
+    for (const face of FACES) {
+      expect(cube[centerCell(face, PUZZLE_5X5)]).toBe(STANDARD_SCHEME[face])
+    }
+    expect(cube.filter((cell) => cell !== null)).toHaveLength(6)
+    expect(centersFilled(cube)).toBe(true)
   })
 })

@@ -10,8 +10,13 @@ import {
   stickerIndexAt,
   stickersOf,
 } from '../../src/cube/geometry.ts'
-import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
-import { CENTER, cellIndex, FACES } from '../../src/cube/state.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  PUZZLE_5X5,
+} from '../../src/cube/puzzle.ts'
+import { centerCell, cellIndex, FACES } from '../../src/cube/state.ts'
 
 describe('STICKERS', () => {
   it('places 54 stickers at 54 different spots', () => {
@@ -30,9 +35,7 @@ describe('STICKERS', () => {
 
   it('puts each face centre in the middle of that face', () => {
     for (const face of FACES) {
-      expect(STICKERS[cellIndex(face, CENTER)].position).toEqual(
-        faceNormal(face),
-      )
+      expect(STICKERS[centerCell(face)].position).toEqual(faceNormal(face))
     }
   })
 
@@ -145,11 +148,58 @@ describe('stickersOf a 4x4', () => {
   })
 })
 
+describe('stickersOf a 5x5', () => {
+  const stickers = stickersOf(PUZZLE_5X5)
+
+  it('places 150 stickers at 150 different spots', () => {
+    const spots = new Set(
+      stickers.map(({ position, normal }) => `${position}|${normal}`),
+    )
+    expect(stickers).toHaveLength(150)
+    expect(spots.size).toBe(150)
+  })
+
+  it('puts the stickers on 98 cubies, 2 out from the middle on the outside', () => {
+    for (const { position, normal } of stickers) {
+      expect(dot(position, normal)).toBe(2)
+      for (const coordinate of position) {
+        expect([-2, -1, 0, 1, 2]).toContain(coordinate)
+      }
+    }
+    const cubies = new Set(stickers.map(({ position }) => `${position}`))
+    expect(cubies.size).toBe(98)
+  })
+
+  it('reads each face left to right, top to bottom, as in the net', () => {
+    const at = (face: 'U' | 'F', n: number) =>
+      stickers[cellIndex(face, n, PUZZLE_5X5)].position
+    expect(at('U', 0)).toEqual([-2, 2, -2]) // top: back left
+    expect(at('U', 24)).toEqual([2, 2, 2]) // top: front right
+    expect(at('F', 0)).toEqual([-2, 2, 2]) // front: top left
+    expect(at('F', 1)).toEqual([-1, 2, 2]) // front: next along the top
+    expect(at('F', 5)).toEqual([-2, 1, 2]) // front: second row, left
+  })
+
+  it("puts each face's centre square (see centerCell) in the middle of that face", () => {
+    for (const face of FACES) {
+      const { position, normal } = stickers[centerCell(face, PUZZLE_5X5)]
+      expect(position).toEqual(normal.map((n) => n * 2))
+    }
+  })
+
+  it('finds every sticker again from where it is', () => {
+    stickers.forEach(({ position, normal }, cell) => {
+      expect(stickerIndexAt(position, normal, PUZZLE_5X5)).toBe(cell)
+    })
+  })
+})
+
 describe('outerLayer', () => {
-  it('is 1 out from the middle on a 3x3, 0.5 on a 2x2 and 1.5 on a 4x4', () => {
+  it('is 1 out from the middle on a 3x3, 0.5 on a 2x2, 1.5 on a 4x4 and 2 on a 5x5', () => {
     expect(outerLayer(PUZZLE_3X3)).toBe(1)
     expect(outerLayer(PUZZLE_2X2)).toBe(0.5)
     expect(outerLayer(PUZZLE_4X4)).toBe(1.5)
+    expect(outerLayer(PUZZLE_5X5)).toBe(2)
   })
 })
 
@@ -160,6 +210,15 @@ describe('layerFrom', () => {
     expect(layerFrom('R', [-0.5, 0.5, -0.5], PUZZLE_4X4)).toBe(2)
     expect(layerFrom('L', [-0.5, 0.5, -0.5], PUZZLE_4X4)).toBe(1)
     expect(layerFrom('U', [-1.5, -1.5, 1.5], PUZZLE_4X4)).toBe(3)
+  })
+
+  it("counts a 5x5's layers in from a face: 2 is the middle layer, 4 touches the opposite face", () => {
+    expect(layerFrom('R', [2, 1, -1], PUZZLE_5X5)).toBe(0)
+    expect(layerFrom('R', [1, 1, -1], PUZZLE_5X5)).toBe(1)
+    expect(layerFrom('R', [0, 1, -1], PUZZLE_5X5)).toBe(2)
+    expect(layerFrom('L', [0, 1, -1], PUZZLE_5X5)).toBe(2)
+    expect(layerFrom('L', [1, 1, -1], PUZZLE_5X5)).toBe(3)
+    expect(layerFrom('U', [-2, -2, 2], PUZZLE_5X5)).toBe(4)
   })
 
   it('works the same on a 3x3 and a 2x2', () => {

@@ -6,7 +6,7 @@ import {
   parseMoves,
   randomScramble,
 } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   FACES,
@@ -113,6 +113,26 @@ describe('holdFor', () => {
       )
       expect(holdFor(cube)).toEqual({ by: 'view' })
       expect(holdFor(cubeAsShown(cube, RIGHT_IN_FRONT))).toEqual({ by: 'view' })
+    })
+  })
+
+  describe('a 5x5', () => {
+    const scrambled = applyMoves(
+      solvedState(STANDARD_SCHEME, PUZZLE_5X5),
+      parseMoves("Rw U2 f' L r2 D"),
+    )
+
+    it('is held by its centres, like a 3x3: they never move', () => {
+      expect(holdFor(scrambled)).toEqual({
+        by: 'centres',
+        front: 'green',
+        top: 'white',
+      })
+      expect(holdFor(cubeAsShown(scrambled, RIGHT_IN_FRONT))).toEqual({
+        by: 'centres',
+        front: 'red',
+        top: 'white',
+      })
     })
   })
 })

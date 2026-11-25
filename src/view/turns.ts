@@ -13,7 +13,8 @@ import { PUZZLE_3X3, type Puzzle } from '../cube/puzzle.ts'
 /**
  * True for the pieces (cubie centres) in the layers that `move` turns: 9 on
  * a 3x3, 4 on a 2x2. On a 4x4, a face turn turns 16 pieces, an inner layer
- * 16 (only 12 of them show), and a wide turn both.
+ * 16 (only 12 of them show), and a wide turn both; on a 5x5, 25 and 25
+ * (only 16 show).
  */
 export function isInTurningLayer(
   position: Vec3,

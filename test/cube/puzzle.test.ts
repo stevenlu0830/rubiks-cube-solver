@@ -4,6 +4,7 @@ import {
   PUZZLE_2X2,
   PUZZLE_3X3,
   PUZZLE_4X4,
+  PUZZLE_5X5,
   PUZZLES,
   puzzleOf,
   puzzleOfSide,
@@ -43,10 +44,22 @@ describe('PUZZLES', () => {
     })
   })
 
+  it('describes a 5x5: 25 squares a face, 150 in all, 25 of each colour, with centres', () => {
+    expect(PUZZLE_5X5).toEqual({
+      name: '5x5',
+      size: 5,
+      cellsPerFace: 25,
+      cellCount: 150,
+      cellsPerColor: 25,
+      hasCenters: true,
+    })
+  })
+
   it('finds each by its name', () => {
     expect(PUZZLES['2x2']).toBe(PUZZLE_2X2)
     expect(PUZZLES['3x3']).toBe(PUZZLE_3X3)
     expect(PUZZLES['4x4']).toBe(PUZZLE_4X4)
+    expect(PUZZLES['5x5']).toBe(PUZZLE_5X5)
   })
 })
 
@@ -55,6 +68,7 @@ describe('puzzleOf', () => {
     expect(puzzleOf(Array(54))).toBe(PUZZLE_3X3)
     expect(puzzleOf(Array(24))).toBe(PUZZLE_2X2)
     expect(puzzleOf(Array(96))).toBe(PUZZLE_4X4)
+    expect(puzzleOf(Array(150))).toBe(PUZZLE_5X5)
   })
 
   it('refuses any other number of cells', () => {
@@ -68,6 +82,7 @@ describe('puzzleOfSide', () => {
     expect(puzzleOfSide(Array(9))).toBe(PUZZLE_3X3)
     expect(puzzleOfSide(Array(4))).toBe(PUZZLE_2X2)
     expect(puzzleOfSide(Array(16))).toBe(PUZZLE_4X4)
+    expect(puzzleOfSide(Array(25))).toBe(PUZZLE_5X5)
     expect(() => puzzleOfSide(Array(5))).toThrow()
   })
 })

@@ -66,7 +66,7 @@ interface CubeViewProps {
    * by cubeAsShown), so it's shown unturned, and swipes and taps are ignored.
    */
   held?: boolean
-  /** A turn to animate on `state`: a face turn, or on a 4x4 a wide or inner-layer turn. */
+  /** A turn to animate on `state`: a face turn, or on a 4x4 or 5x5 a wide or inner-layer turn. */
   turn?: Move | null
   turnDurationMs?: number
   /** Called once `turn` has finished animating. */
@@ -78,7 +78,7 @@ interface CubeViewProps {
 }
 
 /**
- * Draws the cube in 3D: a 2x2, 3x3 or 4x4, whichever the page is for (see
+ * Draws the cube in 3D: a 2x2, 3x3, 4x4 or 5x5, whichever the page is for (see
  * puzzleContext.ts). While painting, it reports swipes (to turn it) and
  * taps on stickers; while solving, it animates face and layer turns. It never changes
  * `state` or `orientation` itself: that's up to the parent.
@@ -271,7 +271,7 @@ interface CubiesProps {
 }
 
 /**
- * The cubies: 26 on a 3x3, 8 on a 2x2, 56 on a 4x4. During a turn, the ones
+ * The cubies: 26 on a 3x3, 8 on a 2x2, 56 on a 4x4, 98 on a 5x5. During a turn, the ones
  * in the turning layers (see isInTurningLayer) sit in a "pivot" group that
  * rotates about the cube's centre. When it finishes, the parent swaps in
  * the new cube state and the pivot empties: the stickers end up exactly

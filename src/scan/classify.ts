@@ -10,7 +10,7 @@
  */
 
 import { puzzleOfSide } from '../cube/puzzle.ts'
-import { CENTER, COLORS, type Color } from '../cube/state.ts'
+import { centerOf, COLORS, type Color } from '../cube/state.ts'
 import { cheapestAssignment } from './assign.ts'
 import { chroma, rgbToLab, type Lab } from './colorSpace.ts'
 
@@ -189,11 +189,12 @@ function classifyByCenters(
   start: References,
   perColor: number,
 ): Classified[][] {
-  const centers = sides.map((side) => side[CENTER])
+  const middle = centerOf(puzzleOfSide(sides[0]))
+  const centers = sides.map((side) => side[middle])
   const centerColors = matchCenters(
     centers,
     start,
-    picked.map((side) => side[CENTER]),
+    picked.map((side) => side[middle]),
   )
   const references: Record<Color, Lab> = { ...start }
   centers.forEach((center, i) => {
@@ -208,7 +209,7 @@ function classifyByCenters(
   })
   const given = sides.map((side, i) =>
     side.map((square, n) => {
-      const color = n === CENTER ? centerColors[i] : picked[i][n]
+      const color = n === middle ? centerColors[i] : picked[i][n]
       if (color === null) return null // shared out
       const unsure =
         picked[i][n] === null && nearestColor(square, references) !== color

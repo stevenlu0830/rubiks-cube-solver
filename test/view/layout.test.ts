@@ -1,7 +1,12 @@
 import { Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { STICKERS } from '../../src/cube/geometry.ts'
-import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  PUZZLE_5X5,
+} from '../../src/cube/puzzle.ts'
 import { CUBIE_SIZE, CUBIES, cubiesOf } from '../../src/view/layout.ts'
 
 const allStickers = CUBIES.flatMap((cubie) =>
@@ -119,6 +124,30 @@ describe('cubiesOf a 4x4', () => {
     const cells = cubies.flatMap((cubie) => cubie.stickers.map((s) => s.cell))
     expect(cells.sort((a, b) => a - b)).toEqual(
       Array.from({ length: 96 }, (_, i) => i),
+    )
+  })
+})
+
+describe('cubiesOf a 5x5', () => {
+  const cubies = cubiesOf(PUZZLE_5X5)
+  const withStickers = (count: number) =>
+    cubies.filter((cubie) => cubie.stickers.length === count)
+
+  it('has 98 cubies: the 27 hidden in the middle are skipped', () => {
+    expect(cubies).toHaveLength(98)
+    expect(new Set(cubies.map(({ position }) => `${position}`)).size).toBe(98)
+  })
+
+  it('has 8 corners with 3 stickers, 36 edge pieces with 2 (3 to an edge) and 54 centre pieces with 1 (9 to a face)', () => {
+    expect(withStickers(3)).toHaveLength(8)
+    expect(withStickers(2)).toHaveLength(36)
+    expect(withStickers(1)).toHaveLength(54)
+  })
+
+  it('shows each of the 150 cells exactly once', () => {
+    const cells = cubies.flatMap((cubie) => cubie.stickers.map((s) => s.cell))
+    expect(cells.sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 150 }, (_, i) => i),
     )
   })
 })

@@ -13,7 +13,7 @@ interface PaletteProps {
   label?: string
 }
 
-/** The six paint colours, each showing how many cells use it out of the 9 a real 3x3 has (4 on a 2x2, 16 on a 4x4). */
+/** The six paint colours, each showing how many cells use it out of the 9 a real 3x3 has (4 on a 2x2, 16 on a 4x4, 25 on a 5x5). */
 export function Palette({
   selected,
   counts,

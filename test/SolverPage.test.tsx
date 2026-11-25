@@ -16,8 +16,7 @@ import {
   type Move,
 } from '../src/cube/moves.ts'
 import {
-  CENTER,
-  cellIndex,
+  centerCell,
   COLORS,
   emptyState,
   isSolved,
@@ -25,7 +24,7 @@ import {
   STANDARD_SCHEME,
   type CubeState,
 } from '../src/cube/state.ts'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../src/cube/puzzle.ts'
 import { loadCube, saveCube } from '../src/editor/storage.ts'
 import { pauseMs } from '../src/solve/playback.ts'
 import { toFaceletString } from '../src/solver/facelets.ts'
@@ -189,8 +188,8 @@ describe('SolverPage', () => {
   it('fills the centres, then disables the button', () => {
     render(<SolverPage />)
     click('Fill centres')
-    expect(view.state[cellIndex('U', CENTER)]).toBe('white')
-    expect(view.state[cellIndex('F', CENTER)]).toBe('green')
+    expect(view.state[centerCell('U')]).toBe('white')
+    expect(view.state[centerCell('F')]).toBe('green')
     expect(screen.getByRole('button', { name: 'Fill centres' })).toBeDisabled()
   })
 
@@ -527,7 +526,7 @@ describe('SolverPage', () => {
       act(() => view.swipeTo(turned))
       expect(view.orientation).toBe(turned)
       expect(view.highlight).toEqual(frontCells(turned))
-      expect(view.highlight).toContain(cellIndex('U', CENTER))
+      expect(view.highlight).toContain(centerCell('U'))
     })
 
     it('reads all six sides with the camera, ready to solve', async () => {
@@ -1150,6 +1149,97 @@ describe('SolverPage', () => {
       expect(view.state).toEqual(saved)
       expect(
         screen.getByRole('button', { name: 'green, 1/16' }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  describe('a 5x5', () => {
+    afterEach(() => removeFakeCamera())
+
+    it('says which cube it is for, with a blank 5x5 of 150 squares', () => {
+      render(<SolverPage cube="5x5" />)
+      expect(
+        screen.getByRole('heading', { name: '5x5 Cube Solver' }),
+      ).toBeInTheDocument()
+      expect(view.state).toEqual(emptyState(PUZZLE_5X5))
+    })
+
+    it('paints squares, counting each colour out of 25', () => {
+      render(<SolverPage cube="5x5" />)
+      expect(
+        screen.getByRole('button', { name: 'white, 0/25' }),
+      ).toBeInTheDocument()
+      tap(0)
+      tap(149)
+      expect(view.state[0]).toBe('white')
+      expect(view.state[149]).toBe('white')
+      expect(
+        screen.getByRole('button', { name: 'white, 2/25' }),
+      ).toBeInTheDocument()
+    })
+
+    it('turns round with a swipe', () => {
+      render(<SolverPage cube="5x5" />)
+      const turned = turnBySwipe(new Quaternion(), 'left')
+      act(() => view.swipeTo(turned))
+      expect(view.orientation).toEqual(turned)
+    })
+
+    it('fills its six fixed centres, the middle square of each face, then disables the button', () => {
+      render(<SolverPage cube="5x5" />)
+      click('Fill centres')
+      expect(view.state[centerCell('U', PUZZLE_5X5)]).toBe('white')
+      expect(view.state[centerCell('F', PUZZLE_5X5)]).toBe('green')
+      expect(view.state.filter((cell) => cell !== null)).toHaveLength(6)
+      expect(
+        screen.getByRole('button', { name: 'Fill centres' }),
+      ).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'white, 1/25' }),
+      ).toBeInTheDocument()
+    })
+
+    it('has Undo and Reset', () => {
+      render(<SolverPage cube="5x5" />)
+      tap(70)
+      click('Undo')
+      expect(view.state[70]).toBeNull()
+      tap(70)
+      click('Reset')
+      expect(view.state).toEqual(emptyState(PUZZLE_5X5))
+    })
+
+    it("can't be scanned or solved yet, and doesn't start a solver", () => {
+      fakeCamera()
+      render(<SolverPage cube="5x5" />)
+      expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
+      expect(
+        screen.getByRole('button', { name: 'Solving a 5x5 is coming soon' }),
+      ).toBeDisabled()
+      expect(solver.started).toEqual([])
+    })
+
+    it('keeps the painted 5x5 after a page refresh, apart from the other cubes', () => {
+      const { unmount } = render(<SolverPage cube="5x5" />)
+      tap(120)
+      unmount()
+      expect(loadCube(localStorage, PUZZLE_5X5)?.[120]).toBe('white')
+      expect(loadCube()).toBeNull()
+      expect(loadCube(localStorage, PUZZLE_4X4)).toBeNull()
+
+      render(<SolverPage cube="5x5" />)
+      expect(view.state[120]).toBe('white')
+    })
+
+    it('opens a 5x5 saved earlier', () => {
+      const saved = [...emptyState(PUZZLE_5X5)]
+      saved[60] = 'green'
+      saveCube(saved)
+      render(<SolverPage cube="5x5" />)
+      expect(view.state).toEqual(saved)
+      expect(
+        screen.getByRole('button', { name: 'green, 1/25' }),
       ).toBeInTheDocument()
     })
   })

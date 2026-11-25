@@ -60,8 +60,9 @@ export interface Solver {
 /**
  * Starts each cube's solver worker. Each `new Worker(new URL(…))` must be
  * written out in full like this, so the build can find the worker's file.
+ * The 5x5's solver is still to come.
  */
-const START_WORKER: Record<CubeType, () => WorkerLike> = {
+const START_WORKER: Partial<Record<CubeType, () => WorkerLike>> = {
   '3x3': () =>
     new Worker(new URL('./solver.worker.ts', import.meta.url), {
       type: 'module',
@@ -75,7 +76,12 @@ const START_WORKER: Record<CubeType, () => WorkerLike> = {
       type: 'module',
     }),
 }
-const startWorker = START_WORKER['3x3']
+const startWorker = START_WORKER['3x3']!
+
+/** Whether this cube has a solver yet. */
+export function hasSolver(puzzle: Puzzle): boolean {
+  return START_WORKER[puzzle.name] !== undefined
+}
 
 export function createSolver(
   makeWorker: () => WorkerLike = startWorker,
@@ -155,7 +161,9 @@ const shared = new Map<CubeType, Solver>()
  */
 export function getSolver(puzzle: Puzzle = PUZZLE_3X3): Solver {
   if (!shared.has(puzzle.name)) {
-    shared.set(puzzle.name, createSolver(START_WORKER[puzzle.name]))
+    const start = START_WORKER[puzzle.name]
+    if (!start) throw new Error(`There's no ${puzzle.name} solver yet`)
+    shared.set(puzzle.name, createSolver(start))
   }
   return shared.get(puzzle.name)!
 }

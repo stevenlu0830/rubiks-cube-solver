@@ -137,7 +137,7 @@ const cellNumbers = perPuzzle((puzzle) =>
 
 /**
  * The cells on the side facing the viewer (9 on a 3x3, 4 on a 2x2, 16 on
- * a 4x4), in the order a photo of that side reads them: row by row from
+ * a 4x4, 25 on a 5x5), in the order a photo of that side reads them: row by row from
  * the top left, as seen on screen.
  */
 export function frontCells(

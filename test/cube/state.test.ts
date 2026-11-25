@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  PUZZLE_5X5,
+} from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
+  centerCell,
+  centerOf,
   colorCounts,
   COLORS,
   emptyState,
@@ -16,6 +23,30 @@ describe('cell layout', () => {
     expect(cellIndex('R', 0)).toBe(9)
     expect(cellIndex('F', 4)).toBe(22)
     expect(cellIndex('B', 8)).toBe(53)
+  })
+})
+
+describe('centerOf', () => {
+  it("is the middle square of a face that has one: 4 of a 3x3's 9, 12 of a 5x5's 25", () => {
+    expect(centerOf()).toBe(4)
+    expect(centerOf(PUZZLE_3X3)).toBe(4)
+    expect(centerOf(PUZZLE_5X5)).toBe(12)
+  })
+
+  it('refuses a 2x2 or 4x4, which have no centre square that stays put', () => {
+    expect(() => centerOf(PUZZLE_2X2)).toThrow('A 2x2 has no centre square')
+    expect(() => centerOf(PUZZLE_4X4)).toThrow('A 4x4 has no centre square')
+  })
+})
+
+describe('centerCell', () => {
+  it("is each face's centre square: U4, R4… on a 3x3, U12, R12… on a 5x5", () => {
+    expect(centerCell('U')).toBe(4)
+    expect(centerCell('R')).toBe(13)
+    expect(centerCell('B')).toBe(49)
+    expect(centerCell('U', PUZZLE_5X5)).toBe(12)
+    expect(centerCell('R', PUZZLE_5X5)).toBe(37)
+    expect(centerCell('B', PUZZLE_5X5)).toBe(137)
   })
 })
 
@@ -84,5 +115,29 @@ describe('on a 2x2', () => {
       expect(isSolved(cube)).toBe(false)
     }
     expect(isSolved(emptyState(PUZZLE_2X2))).toBe(false)
+  })
+})
+
+describe('on a 5x5', () => {
+  it('numbers faces in U R F D L B order, 25 cells each', () => {
+    expect(cellIndex('U', 0, PUZZLE_5X5)).toBe(0)
+    expect(cellIndex('R', 0, PUZZLE_5X5)).toBe(25)
+    expect(cellIndex('F', 12, PUZZLE_5X5)).toBe(62)
+    expect(cellIndex('B', 24, PUZZLE_5X5)).toBe(149)
+  })
+
+  it('starts with 150 unpainted cells', () => {
+    const state = emptyState(PUZZLE_5X5)
+    expect(state).toHaveLength(150)
+    expect(state.every((cell) => cell === null)).toBe(true)
+  })
+
+  it('is solved with each face one colour: 25 of each', () => {
+    const solved = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
+    expect(isSolved(solved)).toBe(true)
+    for (const color of COLORS) expect(colorCounts(solved)[color]).toBe(25)
+    const cube = [...solved]
+    cube[cellIndex('L', 24, PUZZLE_5X5)] = 'white'
+    expect(isSolved(cube)).toBe(false)
   })
 })

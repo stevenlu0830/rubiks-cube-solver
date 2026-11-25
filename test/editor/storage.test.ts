@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   emptyState,
   solvedState,
@@ -118,5 +118,45 @@ describe('saving and loading a 4x4', () => {
       JSON.stringify(emptyState()),
     )
     expect(loadCube(localStorage, PUZZLE_4X4)).toBeNull()
+  })
+})
+
+describe('saving and loading a 5x5', () => {
+  beforeEach(() => localStorage.clear())
+  const fiveByFive = () => {
+    const cube = [...solvedState(STANDARD_SCHEME, PUZZLE_5X5)]
+    cube[80] = null
+    return cube
+  }
+
+  it('gets back exactly what was saved', () => {
+    saveCube(fiveByFive())
+    expect(loadCube(localStorage, PUZZLE_5X5)).toEqual(fiveByFive())
+  })
+
+  it('keeps it apart from the 2x2, 3x3 and 4x4, so none wipes another', () => {
+    const threeByThree = [...solvedState()]
+    const twoByTwo = [...solvedState(STANDARD_SCHEME, PUZZLE_2X2)]
+    const fourByFour = [...solvedState(STANDARD_SCHEME, PUZZLE_4X4)]
+    saveCube(threeByThree)
+    saveCube(twoByTwo)
+    saveCube(fourByFour)
+    saveCube(fiveByFive())
+    expect(loadCube()).toEqual(threeByThree)
+    expect(loadCube(localStorage, PUZZLE_2X2)).toEqual(twoByTwo)
+    expect(loadCube(localStorage, PUZZLE_4X4)).toEqual(fourByFour)
+    expect(loadCube(localStorage, PUZZLE_5X5)).toEqual(fiveByFive())
+    expect(localStorage.getItem('rubiks-cube-solver/cube-5x5')).toBe(
+      JSON.stringify(fiveByFive()),
+    )
+  })
+
+  it('starts blank with nothing saved, or something saved that is not 150 cells', () => {
+    expect(loadCube(localStorage, PUZZLE_5X5)).toBeNull()
+    localStorage.setItem(
+      'rubiks-cube-solver/cube-5x5',
+      JSON.stringify(emptyState(PUZZLE_4X4)),
+    )
+    expect(loadCube(localStorage, PUZZLE_5X5)).toBeNull()
   })
 })

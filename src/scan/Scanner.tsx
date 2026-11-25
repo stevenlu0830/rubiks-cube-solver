@@ -12,7 +12,7 @@ import {
 import type { Quaternion } from 'three'
 import type { Puzzle } from '../cube/puzzle.ts'
 import {
-  CENTER,
+  centerOf,
   colorCounts,
   FACES,
   type Color,
@@ -73,10 +73,17 @@ const LOOK_EVERY_MS = 250
 /** With Auto photo on: how long a side must stay still and clear before its photo is taken. */
 const AUTO_PHOTO_MS = 500
 
+/** A bigger cube's squares, too many to name by words alone: by row and column, counted from the top left. */
+function byRowAndColumn(size: number): string[] {
+  return Array.from(
+    { length: size * size },
+    (_, n) => `row ${Math.floor(n / size) + 1}, column ${(n % size) + 1}`,
+  )
+}
+
 /**
  * The squares of a side, by name, for screen readers: a 3x3's 9, a 2x2's
- * 4, or a 4x4's 16. A 4x4 has too many to name by words alone, so they go
- * by row and column, counted from the top left.
+ * 4, a 4x4's 16 or a 5x5's 25 (see byRowAndColumn).
  */
 const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
   3: [
@@ -91,10 +98,8 @@ const SQUARE_NAMES: Record<Puzzle['size'], readonly string[]> = {
     'bottom right',
   ],
   2: ['top left', 'top right', 'bottom left', 'bottom right'],
-  4: Array.from(
-    { length: 16 },
-    (_, n) => `row ${Math.floor(n / 4) + 1}, column ${(n % 4) + 1}`,
-  ),
+  4: byRowAndColumn(4),
+  5: byRowAndColumn(5),
 }
 
 /**
@@ -205,7 +210,7 @@ export function Scanner({
    */
   function sideName(face: Face): string {
     return puzzle.hasCenters
-      ? named.get(sides[face]!.cells[CENTER])!.color
+      ? named.get(sides[face]!.cells[centerOf(puzzle)])!.color
       : screenSideOf(orientation, face)
   }
 

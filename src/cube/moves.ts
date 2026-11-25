@@ -16,12 +16,17 @@ import { FACES, type Face } from './state.ts'
  *   change which side faces the user but don't scramble anything.
  * - A ' suffix means anticlockwise; a 2 suffix means a half turn.
  *
- * A 4x4 has two inner layers between each pair of opposite faces, so it
+ * A 4x4 or 5x5 has inner layers between each pair of opposite faces, so it
  * also has:
  * - Uw Dw Lw Rw Fw Bw ("wide") turn that face together with the inner
  *   layer behind it: the outer two layers at once.
  * - u d l r f b turn only the inner layer behind that face, the same way as
  *   the face: r is the layer next to R, turning like R.
+ *
+ * A 5x5 has the same moves, with Rw and r meaning the same two layers. Its
+ * middle layer, between r and l, has no move of its own: only x, y and z
+ * turn it, along with the rest of the cube. So a 5x5's centre squares (see
+ * centerOf in state.ts) never move, as on a 3x3.
  */
 export type Axis = 'x' | 'y' | 'z'
 type Wide = `${Face}w`
@@ -34,7 +39,7 @@ const AXIS_FACE: Record<Axis, Face> = { x: 'R', y: 'U', z: 'F' }
 
 /** Every cube's: its 6 faces, and the whole cube 3 ways. */
 const EVERY_CUBE: readonly BaseMove[] = [...FACES, ...AXES]
-/** Only a cube with inner layers to itself has these (a 4x4). */
+/** Only a cube with inner layers to itself has these (a 4x4 or 5x5). */
 const LAYERS: readonly BaseMove[] = [
   ...FACES.map((face): Wide => `${face}w`),
   ...FACES.map((face) => face.toLowerCase() as Inner),
@@ -52,10 +57,10 @@ const withTurns = (bases: readonly BaseMove[]): Move[] =>
 /** The moves every cube has: 18 face turns and 9 whole-cube turns. */
 export const MOVES: readonly Move[] = withTurns(EVERY_CUBE)
 
-/** The moves only a 4x4 has: 18 wide turns and 18 inner-layer turns. */
+/** The moves only a 4x4 or 5x5 has: 18 wide turns and 18 inner-layer turns. */
 export const LAYER_MOVES: readonly Move[] = withTurns(LAYERS)
 
-/** Every move this cube can make: MOVES, plus LAYER_MOVES on a 4x4. */
+/** Every move this cube can make: MOVES, plus LAYER_MOVES on a 4x4 or 5x5. */
 export function movesOf(puzzle: Puzzle): readonly Move[] {
   return withTurns(basesOf(puzzle))
 }
@@ -150,9 +155,10 @@ export function isMove(token: string): token is Move {
 
 /**
  * Works on any array of cells, not only colours: 54 for a 3x3, 24 for a
- * 2x2 or 96 for a 4x4 (see puzzleOf). Tests use this with numbered cells
+ * 2x2, 96 for a 4x4 or 150 for a 5x5 (see puzzleOf). Tests use this with numbered cells
  * to check every cell lands exactly where it should. Wide and inner-layer
- * moves only work on a 4x4: a 2x2 or 3x3 has no inner layer to itself.
+ * moves only work on a 4x4 or 5x5: a 2x2 or 3x3 has no inner layer to
+ * itself.
  */
 export function applyMove<T>(state: readonly T[], move: Move): T[] {
   const puzzle = puzzleOf(state)

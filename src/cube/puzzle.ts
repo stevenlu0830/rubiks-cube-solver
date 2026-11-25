@@ -21,26 +21,30 @@
  * all. It has four centre squares on each face, but they move about as the
  * inner layers turn, so like a 2x2 it has no fixed centre to say which
  * colour a face is.
+ *
+ * A 5x5 has 25 cells per face (U0 to U24, …), 150 in all. Like a 3x3, the
+ * middle square of each face (U12, …) never moves, so it says which colour
+ * that face is. The 8 squares around it move about, like a 4x4's centres.
  */
 
-export const CUBE_TYPES = ['2x2', '3x3', '4x4'] as const
+export const CUBE_TYPES = ['2x2', '3x3', '4x4', '5x5'] as const
 export type CubeType = (typeof CUBE_TYPES)[number]
 
 export interface Puzzle {
   name: CubeType
-  /** Squares along each edge of a face: 2, 3 or 4. */
-  size: 2 | 3 | 4
-  /** Squares on each face: 4, 9 or 16. */
+  /** Squares along each edge of a face: 2, 3, 4 or 5. */
+  size: 2 | 3 | 4 | 5
+  /** Squares on each face: 4, 9, 16 or 25. */
   cellsPerFace: number
-  /** Squares on the whole cube: 24, 54 or 96. */
+  /** Squares on the whole cube: 24, 54, 96 or 150. */
   cellCount: number
-  /** How many squares of each colour a real cube has: one face's worth, 4, 9 or 16. */
+  /** How many squares of each colour a real cube has: one face's worth, 4, 9, 16 or 25. */
   cellsPerColor: number
   /**
-   * Whether each face has a single centre square, which never moves, so on
-   * a 3x3 the centres say which colour each face is. A 2x2 has none; a
-   * 4x4's four centre squares on each face move about, so it counts as
-   * having none too.
+   * Whether each face has a single centre square, which never moves, so the
+   * centres say which colour each face is (see centerOf in state.ts). A
+   * 3x3 and a 5x5 do. A 2x2 has none; a 4x4's four centre squares on each
+   * face move about, so it counts as having none too.
    */
   hasCenters: boolean
 }
@@ -60,16 +64,19 @@ function puzzle(name: CubeType, size: Puzzle['size']): Puzzle {
 export const PUZZLE_2X2 = puzzle('2x2', 2)
 export const PUZZLE_3X3 = puzzle('3x3', 3)
 export const PUZZLE_4X4 = puzzle('4x4', 4)
+export const PUZZLE_5X5 = puzzle('5x5', 5)
 
 export const PUZZLES: Readonly<Record<CubeType, Puzzle>> = {
   '2x2': PUZZLE_2X2,
   '3x3': PUZZLE_3X3,
   '4x4': PUZZLE_4X4,
+  '5x5': PUZZLE_5X5,
 }
 
 /**
  * Which cube a list of cells is for, told by how many there are: 24 for a
- * 2x2, 54 for a 3x3, 96 for a 4x4. Works on colours, cell numbers, anything.
+ * 2x2, 54 for a 3x3, 96 for a 4x4, 150 for a 5x5. Works on colours, cell
+ * numbers, anything.
  */
 export function puzzleOf(cells: { readonly length: number }): Puzzle {
   const found = Object.values(PUZZLES).find(
@@ -81,8 +88,8 @@ export function puzzleOf(cells: { readonly length: number }): Puzzle {
 
 /**
  * Which cube one side's worth of squares is from, told by how many there
- * are: 4 for a 2x2, 9 for a 3x3, 16 for a 4x4. Works on colours, cell
- * numbers, anything.
+ * are: 4 for a 2x2, 9 for a 3x3, 16 for a 4x4, 25 for a 5x5. Works on
+ * colours, cell numbers, anything.
  */
 export function puzzleOfSide(squares: { readonly length: number }): Puzzle {
   return puzzleOf({ length: 6 * squares.length })

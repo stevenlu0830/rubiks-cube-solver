@@ -9,7 +9,13 @@
 
 import { Vector3, type Quaternion } from 'three'
 import { puzzleOfSide } from '../cube/puzzle.ts'
-import { CENTER, COLORS, FACES, type Color, type Face } from '../cube/state.ts'
+import {
+  centerOf,
+  COLORS,
+  FACES,
+  type Color,
+  type Face,
+} from '../cube/state.ts'
 import type { SwipeDirection } from '../view/gestures.ts'
 import { faceTowards, frontFace } from '../view/orientation.ts'
 import {
@@ -94,11 +100,13 @@ export function repeatedSide(sides: ScannedSides, face: Face): Face | null {
   if (!side) return null
   const others = FACES.filter((other) => other !== face && sides[other])
   if (others.length === 0) return null
-  if (!puzzleOfSide(side.cells).hasCenters) {
+  const puzzle = puzzleOfSide(side.cells)
+  if (!puzzle.hasCenters) {
     return lookAlikeSide(sides, side.readings, others)
   }
-  const center = side.readings[CENTER]
-  const otherCenters = others.map((other) => sides[other]!.readings[CENTER])
+  const middle = centerOf(puzzle)
+  const center = side.readings[middle]
+  const otherCenters = others.map((other) => sides[other]!.readings[middle])
   const distances = otherCenters.map((other) => colorDistance(center, other))
   const closest = Math.min(...distances)
   if (closest > SAME_STICKER) return null

@@ -9,7 +9,8 @@ import {
 import { applyMoves, randomScramble, type Move } from '../../src/cube/moves.ts'
 import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
 import {
-  CENTER,
+  centerCell,
+  centerOf,
   cellIndex,
   FACES,
   solvedState,
@@ -53,7 +54,7 @@ const sameRotation = (a: Quaternion, b: Quaternion) => {
 
 /** Which face's colour sits at the front/top centre after these moves, per the Phase 1 engine. */
 const faceShownAfterMoves = (moves: Move[], position: Face): Face => {
-  const color = applyMoves(solvedState(), moves)[cellIndex(position, CENTER)]
+  const color = applyMoves(solvedState(), moves)[centerCell(position)]
   return FACES.find((face) => STANDARD_SCHEME[face] === color)!
 }
 
@@ -139,8 +140,8 @@ describe('cubeAsShown', () => {
   it('shows the colours of the face now in front at the front', () => {
     const cube = applyMoves(solvedState(), randomScramble(25, seededRandom(10)))
     const orientation = swipeAll(['up']) // bottom face comes to the front
-    expect(cubeAsShown(cube, orientation)[cellIndex('F', CENTER)]).toBe(
-      cube[cellIndex('D', CENTER)],
+    expect(cubeAsShown(cube, orientation)[centerCell('F')]).toBe(
+      cube[centerCell('D')],
     )
   })
 })
@@ -206,7 +207,7 @@ describe('frontCells', () => {
       const cells = frontCells(orientation)
       const front = frontFace(orientation)
       expect([...cells].sort((a, b) => a - b)).toEqual(cellsOf(front))
-      expect(cells[CENTER]).toBe(cellIndex(front, CENTER))
+      expect(cells[centerOf()]).toBe(centerCell(front))
 
       const [top, bottom, left, right] = [
         new Vector3(0, 1, 0),

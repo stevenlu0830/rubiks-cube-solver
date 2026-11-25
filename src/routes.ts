@@ -4,7 +4,8 @@ import { CUBE_TYPES, type CubeType } from './cube/puzzle.ts'
 /**
  * Which page to show, read from the end of the address after the # (its
  * "hash"): …/#/3x3 is the 3x3 solver, …/#/2x2 the 2x2's, …/#/4x4 the
- * 4x4's, and anything else is the page for picking a cube.
+ * 4x4's, …/#/5x5 the 5x5's, and anything else is the page for picking a
+ * cube.
  *
  * Hash addresses need no help from the web server. The browser never sends
  * the part after # to it, so GitHub Pages (which has no way to send
@@ -12,6 +13,13 @@ import { CUBE_TYPES, type CubeType } from './cube/puzzle.ts'
  * just serve the one page. Changing the hash doesn't reload the page, and
  * the browser's Back button steps through hashes like any other page.
  */
+
+/**
+ * The cubes that can be solved so far; the picker shows the others as
+ * "Coming soon". Their pages still open from their address (e.g. #/5x5),
+ * to try them out while they're being built.
+ */
+export const READY_CUBES: readonly CubeType[] = ['2x2', '3x3', '4x4']
 
 export type Route = 'picker' | CubeType
 

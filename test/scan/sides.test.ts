@@ -4,7 +4,7 @@ import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
 import { centreCellsOf, WING_CELLS } from '../../src/cube/cubies.ts'
 import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import {
-  CENTER,
+  centerCell,
   cellIndex,
   COLORS,
   FACES,
@@ -76,7 +76,7 @@ describe('readScannedCube', () => {
       F: photo('F', [240, 105, 25]),
       U: photo('U', redOrange),
     })
-    expect(read.get(cellIndex('U', CENTER))?.color).toBe('red')
+    expect(read.get(centerCell('U'))?.color).toBe('red')
   })
 
   it('can change an earlier side when a new one comes in', () => {

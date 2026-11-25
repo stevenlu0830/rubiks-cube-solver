@@ -6,7 +6,13 @@ import { PUZZLE_2X2, PUZZLE_4X4 } from '../src/cube/puzzle.ts'
 import { solvedState, STANDARD_SCHEME } from '../src/cube/state.ts'
 import { STICKER_COLORS } from '../src/view/colors.ts'
 import { frontCells } from '../src/view/orientation.ts'
-import { savedCube, SCRAMBLED, SCRAMBLED_2X2, SCRAMBLED_4X4 } from './cubes.ts'
+import {
+  savedCube,
+  SCRAMBLED,
+  SCRAMBLED_2X2,
+  SCRAMBLED_4X4,
+  SCRAMBLED_5X5,
+} from './cubes.ts'
 import { fakeCamera, scanEverySide, showSide } from './fakeCamera.ts'
 
 /**
@@ -37,12 +43,15 @@ for (const colorScheme of ['light', 'dark'] as const) {
     test('the page for picking a cube, and its About window', async ({
       page,
     }) => {
-      // A saved cube of each, so every card shows "In progress" too.
+      // A saved cube of each, so every card that's ready shows "In
+      // progress" too; the 5x5's says "Coming soon".
       await page.addInitScript(savedCube, SCRAMBLED)
       await page.addInitScript(savedCube, SCRAMBLED_2X2)
       await page.addInitScript(savedCube, SCRAMBLED_4X4)
+      await page.addInitScript(savedCube, SCRAMBLED_5X5)
       await page.goto('./')
       await expect(page.getByText('In progress')).toHaveCount(3)
+      await expect(page.getByText('Coming soon')).toHaveCount(1)
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'About this app' }).click()
       await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
@@ -78,6 +87,27 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Solve' }).click() // all blank
       await expect(page.getByRole('status')).toContainText('still blank')
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Settings' }).click()
+      await expectNoProblems(page)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: 'About this app' }).click()
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('the 5x5 painting screen, the settings menu and the About window', async ({
+      page,
+    }) => {
+      await page.goto('./#/5x5')
+      await expect(
+        page.getByRole('button', { name: 'white, 0/25' }),
+      ).toBeVisible()
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: 'Fill centres' }).click()
+      await expect(
+        page.getByRole('button', { name: 'white, 1/25' }),
+      ).toBeVisible()
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Settings' }).click()
       await expectNoProblems(page)

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { CENTER, cellIndex, COLORS } from '../src/cube/state.ts'
+import { centerCell, COLORS } from '../src/cube/state.ts'
 import { frontFace, topFace } from '../src/view/orientation.ts'
 import { CubePainter } from './cubePainter.ts'
 import { SCRAMBLED, TWISTED_CORNER } from './cubes.ts'
@@ -21,8 +21,8 @@ test('paints a scrambled cube, checks it, and plays the solution to the end', as
 
   await page.getByRole('button', { name: 'Solve' }).click()
   // The holding position is however the cube is turned on screen right now.
-  const front = SCRAMBLED[cellIndex(frontFace(painter.orientation), CENTER)]
-  const top = SCRAMBLED[cellIndex(topFace(painter.orientation), CENTER)]
+  const front = SCRAMBLED[centerCell(frontFace(painter.orientation))]
+  const top = SCRAMBLED[centerCell(topFace(painter.orientation))]
   await expect(page.getByLabel('How to hold your cube')).toContainText(
     `Hold your cube with ${front} facing you and ${top} on top`,
     { timeout: 30_000 }, // the solver's one-off setup can take a while

@@ -12,8 +12,8 @@ import { COLORS, type CubeState } from '../cube/state.ts'
  * private browsing modes), so failures are silently ignored: the app then
  * simply starts blank.
  *
- * Each cube is saved in its own place, so painting a 2x2 never wipes a 3x3
- * or a 4x4, and the other way round.
+ * Each cube is saved in its own place, so painting a 2x2 never wipes a 3x3,
+ * a 4x4 or a 5x5, and the other way round.
  */
 
 const STORAGE_KEYS: Readonly<Record<CubeType, string>> = {
@@ -21,9 +21,10 @@ const STORAGE_KEYS: Readonly<Record<CubeType, string>> = {
   '3x3': 'rubiks-cube-solver/cube',
   '2x2': 'rubiks-cube-solver/cube-2x2',
   '4x4': 'rubiks-cube-solver/cube-4x4',
+  '5x5': 'rubiks-cube-solver/cube-5x5',
 }
 
-/** Saves a 2x2, 3x3 or 4x4 (told apart by how many cells it has) in its own place. */
+/** Saves a 2x2, 3x3, 4x4 or 5x5 (told apart by how many cells it has) in its own place. */
 export function saveCube(
   cube: CubeState,
   storage: Storage = localStorage,

@@ -30,9 +30,10 @@ export const CAMERA_MARGIN = 0.08
 
 /**
  * Half the cube's outer size: a 3x3 spans -1.5 to 1.5 on each axis, a 2x2
- * -1 to 1, a 4x4 -2 to 2. The camera moves in closer for a 2x2 and further
- * back for a 4x4, so every cube looks the same size on screen: a 2x2's
- * stickers are bigger, a 4x4's smaller.
+ * -1 to 1, a 4x4 -2 to 2, a 5x5 -2.5 to 2.5. The camera moves in closer
+ * for a 2x2 and further back for a 4x4 or 5x5, so every cube looks the
+ * same size on screen: a 2x2's stickers are bigger, a 4x4's and 5x5's
+ * smaller.
  */
 export function cubeHalfSize(puzzle: Puzzle): number {
   return puzzle.size / 2

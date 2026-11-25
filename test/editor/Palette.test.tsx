@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import { COLORS, type Color } from '../../src/cube/state.ts'
 import { Palette } from '../../src/editor/Palette.tsx'
 import { PuzzleContext } from '../../src/puzzleContext.ts'
@@ -114,5 +114,32 @@ describe('Palette on a 4x4', () => {
     expect(screen.getByText('16/16')).toHaveAttribute('data-status', 'full')
     expect(screen.getByText('17/16')).toHaveAttribute('data-status', 'over')
     expect(screen.getByText('9/16')).not.toHaveAttribute('data-status')
+  })
+})
+
+describe('Palette on a 5x5', () => {
+  it('counts each colour out of the 25 a 5x5 has, marking full and too many', () => {
+    render(
+      <PuzzleContext value={PUZZLE_5X5}>
+        <Palette
+          selected="white"
+          counts={{
+            white: 25,
+            yellow: 26,
+            green: 0,
+            blue: 1,
+            red: 16,
+            orange: 3,
+          }}
+          onSelect={vi.fn()}
+        />
+      </PuzzleContext>,
+    )
+    expect(
+      screen.getByRole('button', { name: 'white, 25/25' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('25/25')).toHaveAttribute('data-status', 'full')
+    expect(screen.getByText('26/25')).toHaveAttribute('data-status', 'over')
+    expect(screen.getByText('16/25')).not.toHaveAttribute('data-status')
   })
 })

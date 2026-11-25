@@ -14,8 +14,7 @@ import {
   type Puzzle,
 } from './puzzle.ts'
 import {
-  CENTER,
-  cellIndex,
+  centerCell,
   FACES,
   STANDARD_SCHEME,
   type Color,
@@ -204,10 +203,11 @@ export function solvedCubies(): CubieCube {
  * order round each corner, which is the same however it's held.
  */
 export function faceColorsOf(state: CubeState): ColorScheme | null {
-  if (!puzzleOf(state).hasCenters) return STANDARD_SCHEME
+  const puzzle = puzzleOf(state)
+  if (!puzzle.hasCenters) return STANDARD_SCHEME
   const scheme: Partial<Record<Face, Color>> = {}
   for (const face of FACES) {
-    const center = state[cellIndex(face, CENTER)]
+    const center = state[centerCell(face, puzzle)]
     if (center === null || Object.values(scheme).includes(center)) return null
     scheme[face] = center
   }

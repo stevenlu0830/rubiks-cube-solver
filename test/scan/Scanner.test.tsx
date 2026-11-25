@@ -10,7 +10,7 @@ import {
   type Puzzle,
 } from '../../src/cube/puzzle.ts'
 import {
-  CENTER,
+  centerOf,
   emptyState,
   solvedState,
   STANDARD_SCHEME,
@@ -639,7 +639,7 @@ describe('Scanner', () => {
           if (side === 2) {
             // The real cube held a quarter turn round from the 3D one.
             shows = turnCells(shows, 1)
-            turnedSide = SCRAMBLED[shows[CENTER]]
+            turnedSide = SCRAMBLED[shows[centerOf()]]
           }
           camera.show(shows.map((cell) => SCRAMBLED[cell]!))
           click('Take photo')

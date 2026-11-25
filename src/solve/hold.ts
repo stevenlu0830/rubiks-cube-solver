@@ -1,6 +1,6 @@
 import { cornerCellsOf, CORNERS } from '../cube/cubies.ts'
 import { puzzleOf } from '../cube/puzzle.ts'
-import { CENTER, cellIndex, type Color, type CubeState } from '../cube/state.ts'
+import { centerCell, type Color, type CubeState } from '../cube/state.ts'
 
 /**
  * How to hold the cube for every step of its solution, so each move turns
@@ -29,8 +29,8 @@ export function holdFor(cube: CubeState): Hold {
   if (puzzle.hasCenters) {
     return {
       by: 'centres',
-      front: cube[cellIndex('F', CENTER)]!,
-      top: cube[cellIndex('U', CENTER)]!,
+      front: cube[centerCell('F', puzzle)]!,
+      top: cube[centerCell('U', puzzle)]!,
     }
   }
   if (puzzle.size > 2) return { by: 'view' }

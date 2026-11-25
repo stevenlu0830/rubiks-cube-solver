@@ -1,7 +1,6 @@
 import { puzzleOf } from '../cube/puzzle.ts'
 import {
-  CENTER,
-  cellIndex,
+  centerCell,
   emptyState,
   FACES,
   STANDARD_SCHEME,
@@ -36,7 +35,7 @@ export type EditorAction =
       type: 'paintCells'
       paints: readonly (readonly [cell: number, color: Color])[]
     }
-  /** Set the six centres to the standard colour scheme (a 3x3 only: a 2x2 has none). */
+  /** Set the six centres to the standard colour scheme (a 3x3 or 5x5: a 2x2 or 4x4 has none). */
   | { type: 'fillCenters' }
   /** Clear every cell. */
   | { type: 'reset' }
@@ -65,10 +64,11 @@ export function editorReducer(
       return change(state, cube)
     }
     case 'fillCenters': {
-      if (!puzzleOf(state.cube).hasCenters) return state
+      const puzzle = puzzleOf(state.cube)
+      if (!puzzle.hasCenters) return state
       const cube = [...state.cube]
       for (const face of FACES) {
-        cube[cellIndex(face, CENTER)] = STANDARD_SCHEME[face]
+        cube[centerCell(face, puzzle)] = STANDARD_SCHEME[face]
       }
       return change(state, cube)
     }
@@ -95,11 +95,12 @@ function change(state: EditorState, cube: CubeState): EditorState {
 
 /**
  * True when the six centres already match the standard colour scheme, or
- * there are none to fill (a 2x2).
+ * there are none to fill (a 2x2 or 4x4).
  */
 export function centersFilled(cube: CubeState): boolean {
-  if (!puzzleOf(cube).hasCenters) return true
+  const puzzle = puzzleOf(cube)
+  if (!puzzle.hasCenters) return true
   return FACES.every(
-    (face) => cube[cellIndex(face, CENTER)] === STANDARD_SCHEME[face],
+    (face) => cube[centerCell(face, puzzle)] === STANDARD_SCHEME[face],
   )
 }

@@ -10,8 +10,7 @@ import {
 } from './cubies.ts'
 import { puzzleOf } from './puzzle.ts'
 import {
-  CENTER,
-  cellIndex,
+  centerCell,
   colorCounts,
   COLORS,
   FACES,
@@ -116,7 +115,7 @@ export function validateCube(cube: CubeState): Validation {
 
   // 3. Six different centres. Centres never move, so each one names its face.
   if (puzzle.hasCenters) {
-    const centerCells = FACES.map((face) => cellIndex(face, CENTER))
+    const centerCells = FACES.map((face) => centerCell(face, puzzle))
     const sharedCenters = centerCells.filter((cell) =>
       centerCells.some((other) => other !== cell && cube[other] === cube[cell]),
     )

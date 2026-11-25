@@ -9,8 +9,8 @@ import { FACES, type Face } from './state.ts'
  * Axes: x points right (towards R), y points up (towards U), z points at the
  * viewer (towards F). Neighbouring small cubes ("cubies") are 1 apart, and
  * the cube's middle is at 0. So a 3×3×3 cube's cubie centres have
- * coordinates -1, 0 or 1, a 2×2×2 cube's -0.5 or 0.5, and a 4×4×4 cube's
- * -1.5, -0.5, 0.5 or 1.5.
+ * coordinates -1, 0 or 1, a 2×2×2 cube's -0.5 or 0.5, a 4×4×4 cube's
+ * -1.5, -0.5, 0.5 or 1.5, and a 5×5×5 cube's -2, -1, 0, 1 or 2.
  */
 
 export type Vec3 = readonly [number, number, number]
@@ -44,7 +44,7 @@ export function faceNormal(face: Face): Vec3 {
 
 /**
  * How far the outer layers' cubie centres are from the middle: 1 on a 3x3,
- * 0.5 on a 2x2, 1.5 on a 4x4. A face turn moves the cubies this far out
+ * 0.5 on a 2x2, 1.5 on a 4x4, 2 on a 5x5. A face turn moves the cubies this far out
  * along its normal.
  */
 export function outerLayer(puzzle: Puzzle): number {
@@ -111,7 +111,8 @@ export function stickerIndexAt(
 /**
  * Rounds each coordinate to the nearest half: undoes the tiny errors left
  * after turning a point with floating-point maths, for any cube (whose
- * cubie centres are whole numbers on a 3x3 and halves on a 2x2 or 4x4).
+ * cubie centres are whole numbers on a 3x3 or 5x5 and halves on a 2x2 or
+ * 4x4).
  */
 export function snapToGrid(v: Vec3): Vec3 {
   const snap = (n: number) => Math.round(n * 2) / 2

@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   emptyState,
   solvedState,
@@ -17,7 +17,7 @@ const card = (name: string) =>
 describe('CubePicker', () => {
   beforeEach(() => localStorage.clear())
 
-  it('asks which cube, and offers the 2x2, 3x3 and 4x4', () => {
+  it('asks which cube, and offers the 2x2, 3x3, 4x4 and 5x5', () => {
     render(<CubePicker />)
     expect(
       screen.getByRole('heading', { name: "Rubik's Cube Solver" }),
@@ -25,10 +25,10 @@ describe('CubePicker', () => {
     expect(
       screen.getByRole('heading', { name: 'Which cube are you solving?' }),
     ).toBeInTheDocument()
-    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    expect(screen.getAllByRole('listitem')).toHaveLength(4)
   })
 
-  it('links each cube to its solver', () => {
+  it('links each cube that can be solved to its solver', () => {
     render(<CubePicker />)
     const threeByThree = within(card('3x3')).getByRole('link')
     expect(threeByThree).toHaveAttribute('href', '#/3x3')
@@ -39,7 +39,23 @@ describe('CubePicker', () => {
     const fourByFour = within(card('4x4')).getByRole('link')
     expect(fourByFour).toHaveAttribute('href', '#/4x4')
     expect(fourByFour).toHaveTextContent('4x4Four layers, no fixed centres')
-    expect(screen.queryByText('Coming soon')).toBeNull()
+    for (const ready of ['2x2', '3x3', '4x4']) {
+      expect(card(ready)).not.toHaveTextContent('Coming soon')
+    }
+  })
+
+  it('shows the 5x5 as coming soon, with no link yet', () => {
+    render(<CubePicker />)
+    expect(card('5x5')).toHaveTextContent(
+      '5x5Five layers, fixed centresComing soon',
+    )
+    expect(within(card('5x5')).queryByRole('link')).toBeNull()
+  })
+
+  it("doesn't say a 5x5 is in progress while it's coming soon, even with one saved", () => {
+    saveCube(solvedState(STANDARD_SCHEME, PUZZLE_5X5))
+    render(<CubePicker />)
+    expect(card('5x5')).not.toHaveTextContent('In progress')
   })
 
   it('says when a 4x4 is part-painted and saved', () => {

@@ -16,7 +16,12 @@ import {
   type CubieCube,
 } from '../../src/cube/cubies.ts'
 import { STICKERS, stickersOf, type Vec3 } from '../../src/cube/geometry.ts'
-import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  PUZZLE_5X5,
+} from '../../src/cube/puzzle.ts'
 import {
   applyMove,
   applyMoves,
@@ -26,7 +31,7 @@ import {
   type Move,
 } from '../../src/cube/moves.ts'
 import {
-  CENTER,
+  centerCell,
   cellIndex,
   emptyState,
   FACES,
@@ -44,7 +49,7 @@ const numbers = (digits: string) => digits.split(' ').map(Number)
 
 const schemeOf = (state: CubeState) =>
   Object.fromEntries(
-    FACES.map((face) => [face, state[cellIndex(face, CENTER)]]),
+    FACES.map((face) => [face, state[centerCell(face)]]),
   ) as ColorScheme
 
 describe('slot cells', () => {
@@ -192,7 +197,7 @@ describe('toCubies', () => {
 
   it('returns null when two centres share a colour', () => {
     const state = [...solvedState()]
-    state[cellIndex('U', CENTER)] = 'yellow'
+    state[centerCell('U')] = 'yellow'
     expect(toCubies(state)).toBeNull()
   })
 
@@ -307,7 +312,7 @@ describe('on a 2x2', () => {
 describe('centreCellsOf', () => {
   it("finds a 3x3's 6 centres, a 4x4's 24 and a 2x2's none", () => {
     expect(centreCellsOf(PUZZLE_3X3)).toEqual(
-      FACES.map((face) => cellIndex(face, CENTER)),
+      FACES.map((face) => centerCell(face)),
     )
     expect(centreCellsOf(PUZZLE_2X2)).toEqual([])
     expect(centreCellsOf(PUZZLE_4X4)).toEqual(
@@ -395,5 +400,34 @@ describe('on a 4x4', () => {
     )!
     expect(fourByFour).toEqual(twoByTwo)
     expect(faceColorsOf(SOLVED_4X4)).toBe(STANDARD_SCHEME)
+  })
+})
+
+describe('faceColorsOf a 5x5', () => {
+  const SOLVED_5X5 = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
+
+  it("reads each face's colour from its middle square, whichever way the cube is held", () => {
+    expect(faceColorsOf(SOLVED_5X5)).toEqual(STANDARD_SCHEME)
+    const turned = applyMoves(SOLVED_5X5, parseMoves("x y'"))
+    for (const face of FACES) {
+      expect(faceColorsOf(turned)![face]).toBe(
+        turned[centerCell(face, PUZZLE_5X5)],
+      )
+    }
+    expect(faceColorsOf(turned)).not.toEqual(STANDARD_SCHEME)
+  })
+
+  it("isn't fooled by the squares round the middle, which move", () => {
+    const cube = applyMoves(SOLVED_5X5, parseMoves("r u' Rw f2"))
+    expect(faceColorsOf(cube)).toEqual(STANDARD_SCHEME)
+  })
+
+  it('is null when a middle square is blank or two are the same colour', () => {
+    const blank = [...SOLVED_5X5]
+    blank[centerCell('F', PUZZLE_5X5)] = null
+    expect(faceColorsOf(blank)).toBeNull()
+    const repeated = [...SOLVED_5X5]
+    repeated[centerCell('F', PUZZLE_5X5)] = 'white'
+    expect(faceColorsOf(repeated)).toBeNull()
   })
 })

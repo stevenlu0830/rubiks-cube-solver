@@ -20,7 +20,7 @@ import {
 import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
 import { FLIP_FIX, SWAP_FIX } from '../../src/solver/fourByFour.ts'
 import {
-  CENTER,
+  centerCell,
   cellIndex,
   emptyState,
   solvedState,
@@ -136,8 +136,8 @@ describe('2. nine squares of each colour', () => {
 
 describe('3. six different centres', () => {
   it('highlights two centres of the same colour', () => {
-    const upCenter = cellIndex('U', CENTER)
-    const rightCenter = cellIndex('R', CENTER)
+    const upCenter = centerCell('U')
+    const rightCenter = centerCell('R')
     // Swap the white top centre with a red square: counts stay at 9 each.
     const cube = swapCells(solvedState(), upCenter, cellIndex('R', 0))
     const result = expectProblem(cube, 'centers')
