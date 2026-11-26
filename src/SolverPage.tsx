@@ -19,7 +19,7 @@ import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
 import { InfoButton } from './info/InfoButton.tsx'
 import { PuzzleContext } from './puzzleContext.ts'
-import { hashFor } from './routes.ts'
+import { hashFor, READY_CUBES } from './routes.ts'
 import { canOfferCamera } from './scan/camera.ts'
 import { CameraIcon, Scanner } from './scan/Scanner.tsx'
 import {
@@ -45,7 +45,7 @@ import { PlaybackControls } from './solve/PlaybackControls.tsx'
 import { SolveCard } from './solve/SolveCard.tsx'
 import { StepList } from './solve/StepList.tsx'
 import { toFaceletString } from './solver/facelets.ts'
-import { getSolver, hasSolver, solverErrorMessage } from './solver/solver.ts'
+import { getSolver, solverErrorMessage } from './solver/solver.ts'
 import { CubeView } from './view/CubeView.tsx'
 import { cubeAsShown, frontCells } from './view/orientation.ts'
 import './App.css'
@@ -58,13 +58,13 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
  * The page for one cube: paint or scan it, check it, and step through the
  * solution. The page for picking a cube links here.
  *
- * A 5x5 can so far only be painted and checked: solving and scanning one
- * are still to come, so its page has no Scan button, and Check in place of
+ * A cube that isn't ready yet (see READY_CUBES), a 5x5, can so far only be
+ * painted and checked: its page has no Scan button, and Check in place of
  * Solve.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
-  const solvable = hasSolver(puzzle)
+  const solvable = READY_CUBES.includes(cubeType)
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -150,7 +150,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
       ? playback.moves[currentStep(playback)]
       : null
 
-  /** For a cube with no solver yet: says whether it's a real cube, and if not, what's wrong. */
+  /** For a cube that isn't ready to solve yet: says whether it's a real cube, and if not, what's wrong. */
   function handleCheck() {
     const validation = validateCube(cube)
     setSolve({ cube, status: { stage: 'checked', validation } })

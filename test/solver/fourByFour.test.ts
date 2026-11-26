@@ -9,10 +9,10 @@ import {
 } from '../../src/cube/state.ts'
 import { validateCube } from '../../src/cube/validate.ts'
 import { toFaceletString } from '../../src/solver/facelets.ts'
+import { mergeTurns } from '../../src/solver/bigCube.ts'
 import {
   FLIP_FIX,
   initFourByFourSolver,
-  mergeTurns,
   solveFourByFour,
   SWAP_FIX,
 } from '../../src/solver/fourByFour.ts'
@@ -183,32 +183,4 @@ describe('the parity fixes', () => {
       expect(result.valid ? null : result.problem).toBe(problem)
     },
   )
-})
-
-describe('mergeTurns', () => {
-  it.each([
-    ['R r', 'Rw'],
-    ["U U'", ''],
-    ['F2 F', "F'"],
-    ["Rw R'", 'r'],
-    ['L l', 'Lw'],
-    ["u2 U2 u2 U'", 'U'],
-    ["R L R'", 'L'],
-    ["r l'", "r l'"],
-    ["R U R'", "R U R'"],
-    ["U R R' U'", ''],
-  ])('%s → %s', (moves, merged) => {
-    expect(mergeTurns(parseMoves(moves))).toEqual(parseMoves(merged))
-  })
-
-  it('never changes what the moves do', () => {
-    const random = seededRandom(406)
-    const numbered = Array.from({ length: 96 }, (_, i) => i)
-    for (let run = 0; run < 100; run++) {
-      const moves = randomTurns(30, random)
-      expect(applyMoves(numbered, mergeTurns(moves))).toEqual(
-        applyMoves(numbered, moves),
-      )
-    }
-  })
 })

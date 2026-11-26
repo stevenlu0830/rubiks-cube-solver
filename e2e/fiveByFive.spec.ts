@@ -132,4 +132,9 @@ test('has no Scan or Solve yet, but checks a painted 5x5, outlining a mistake un
   await expect(status).toContainText(
     'Looks good: this is a real, solvable cube. Solving a 5x5 is coming soon.',
   )
+
+  // The 5x5's solver is built, but its page doesn't start it until solving
+  // is ready.
+  const workers = page.workers().map((worker) => worker.url())
+  expect(workers.some((url) => url.includes('.worker'))).toBe(false)
 })

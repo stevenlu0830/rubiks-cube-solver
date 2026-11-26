@@ -7,9 +7,10 @@ import type { Move } from '../cube/moves.ts'
  */
 
 /**
- * The stages of a 4x4's solution, in order (see fourByFour.ts): its
- * centres, then its edge pieces paired up, then a fix for the cases a 3x3
- * can't have (often not needed), then the rest, solved like a 3x3.
+ * The stages of a 4x4's or 5x5's solution, in order (see fourByFour.ts and
+ * fiveByFive.ts): its centres, then its edge pieces paired up, then a fix
+ * for the cases a 3x3 can't have (often not needed), then the rest, solved
+ * like a 3x3.
  */
 export type StageName = 'centres' | 'edges' | 'parity' | 'finish'
 
@@ -20,8 +21,9 @@ export interface Stage {
 }
 
 /**
- * The moves that solve a cube. A 4x4's solution also says where each stage
- * starts, leaving out any it didn't need; a 2x2 or 3x3 has no stages.
+ * The moves that solve a cube. A 4x4's or 5x5's solution also says where
+ * each stage starts, leaving out any it didn't need; a 2x2 or 3x3 has no
+ * stages.
  */
 export interface Solution {
   moves: Move[]

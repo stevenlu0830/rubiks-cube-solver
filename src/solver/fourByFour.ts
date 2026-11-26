@@ -1,28 +1,38 @@
 import { centreCellsOf, WING_CELLS } from '../cube/cubies.ts'
-import {
-  applyMoves,
-  invertMoves,
-  movesOf,
-  parseMoves,
-  type Move,
-} from '../cube/moves.ts'
+import { applyMoves, parseMoves, type Move } from '../cube/moves.ts'
 import { PUZZLE_4X4 } from '../cube/puzzle.ts'
 import { FACES, STANDARD_SCHEME, type Face } from '../cube/state.ts'
 import { validateCube, type Problem } from '../cube/validate.ts'
+import {
+  moveSource,
+  pairEdges,
+  pairingSequences,
+  solutionOf,
+  turnLetters,
+  type EdgePairing,
+  type Pairing,
+} from './bigCube.ts'
+import {
+  centreSteps,
+  FACE_TURNS,
+  solveStep,
+  type CentreStep,
+  type RingMoves,
+} from './centres.ts'
 import { initSolver as initKociemba, solveFacelets } from './kociemba.ts'
-import type { Solution, Stage, StageName } from './protocol.ts'
+import type { Solution, StageName } from './protocol.ts'
 
 /**
  * The 4x4 solver. It solves a 4x4 the way most people do, by "reduction":
  * turning it into something that can be solved like a 3x3.
  *
  * 1. Centres: the four centre squares of each face all one colour, in
- *    three small steps (see CENTRE_STEPS). Each step has a lookup table of
+ *    three small steps (see centres.ts). Each step has a lookup table of
  *    how many moves every position needs, so it always takes the fewest.
  * 2. Edges: the two edge pieces of each edge paired up side by side, a
  *    pair or two at a time, by short sequences that leave the centres as
- *    they were (see pairEdges). The cube now looks like a 3x3 with big
- *    centres and edges.
+ *    they were (see pairEdges in bigCube.ts). The cube now looks like a
+ *    3x3 with big centres and edges.
  * 3. Parity: a 3x3 can't have just one edge flipped, or just two pieces
  *    swapped, but a 4x4 treated as a 3x3 can. A fixed sequence fixes each
  *    (see fixParity); about 3 in 4 cubes need one or both.
@@ -40,36 +50,7 @@ import type { Solution, Stage, StageName } from './protocol.ts'
  * holds their cube the same way throughout.
  */
 
-// ---------------------------------------------------------------------------
-// Moves
-
 const CELLS = Array.from({ length: 96 }, (_, i) => i)
-
-/** For each move, which cell each cell's sticker comes from (see applyMove). */
-const SOURCE = new Map<Move, readonly number[]>(
-  movesOf(PUZZLE_4X4).map((move) => [move, applyMoves(CELLS, [move])]),
-)
-
-/** The cube after these moves. */
-function turn(cube: string, moves: readonly Move[]): string {
-  let current = cube
-  for (const move of moves) {
-    const from = SOURCE.get(move)!
-    let next = ''
-    for (let i = 0; i < 96; i++) next += current[from[i]]
-    current = next
-  }
-  return current
-}
-
-const withTurns = (bases: readonly string[]): Move[] =>
-  bases.flatMap((base) => [base, `${base}'`, `${base}2`] as Move[])
-
-/** The 18 outer face turns: R, R', R2, U… */
-const FACE_TURNS = withTurns(FACES)
-/** The 18 inner-layer turns: r, r', r2, u… */
-const INNER_TURNS = withTurns(FACES.map((face) => face.toLowerCase()))
-
 const SOLVED = FACES.map((face) => face.repeat(16)).join('')
 
 // ---------------------------------------------------------------------------
@@ -77,330 +58,21 @@ const SOLVED = FACES.map((face) => face.repeat(16)).join('')
 
 /**
  * The 24 centre cells, four to a face in the order U R F D L B, so slot
- * 4f + k is on FACES[f]. Outer face turns only turn a face's centres round
- * on that face; inner-layer turns move them from face to face.
+ * 4f + k is on FACES[f] (see centres.ts). Outer face turns only turn a
+ * face's centres round on that face; inner-layer turns move them from face
+ * to face.
  */
 const CENTRES = centreCellsOf(PUZZLE_4X4)
-const slotOf = (face: Face) =>
-  [0, 1, 2, 3].map((k) => FACES.indexOf(face) * 4 + k)
 
-/**
- * Which centre slot each slot's centre comes from after `move`, among
- * `slots` (which the move must keep to themselves), numbered 0, 1, … in
- * that list's order.
- */
-function centreSource(move: Move, slots: readonly number[]): number[] {
-  const from = SOURCE.get(move)!
-  const index = new Map(slots.map((slot, i) => [CENTRES[slot], i]))
-  return slots.map((slot) => {
-    const i = index.get(from[CENTRES[slot]])
-    if (i === undefined) throw new Error(`${move} moves a centre elsewhere`)
-    return i
-  })
-}
+/** How each move moves the centres (see RingMoves). */
+const CENTRE_MOVES: RingMoves = (() => {
+  const slotOfCell = new Map(CENTRES.map((cell, slot) => [cell, slot]))
+  return (move) =>
+    CENTRES.map((cell) => slotOfCell.get(moveSource(move, PUZZLE_4X4)[cell])!)
+})()
 
-/**
- * How a move moves a set of up to 24 slots, written as a bitmask (bit i
- * set: slot i is in the set). It runs millions of times while setting up,
- * so it's done a byte (8 bits) of the bitmask at a time, with a prepared
- * table: entry 256b + bits says where the slots in `bits`, byte b of the
- * set, go. Each move's 768 entries follow on from the last's, all in one
- * list: several times quicker than a separate function for each move.
- */
-function turnTables(sources: readonly (readonly number[])[]): Int32Array {
-  const tables = new Int32Array(sources.length * 768)
-  sources.forEach((source, move) => {
-    source.forEach((from, to) => {
-      const table = move * 768 + (from >> 3) * 256
-      for (let bits = 0; bits < 256; bits++) {
-        if ((bits >> (from & 7)) & 1) tables[table + bits] |= 1 << to
-      }
-    })
-  })
-  return tables
-}
-
-/** The set of slots `mask` after move number `move` (see turnTables). */
-function turned(tables: Int32Array, move: number, mask: number): number {
-  const table = move * 768
-  return (
-    tables[table + (mask & 255)] |
-    tables[table + 256 + ((mask >> 8) & 255)] |
-    tables[table + 512 + ((mask >> 16) & 255)]
-  )
-}
-
-/** binomial[n][k]: how many ways to pick k things out of n. */
-const binomial: number[][] = []
-for (let n = 0; n <= 24; n++) {
-  binomial[n] = [1]
-  for (let k = 1; k <= 24; k++) {
-    binomial[n][k] = n === 0 ? 0 : binomial[n - 1][k - 1] + binomial[n - 1][k]
-  }
-}
-
-/** How many bits are set in each byte. */
-const BITS_IN = new Uint8Array(256)
-for (let bits = 1; bits < 256; bits++) {
-  BITS_IN[bits] = BITS_IN[bits >> 1] + (bits & 1)
-}
-
-/**
- * Numbers a step's patterns 0, 1, 2… for their place in its `distance`
- * list. Like turnTables, it goes a byte at a time: entry
- * (17b + before) × 256 + bits is what byte b adds, when `before` bits
- * (at most 16) are set in the bytes below it.
- */
-type Numbering = Int32Array
-
-function byteNumbering(
-  adds: (byte: number, before: number, bits: number) => number,
-): Numbering {
-  const table = new Int32Array(3 * 17 * 256)
-  for (let byte = 0; byte < 3; byte++) {
-    for (let before = 0; before <= 16; before++) {
-      for (let bits = 0; bits < 256; bits++) {
-        table[(byte * 17 + before) * 256 + bits] = adds(byte, before, bits)
-      }
-    }
-  }
-  return table
-}
-
-/** A pattern's number (see byteNumbering). */
-function numberOf(table: Numbering, pattern: number): number {
-  const low = pattern & 255
-  const middle = (pattern >> 8) & 255
-  return (
-    table[low] +
-    table[(17 + BITS_IN[low]) * 256 + middle] +
-    table[(34 + BITS_IN[low] + BITS_IN[middle]) * 256 + ((pattern >> 16) & 255)]
-  )
-}
-
-/**
- * Numbers each set of k slots out of n 0, 1, 2… (the "combinatorial number
- * system"): the slots, lowest first, add up binomial[slot][1],
- * binomial[slot][2]…
- */
-const SET_NUMBERING = byteNumbering((byte, before, bits) => {
-  let number = 0
-  let k = before
-  for (let bit = 0; bit < 8; bit++) {
-    if ((bits >> bit) & 1) number += binomial[byte * 8 + bit][++k]
-  }
-  return number
-})
-
-/** The set of k slots out of n with this number. */
-function setFromNumber(number: number, n: number, k: number): number {
-  let mask = 0
-  for (let slot = n - 1; slot >= 0 && k > 0; slot--) {
-    if (binomial[slot][k] <= number) {
-      number -= binomial[slot][k]
-      mask |= 1 << slot
-      k--
-    }
-  }
-  return mask
-}
-
-/**
- * One step of solving the centres. Its "pattern" is a bitmask saying where
- * the centres it cares about are; `distance` says, for every pattern, the
- * fewest of its moves that reach the goal.
- */
-interface CentreStep {
-  moves: readonly Move[]
-  /** Each move's effect on a pattern (see turnTables). */
-  turns: Int32Array
-  /** Each pattern's place in `distance`. */
-  numbering: Numbering
-  /** Reads the pattern off a cube. */
-  read: (cube: string) => number
-  distance: Uint8Array
-}
-
-/** A set of slots as a bitmask: bit i for slots[i], set where `has` says. */
-function maskOf(
-  cube: string,
-  slots: readonly number[],
-  has: (face: string, i: number) => boolean,
-): number {
-  return slots.reduce(
-    (mask, slot, i) => (has(cube[CENTRES[slot]], i) ? mask | (1 << i) : mask),
-    0,
-  )
-}
-
-/**
- * Fills in `distance` by working outwards from the goal: every pattern one
- * move away needs 1 move, every new one a move from those needs 2, and so
- * on (a "breadth-first search"). The moves can all be undone by other moves
- * in the list, so the moves out from the goal are the moves back to it.
- */
-function distances(
-  size: number,
-  goal: number,
-  turns: Int32Array,
-  numbering: Numbering,
-  fromNumber: (number: number) => number,
-): Uint8Array {
-  const moveCount = turns.length / 768
-  const distance = new Uint8Array(size).fill(255)
-  // Every pattern found so far, by number, in the order found: those the
-  // same number of moves from the goal are side by side.
-  const found = new Int32Array(size)
-  found[0] = numberOf(numbering, goal)
-  distance[found[0]] = 0
-  let start = 0
-  let end = 1
-  for (let depth = 1; start < end; depth++) {
-    let next = end
-    for (let i = start; i < end; i++) {
-      const pattern = fromNumber(found[i])
-      for (let move = 0; move < moveCount; move++) {
-        const to = numberOf(numbering, turned(turns, move, pattern))
-        if (distance[to] === 255) {
-          distance[to] = depth
-          found[next++] = to
-        }
-      }
-    }
-    start = end
-    end = next
-  }
-  if (end < size) throw new Error('A centre position is unreachable')
-  return distance
-}
-
-/**
- * Step 1: the 8 white and yellow centres (U and D) onto the top and
- * bottom, any way round. Any move can be used. 735,471 patterns (which 8
- * of the 24 slots they're in), at most 8 moves.
- */
-function topAndBottomStep(): CentreStep {
-  const slots = CENTRES.map((_, slot) => slot)
-  const moves = [...FACE_TURNS, ...INNER_TURNS]
-  const turns = turnTables(moves.map((move) => centreSource(move, slots)))
-  const goal = [...slotOf('U'), ...slotOf('D')].reduce(
-    (mask, slot) => mask | (1 << slot),
-    0,
-  )
-  return {
-    moves,
-    turns,
-    numbering: SET_NUMBERING,
-    read: (cube) => maskOf(cube, slots, (face) => face === 'U' || face === 'D'),
-    distance: distances(binomial[24][8], goal, turns, SET_NUMBERING, (number) =>
-      setFromNumber(number, 24, 8),
-    ),
-  }
-}
-
-/** The 16 centre slots on the four sides: R, F, L and B. */
-const SIDE_SLOTS = (['R', 'F', 'L', 'B'] as const).flatMap(slotOf)
-
-/**
- * Step 2: the red and orange centres (R and L) onto the right and left
- * sides, so green and blue are on the front and back. Only moves that keep
- * the top and bottom's centres on the top and bottom: inner layers round
- * the middle (u, d), and half turns of the others. 12,870 patterns, at
- * most 7 moves.
- */
-function sidesStep(): CentreStep {
-  const moves = [
-    ...FACE_TURNS,
-    ...withTurns(['u', 'd']),
-    ...(['r2', 'l2', 'f2', 'b2'] as const),
-  ]
-  const turns = turnTables(moves.map((move) => centreSource(move, SIDE_SLOTS)))
-  const goal = [...slotOf('R'), ...slotOf('L')].reduce(
-    (mask, slot) => mask | (1 << SIDE_SLOTS.indexOf(slot)),
-    0,
-  )
-  return {
-    moves,
-    turns,
-    numbering: SET_NUMBERING,
-    read: (cube) =>
-      maskOf(cube, SIDE_SLOTS, (face) => face === 'R' || face === 'L'),
-    distance: distances(binomial[16][8], goal, turns, SET_NUMBERING, (number) =>
-      setFromNumber(number, 16, 8),
-    ),
-  }
-}
-
-/**
- * Each pair of opposite faces' 8 centre slots, U and D, R and L, F and B,
- * one after another: a byte of a bitmask each.
- */
-const AXIS_SLOTS = (
-  [
-    ['U', 'D'],
-    ['R', 'L'],
-    ['F', 'B'],
-  ] as const
-).flatMap(([a, b]) => [...slotOf(a), ...slotOf(b)])
-
-/** The 70 ways to choose 4 of 8 slots, numbered (-1 for any other bitmask). */
-const FOUR_OF_EIGHT = new Int32Array(256).fill(-1)
-const FOUR_OF_EIGHT_MASKS: number[] = []
-for (let mask = 0; mask < 256; mask++) {
-  if (BITS_IN[mask] === 4) {
-    FOUR_OF_EIGHT[mask] = FOUR_OF_EIGHT_MASKS.length
-    FOUR_OF_EIGHT_MASKS.push(mask)
-  }
-}
-
-/**
- * Step 3: every centre onto its own face, keeping each pair of opposite
- * colours on its pair of faces: only half turns of inner layers. The
- * pattern is a byte for each pair of faces, of where its first colour (U,
- * R or F) is. 70 × 70 × 70 = 343,000 patterns, at most 11 moves.
- */
-function ownFacesStep(): CentreStep {
-  const moves = [
-    ...FACE_TURNS,
-    ...(['u2', 'd2', 'r2', 'l2', 'f2', 'b2'] as const),
-  ]
-  const turns = turnTables(moves.map((move) => centreSource(move, AXIS_SLOTS)))
-  const numbering = byteNumbering(
-    (byte, _, bits) => FOUR_OF_EIGHT[bits] * [4900, 70, 1][byte],
-  )
-  const fromNumber = (number: number) =>
-    FOUR_OF_EIGHT_MASKS[Math.floor(number / 4900)] |
-    (FOUR_OF_EIGHT_MASKS[Math.floor(number / 70) % 70] << 8) |
-    (FOUR_OF_EIGHT_MASKS[number % 70] << 16)
-  // In each pair, the first face's 4 slots come first: 0b00001111.
-  const goal = 15 | (15 << 8) | (15 << 16)
-  return {
-    moves,
-    turns,
-    numbering,
-    read: (cube) =>
-      maskOf(cube, AXIS_SLOTS, (face, i) => face === 'URF'[i >> 3]),
-    distance: distances(343000, goal, turns, numbering, fromNumber),
-  }
-}
-
-/** The fewest of the step's moves from this cube to its goal. */
-function solveStep(step: CentreStep, cube: string): Move[] {
-  const moves: Move[] = []
-  let pattern = step.read(cube)
-  const { turns, numbering, distance } = step
-  for (let left = distance[numberOf(numbering, pattern)]; left > 0; left--) {
-    // Any move one closer will do; the first found is taken.
-    const move = step.moves.findIndex(
-      (_, move) =>
-        distance[numberOf(numbering, turned(turns, move, pattern))] ===
-        left - 1,
-    )
-    pattern = turned(turns, move, pattern)
-    moves.push(step.moves[move])
-  }
-  return moves
-}
+/** The centres' face letters, in slot order. */
+const centreFaces = (cube: string) => CENTRES.map((cell) => cube[cell]).join('')
 
 // ---------------------------------------------------------------------------
 // 2. Edges
@@ -438,170 +110,20 @@ function pairedEdges(numbers: readonly number[]): number {
   return paired
 }
 
-const moved = (numbers: readonly number[], source: readonly number[]) =>
-  source.map((from) => numbers[from])
-
-/**
- * Relabels moves as if the cube were held another way round: each of the
- * 24 ways to hold a cube, as a map from face to face.
- */
-const HOLDINGS: readonly Record<Face, Face>[] = (() => {
-  const x: Record<Face, Face> = {
-    R: 'R',
-    L: 'L',
-    U: 'F',
-    F: 'D',
-    D: 'B',
-    B: 'U',
+/** What pairing a 4x4's edges aims for, given its pairing sequences (see pairEdges). */
+function edgePairing(pairings: readonly Pairing[]): EdgePairing {
+  return {
+    pairings,
+    faceTurns: FACE_TURNS.map((move) => edgeSource([move])),
+    done: pairedEdges,
+    goal: 12,
   }
-  const y: Record<Face, Face> = {
-    U: 'U',
-    D: 'D',
-    F: 'R',
-    R: 'B',
-    B: 'L',
-    L: 'F',
-  }
-  const found = new Map<string, Record<Face, Face>>()
-  const queue = [
-    Object.fromEntries(FACES.map((f) => [f, f])) as Record<Face, Face>,
-  ]
-  while (queue.length > 0) {
-    const holding = queue.shift()!
-    const key = FACES.map((face) => holding[face]).join('')
-    if (found.has(key)) continue
-    found.set(key, holding)
-    for (const turnTo of [x, y]) {
-      queue.push(
-        Object.fromEntries(
-          FACES.map((face) => [face, turnTo[holding[face]]]),
-        ) as Record<Face, Face>,
-      )
-    }
-  }
-  return [...found.values()]
-})()
-
-function relabel(moves: readonly Move[], holding: Record<Face, Face>): Move[] {
-  return moves.map((move) => {
-    const letter = move[0]
-    const face = holding[letter.toUpperCase() as Face]
-    const renamed = letter === letter.toUpperCase() ? face : face.toLowerCase()
-    return `${renamed}${move.slice(1)}` as Move
-  })
 }
 
-/**
- * The middles of the pairing sequences: outer face turns that, between
- * them, turn each face back as often as they turn it, apart from the top.
- */
-const PAIRING_MIDDLES = [
-  "R U R'",
-  "R U' R'",
-  "R' U R",
-  "R' U' R",
-  "R U2 R'",
-  "R U R' F R' F' R",
-  "R F' U R' F",
-  "F R' F' R",
-  "R' F R F'",
-  'R2 U2 R2',
-]
-
-/** A sequence that changes which edge pieces are paired, and what it does. */
-interface Pairing {
-  moves: readonly Move[]
-  /** Which edge slot each slot's piece comes from (see edgeSource). */
-  source: readonly number[]
-}
-
-/**
- * The pairing sequences: an inner-layer turn, which takes some edge pieces
- * away from their neighbours (and some centres with them); a middle, which
- * moves edges about but never a centre off its face; then the inner layer
- * turned back. Each middle is tried held every way round, with every
- * inner-layer turn, keeping only the ones that leave every centre as it was
- * and do something new: about 1,900.
- */
-function pairingSequences(): Pairing[] {
-  const found = new Map<string, Pairing>()
-  for (const middle of PAIRING_MIDDLES) {
-    for (const holding of HOLDINGS) {
-      for (const inner of INNER_TURNS) {
-        const moves = [
-          inner,
-          ...relabel(parseMoves(middle), holding),
-          ...invertMoves([inner]),
-        ]
-        const after = turn(SOLVED, moves)
-        if (CENTRES.some((cell) => after[cell] !== SOLVED[cell])) continue
-        const source = edgeSource(moves)
-        const key = source.join()
-        if (source.every((from, slot) => from === slot) || found.has(key))
-          continue
-        found.set(key, { moves, source })
-      }
-    }
-  }
-  return [...found.values()]
-}
-
-/** What the outer face turns do to the edge slots. */
-const FACE_TURN_SOURCES = FACE_TURNS.map((move) => edgeSource([move]))
-
-/**
- * The best next step for pairing edges: up to `setupMoves` outer face turns
- * (which move edges about but never split a pair or move a centre off its
- * face), then a pairing sequence. Best means the most new pairs for each
- * move. Null if nothing pairs more.
- */
-function bestPairingStep(
-  numbers: readonly number[],
-  pairings: readonly Pairing[],
-  setupMoves: number,
-): Move[] | null {
-  const before = pairedEdges(numbers)
-  let best: { moves: Move[]; score: number } | null = null
-  const tryFrom = (current: readonly number[], setup: number[]) => {
-    for (const pairing of pairings) {
-      const gained = pairedEdges(moved(current, pairing.source)) - before
-      if (gained <= 0) continue
-      const score = gained / (setup.length + pairing.moves.length)
-      if (!best || score > best.score) {
-        best = {
-          moves: [...setup.map((i) => FACE_TURNS[i]), ...pairing.moves],
-          score,
-        }
-      }
-    }
-    if (setup.length === setupMoves) return
-    for (let i = 0; i < FACE_TURNS.length; i++) {
-      // Turning the same face twice in a row is just one longer turn.
-      const last = setup.at(-1)
-      if (last !== undefined && Math.floor(last / 3) === Math.floor(i / 3))
-        continue
-      tryFrom(moved(current, FACE_TURN_SOURCES[i]), [...setup, i])
-    }
-  }
-  tryFrom(numbers, [])
-  return (best as { moves: Move[] } | null)?.moves ?? null
-}
-
-/** Moves that pair up every edge, leaving the centres as they were. */
-function pairEdges(cube: string, pairings: readonly Pairing[]): Move[] {
-  const moves: Move[] = []
-  let current = cube
-  while (pairedEdges(edgeNumbers(current)) < 12) {
-    let step: Move[] | null = null
-    // Look further ahead only when nothing nearer pairs anything.
-    for (let setupMoves = 1; setupMoves <= 3 && !step; setupMoves++) {
-      step = bestPairingStep(edgeNumbers(current), pairings, setupMoves)
-    }
-    if (!step || moves.length > 200) throw new Error("Couldn't pair the edges")
-    current = turn(current, step)
-    moves.push(...step)
-  }
-  return moves
+/** Whether these moves leave a solved cube's centres solved. */
+const keepsCentres = (moves: readonly Move[]) => {
+  const after = turnLetters(SOLVED, moves)
+  return CENTRES.every((cell) => after[cell] === SOLVED[cell])
 }
 
 // ---------------------------------------------------------------------------
@@ -653,11 +175,11 @@ function fixParity(cube: string): Move[] {
   const moves: Move[] = []
   let current = cube
   if (threeByThreeProblem(current) === 'flip') {
-    current = turn(current, FLIP_FIX)
+    current = turnLetters(current, FLIP_FIX)
     moves.push(...FLIP_FIX)
   }
   if (threeByThreeProblem(current) === 'swap') {
-    current = turn(current, SWAP_FIX)
+    current = turnLetters(current, SWAP_FIX)
     moves.push(...SWAP_FIX)
   }
   const problem = threeByThreeProblem(current)
@@ -666,87 +188,11 @@ function fixParity(cube: string): Move[] {
 }
 
 // ---------------------------------------------------------------------------
-// Tidying up
-
-/**
- * The layers of each axis, from one side to the other: R r l L (r is next
- * to R, l next to L), U u d D and F f b B. Moves on one axis don't affect
- * each other, so a run of them only matters for how far each layer ends up
- * turned, which mergeTurns rewrites in the fewest moves.
- */
-const AXIS_LAYERS = ['RrlL', 'UudD', 'FfbB'] as const
-
-/** Which axis a move turns, and how far it turns each layer (quarter turns, R's way). */
-function layerTurns(move: Move): { axis: number; turns: number[] } {
-  const letter = move[0]
-  const axis = AXIS_LAYERS.findIndex((layers) => layers.includes(letter))
-  const layer = AXIS_LAYERS[axis].indexOf(letter)
-  const quarters = move.endsWith('2') ? 2 : move.endsWith("'") ? 3 : 1
-  // The far half (l, L) turns the other way round, like L does.
-  const amount = layer < 2 ? quarters : (4 - quarters) % 4
-  const layers = move.includes('w') ? (layer === 0 ? [0, 1] : [2, 3]) : [layer]
-  const turns = [0, 0, 0, 0]
-  for (const l of layers) turns[l] = amount
-  return { axis, turns }
-}
-
-/** For each axis, the fewest moves for every way its 4 layers can end up turned. */
-const SHORTEST: readonly (readonly Move[])[][] = AXIS_LAYERS.map((layers) => {
-  const [near, nearInner, farInner, far] = [...layers]
-  const options = withTurns([
-    near,
-    nearInner,
-    farInner,
-    far,
-    `${near}w`,
-    `${far}w`,
-  ])
-  const key = (turns: readonly number[]) => turns.join('')
-  const shortest = new Map<string, Move[]>([['0000', []]])
-  let frontier = [[0, 0, 0, 0]]
-  while (frontier.length > 0) {
-    const next: number[][] = []
-    for (const turns of frontier) {
-      for (const option of options) {
-        const after = layerTurns(option).turns.map((t, l) => (t + turns[l]) % 4)
-        if (shortest.has(key(after))) continue
-        shortest.set(key(after), [...shortest.get(key(turns))!, option])
-        next.push(after)
-      }
-    }
-    frontier = next
-  }
-  const table: Move[][] = []
-  for (const [turns, moves] of shortest) table[parseInt(turns, 4)] = moves
-  return table
-})
-
-/**
- * Rewrites runs of moves on the same axis in as few moves as possible:
- * "R r" becomes "Rw", "U U'" disappears, "F2 F" becomes "F'".
- */
-export function mergeTurns(moves: readonly Move[]): Move[] {
-  const merged: Move[] = []
-  for (let i = 0; i < moves.length;) {
-    const { axis } = layerTurns(moves[i])
-    const total = [0, 0, 0, 0]
-    for (; i < moves.length && layerTurns(moves[i]).axis === axis; i++) {
-      layerTurns(moves[i]).turns.forEach(
-        (t, l) => (total[l] = (total[l] + t) % 4),
-      )
-    }
-    merged.push(...SHORTEST[axis][parseInt(total.join(''), 4)])
-  }
-  // Moves that cancel out can leave two runs on the same axis side by side.
-  return merged.length < moves.length ? mergeTurns(merged) : merged
-}
-
-// ---------------------------------------------------------------------------
 // Putting it together
 
 interface Tables {
-  centreSteps: readonly CentreStep[]
-  pairings: readonly Pairing[]
+  centres: readonly CentreStep[]
+  edges: EdgePairing
 }
 
 let tables: Tables | undefined
@@ -755,8 +201,8 @@ let tables: Tables | undefined
 export function initFourByFourSolver(): void {
   if (!tables) {
     tables = {
-      centreSteps: [topAndBottomStep(), sidesStep(), ownFacesStep()],
-      pairings: pairingSequences(),
+      centres: centreSteps(CENTRE_MOVES),
+      edges: edgePairing(pairingSequences(keepsCentres, edgeSource)),
     }
   }
   initKociemba()
@@ -772,33 +218,25 @@ export function solveFourByFour(facelets: string): Solution {
     throw new Error(`Not a 4x4 cube: "${facelets}"`)
   }
   if (!tables) initFourByFourSolver()
-  const { centreSteps, pairings } = tables!
+  const { centres, edges } = tables!
 
   let cube = facelets
   const stages: { name: StageName; moves: Move[] }[] = []
   const stage = (name: StageName, moves: Move[]) => {
-    cube = turn(cube, moves)
-    stages.push({ name, moves: mergeTurns(moves) })
+    cube = turnLetters(cube, moves)
+    stages.push({ name, moves })
   }
   // Each centre step starts where the one before left off.
   let centred = cube
-  const centreMoves = centreSteps.flatMap((step) => {
-    const moves = solveStep(step, centred)
-    centred = turn(centred, moves)
+  const centreMoves = centres.flatMap((step) => {
+    const moves = solveStep(step, centreFaces(centred))
+    centred = turnLetters(centred, moves)
     return moves
   })
   stage('centres', centreMoves)
-  stage('edges', pairEdges(cube, pairings))
+  stage('edges', pairEdges(edgeNumbers(cube), edges))
   stage('parity', fixParity(cube))
   stage('finish', solveFacelets(asThreeByThree(cube)))
   if (cube !== SOLVED) throw new Error("Couldn't solve this cube")
-
-  const moves: Move[] = []
-  const starts: Stage[] = []
-  for (const { name, moves: stageMoves } of stages) {
-    if (stageMoves.length === 0) continue
-    starts.push({ name, start: moves.length })
-    moves.push(...stageMoves)
-  }
-  return { moves, stages: starts }
+  return solutionOf(stages)
 }

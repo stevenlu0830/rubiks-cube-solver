@@ -9,7 +9,6 @@ import type { SolveRequest, SolverMessage } from '../../src/solver/protocol.ts'
 import {
   createSolver,
   getSolver,
-  hasSolver,
   SolverError,
   solverErrorMessage,
   type WorkerLike,
@@ -144,29 +143,23 @@ describe('getSolver', () => {
   })
 })
 
-describe('hasSolver', () => {
+describe('a 5x5 solution', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('says which cubes have a solver so far: not the 5x5 yet', () => {
-    expect(hasSolver(PUZZLE_2X2)).toBe(true)
-    expect(hasSolver(PUZZLE_3X3)).toBe(true)
-    expect(hasSolver(PUZZLE_4X4)).toBe(true)
-    expect(hasSolver(PUZZLE_5X5)).toBe(false)
-  })
-
-  it("won't start a solver for a 5x5, and starts no worker trying", () => {
-    const started = vi.fn()
+  it("starts the 5x5's own worker", () => {
+    const started: string[] = []
     vi.stubGlobal(
       'Worker',
       class extends FakeWorker {
-        constructor() {
+        constructor(url: URL) {
           super()
-          started()
+          started.push(String(url))
         }
       },
     )
-    expect(() => getSolver(PUZZLE_5X5)).toThrow("There's no 5x5 solver yet")
-    expect(started).not.toHaveBeenCalled()
+    getSolver(PUZZLE_5X5)
+    expect(started).toHaveLength(1)
+    expect(started[0]).toContain('fiveByFive.worker')
   })
 })
 
