@@ -9,9 +9,9 @@ import { cellIndex, FACES, type Face } from '../cube/state.ts'
  * front or top face) and which way it moves. The same guide places the
  * arrows drawn on the 3D cube.
  *
- * A 4x4's wide turns (Rw) move two rows or columns at once, and its
- * inner-layer turns (r) the second one in from the face, so their guides
- * have a line of stickers for each layer that turns.
+ * A 4x4's or 5x5's wide turns (Rw) move two rows or columns at once, and
+ * its inner-layer turns (r) the second one in from the face, so their
+ * guides have a line of stickers for each layer that turns.
  */
 
 type Direction = 'left' | 'right' | 'up' | 'down'
@@ -21,7 +21,8 @@ export interface TurnGuide {
   face: 'F' | 'U'
   /**
    * A whole row or column of cells that move during a clockwise face turn
-   * (3 on a 3x3, 2 on a 2x2, 4 on a 4x4), listed in the direction they move.
+   * (3 on a 3x3, 2 on a 2x2, 4 on a 4x4, 5 on a 5x5), listed in the
+   * direction they move.
    */
   cells: readonly number[]
   /** Which way they move during a clockwise turn, as seen from the front. */
@@ -117,7 +118,8 @@ export function layerGuideOf(
   return { face: on, direction, lines: layers.map(line) }
 }
 
-const FACE_NAMES: Record<Face, string> = {
+/** Each face's name in words, as seen holding the cube. */
+export const FACE_NAMES: Record<Face, string> = {
   U: 'top',
   D: 'bottom',
   R: 'right',
@@ -156,8 +158,8 @@ function whatTurns(move: Move): string {
 
 /**
  * Plain English for a turn, e.g. "Turn the right face clockwise (front
- * stickers move up)", or on a 4x4 "Turn the right two layers clockwise…"
- * and "Turn only the second layer from the right clockwise…".
+ * stickers move up)", or on a 4x4 or 5x5 "Turn the right two layers
+ * clockwise…" and "Turn only the second layer from the right clockwise…".
  */
 export function describeMove(move: Move): string {
   if (/^[xyz]/.test(move)) throw new Error(`${move} is not a face turn`)

@@ -10,7 +10,7 @@ interface StepListProps {
 
 /**
  * Every move of the solution, under a heading for each stage if it has
- * stages (a 4x4's). Tapping one jumps the cube to just before it.
+ * stages (a 4x4's or 5x5's). Tapping one jumps the cube to just before it.
  */
 export function StepList({ playback, onJump }: StepListProps) {
   const { moves, ready, stages } = playback

@@ -72,7 +72,7 @@ interface CubeViewProps {
   turnDurationMs?: number
   /** Called once `turn` has finished animating. */
   onTurnDone?: () => void
-  /** A turn to point out with an arrow (two side by side for a 4x4's wide turn). */
+  /** A turn to point out with an arrow (two side by side for a wide turn). */
   hint?: Move | null
   /** Write each sticker's colour letter on it (W, Y, G…), for colour-blind users. */
   letters?: boolean

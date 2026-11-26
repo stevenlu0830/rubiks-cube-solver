@@ -19,8 +19,8 @@ import { SolveStatus, type SolveStage } from './editor/SolveStatus.tsx'
 import { loadCube, saveCube } from './editor/storage.ts'
 import { InfoButton } from './info/InfoButton.tsx'
 import { PuzzleContext } from './puzzleContext.ts'
-import { hashFor, READY_CUBES } from './routes.ts'
-import { canOfferCamera } from './scan/camera.ts'
+import { hashFor } from './routes.ts'
+import { canOfferCamera, SCANNABLE_CUBES } from './scan/camera.ts'
 import { CameraIcon, Scanner } from './scan/Scanner.tsx'
 import {
   loadSettings,
@@ -56,15 +56,11 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
 
 /**
  * The page for one cube: paint or scan it, check it, and step through the
- * solution. The page for picking a cube links here.
- *
- * A cube that isn't ready yet (see READY_CUBES), a 5x5, can so far only be
- * painted and checked: its page has no Scan button, and Check in place of
- * Solve.
+ * solution. The page for picking a cube links here. A 5x5 can't be scanned
+ * yet, so its page has no Scan button (see SCANNABLE_CUBES).
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
-  const solvable = READY_CUBES.includes(cubeType)
   const [{ cube, history }, dispatch] = useReducer(
     editorReducer,
     undefined,
@@ -117,8 +113,8 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
 
   // Start the solver's setup now, so it's ready by the time the cube is painted.
   useEffect(() => {
-    if (solvable) getSolver(puzzle)
-  }, [solvable, puzzle])
+    getSolver(puzzle)
+  }, [puzzle])
 
   // While playing, start the next turn after a short pause.
   const waitingToPlay =
@@ -150,15 +146,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
       ? playback.moves[currentStep(playback)]
       : null
 
-  /** For a cube that isn't ready to solve yet: says whether it's a real cube, and if not, what's wrong. */
-  function handleCheck() {
-    const validation = validateCube(cube)
-    setSolve({ cube, status: { stage: 'checked', validation } })
-    if (!validation.valid) feel('problem')
-  }
-
   async function handleSolve() {
-    if (!solvable) return
     const validation = validateCube(cube)
     if (!validation.valid || validation.solved) {
       setSolve({ cube, status: { stage: 'checked', validation } })
@@ -350,7 +338,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
               </button>
             </nav>
             <div className="main-actions">
-              {solvable && canOfferCamera() && (
+              {SCANNABLE_CUBES.includes(cubeType) && canOfferCamera() && (
                 <button
                   type="button"
                   className="scan-button"
@@ -364,24 +352,14 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
                   Scan
                 </button>
               )}
-              {solvable ? (
-                <button
-                  type="button"
-                  className="solve-button"
-                  onClick={handleSolve}
-                  disabled={status?.stage === 'solving'}
-                >
-                  {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="solve-button"
-                  onClick={handleCheck}
-                >
-                  Check
-                </button>
-              )}
+              <button
+                type="button"
+                className="solve-button"
+                onClick={handleSolve}
+                disabled={status?.stage === 'solving'}
+              >
+                {status?.stage === 'solving' ? 'Solving…' : 'Solve'}
+              </button>
             </div>
           </>
         )}

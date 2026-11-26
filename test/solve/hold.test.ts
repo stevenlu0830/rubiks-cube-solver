@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyMove,
   applyMoves,
+  movesOf,
   parseMoves,
   randomScramble,
 } from '../../src/cube/moves.ts'
@@ -133,6 +134,13 @@ describe('holdFor', () => {
         front: 'red',
         top: 'white',
       })
+    })
+
+    it('stays the same through every face, wide and inner-layer turn: none turns the middle layers', () => {
+      const turns = movesOf(PUZZLE_5X5).filter((move) => !/^[xyz]/.test(move))
+      for (const move of turns) {
+        expect(holdFor(applyMove(scrambled, move))).toEqual(holdFor(scrambled))
+      }
     })
   })
 })

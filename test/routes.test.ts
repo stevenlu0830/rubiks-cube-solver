@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  hashFor,
-  pageTitle,
-  READY_CUBES,
-  routeFromHash,
-} from '../src/routes.ts'
+import { hashFor, pageTitle, routeFromHash } from '../src/routes.ts'
 
 describe('routeFromHash', () => {
   it('opens each cube at its own address: #/3x3, #/2x2, #/4x4 and #/5x5', () => {
@@ -35,11 +30,5 @@ describe('pageTitle', () => {
     expect(pageTitle('2x2')).toBe("2x2 · Rubik's Cube Solver")
     expect(pageTitle('4x4')).toBe("4x4 · Rubik's Cube Solver")
     expect(pageTitle('5x5')).toBe("5x5 · Rubik's Cube Solver")
-  })
-})
-
-describe('READY_CUBES', () => {
-  it('lists the cubes that can be solved so far: not the 5x5 yet', () => {
-    expect(READY_CUBES).toEqual(['2x2', '3x3', '4x4'])
   })
 })

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { PUZZLE_2X2 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   emptyState,
   solvedState,
@@ -40,6 +40,19 @@ describe('CubeNet', () => {
         hexToRgb(STICKER_COLORS[STANDARD_SCHEME.R]),
       )
     }
+  })
+
+  it('shows a 5x5 as six faces of 25 squares', () => {
+    render(
+      <PuzzleContext value={PUZZLE_5X5}>
+        <CubeNet
+          state={solvedState(STANDARD_SCHEME, PUZZLE_5X5)}
+          activeFace={null}
+        />
+      </PuzzleContext>,
+    )
+    for (const face of faces()) expect(face.children).toHaveLength(25)
+    expect(map().style.getPropertyValue('--net-size')).toBe('5')
   })
 
   it('leaves blank squares see-through', () => {

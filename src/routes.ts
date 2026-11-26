@@ -14,16 +14,6 @@ import { CUBE_TYPES, type CubeType } from './cube/puzzle.ts'
  * the browser's Back button steps through hashes like any other page.
  */
 
-/**
- * The cubes that are ready to use: their pages can scan a cube, solve it
- * and play the solution through. The picker shows the others as "Coming
- * soon". Their pages still open from their address (e.g. #/5x5), to try
- * them out while they're being built, but only paint a cube and check it.
- * The 5x5 has a solver already (see fiveByFive.ts), but isn't ready until
- * playing its solution through is too.
- */
-export const READY_CUBES: readonly CubeType[] = ['2x2', '3x3', '4x4']
-
 export type Route = 'picker' | CubeType
 
 export const APP_NAME = "Rubik's Cube Solver"

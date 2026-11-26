@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { faceNormal, STICKERS, stickersOf } from '../../src/cube/geometry.ts'
-import { applyMove, movesOf, type Move } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import {
+  applyMove,
+  movesOf,
+  turnedLayers,
+  type Move,
+} from '../../src/cube/moves.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_3X3,
+  PUZZLE_4X4,
+  PUZZLE_5X5,
+} from '../../src/cube/puzzle.ts'
 import { cellIndex, FACES, type Face } from '../../src/cube/state.ts'
 import {
   describeMove,
@@ -67,6 +77,28 @@ describe('describeMove', () => {
   ] as const)("a 4x4's %s → %s", (move, text) => {
     expect(describeMove(move)).toBe(text)
   })
+
+  it.each(
+    movesOf(PUZZLE_5X5).filter(
+      (move) => /[a-z]/.test(move[0]) && !/^[xyz]/.test(move),
+    ),
+  )(
+    "reads the same on a 5x5, where it's still true: %s turns the layers the words say",
+    (move) => {
+      const words = describeMove(move)
+      const { layers } = turnedLayers(move, PUZZLE_5X5)
+      expect(layers).toEqual([1])
+      expect(words).toMatch(/^Turn only the second layer from the /)
+    },
+  )
+
+  it.each(movesOf(PUZZLE_5X5).filter((move) => move[1] === 'w'))(
+    'reads the same on a 5x5: %s turns the outer two of its five layers',
+    (move) => {
+      expect(turnedLayers(move, PUZZLE_5X5).layers).toEqual([0, 1])
+      expect(describeMove(move)).toMatch(/^Turn the \w+ two layers /)
+    },
+  )
 })
 
 describe('turnedFace', () => {
@@ -170,10 +202,10 @@ describe('turnGuidesOf a 2x2', () => {
   })
 })
 
-describe('layerGuideOf a 4x4', () => {
-  const stickers = stickersOf(PUZZLE_4X4)
-  const NUMBERED_4X4 = Array.from({ length: 96 }, (_, i) => i)
-  const TURNS = movesOf(PUZZLE_4X4).filter(
+describe.each([PUZZLE_4X4, PUZZLE_5X5])('layerGuideOf a $name', (puzzle) => {
+  const stickers = stickersOf(puzzle)
+  const NUMBERED = Array.from({ length: puzzle.cellCount }, (_, i) => i)
+  const TURNS = movesOf(puzzle).filter(
     (move) => !/^[xyz]/.test(move) && !move.endsWith('2'),
   )
   /** Where a sticker's face is: the end ones of a line wrap round an edge. */
@@ -183,16 +215,16 @@ describe('layerGuideOf a 4x4', () => {
   }
 
   it.each(TURNS)(
-    '%s: a line of 4 stickers on the front or top face for each layer it turns, each moving the way the words say',
+    '%s: a whole row or column of stickers on the front or top face for each layer it turns, each moving the way the words say',
     (move: Move) => {
-      const guide = layerGuideOf(move, PUZZLE_4X4)
+      const guide = layerGuideOf(move, puzzle)
       const layers = move.includes('w') ? 2 : 1
       expect(guide.lines).toHaveLength(layers)
       const toward = DIRECTION_VECTORS[guide.direction]
       const sign = move.endsWith("'") ? -1 : 1
-      const after = applyMove(NUMBERED_4X4, move)
+      const after = applyMove(NUMBERED, move)
       for (const line of guide.lines) {
-        expect(line).toHaveLength(4)
+        expect(line).toHaveLength(puzzle.size)
         for (const cell of line) {
           expect(stickers[cell].normal).toEqual(faceNormal(guide.face))
           const moved = sub(surface(after.indexOf(cell)), surface(cell))
@@ -203,15 +235,29 @@ describe('layerGuideOf a 4x4', () => {
   )
 
   it("puts an inner layer's line one in from the face's: r is the front's second column from the right", () => {
+    const { size } = puzzle
+    const last = size - 1
+    /** Column c of the front, from the bottom up: the way R moves it. */
     const column = (c: number) =>
-      [3, 2, 1, 0].map((row) => cellIndex('F', row * 4 + c, PUZZLE_4X4))
-    expect(layerGuideOf('r', PUZZLE_4X4).lines).toEqual([column(2)])
-    expect(layerGuideOf('R', PUZZLE_4X4).lines).toEqual([column(3)])
-    expect(layerGuideOf('Rw', PUZZLE_4X4).lines).toEqual([column(3), column(2)])
+      Array.from({ length: size }, (_, i) =>
+        cellIndex('F', (last - i) * size + c, puzzle),
+      )
+    expect(layerGuideOf('r', puzzle).lines).toEqual([column(last - 1)])
+    expect(layerGuideOf('R', puzzle).lines).toEqual([column(last)])
+    expect(layerGuideOf('Rw', puzzle).lines).toEqual([
+      column(last),
+      column(last - 1),
+    ])
   })
 
+  it('refuses a whole-cube turn', () => {
+    expect(() => layerGuideOf('x', puzzle)).toThrow()
+  })
+})
+
+describe('layerGuideOf', () => {
   it('matches turnGuidesOf for a face turn, on every cube', () => {
-    for (const puzzle of [PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4]) {
+    for (const puzzle of [PUZZLE_2X2, PUZZLE_3X3, PUZZLE_4X4, PUZZLE_5X5]) {
       for (const face of FACES) {
         const guide = turnGuidesOf(puzzle)[face]
         expect(layerGuideOf(face, puzzle)).toEqual({
@@ -221,9 +267,5 @@ describe('layerGuideOf a 4x4', () => {
         })
       }
     }
-  })
-
-  it('refuses a whole-cube turn', () => {
-    expect(() => layerGuideOf('x', PUZZLE_4X4)).toThrow()
   })
 })

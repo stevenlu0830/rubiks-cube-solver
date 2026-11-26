@@ -2,7 +2,7 @@ import { Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { faceNormal, STICKERS, stickersOf } from '../../src/cube/geometry.ts'
 import { applyMove, MOVES, movesOf } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   layerGuideOf,
   TURN_GUIDES,
@@ -106,58 +106,61 @@ describe('arrowPlacement on a 2x2', () => {
   )
 })
 
-describe('arrowPlacements on a 4x4', () => {
-  const stickers = stickersOf(PUZZLE_4X4)
-  const NUMBERED_4X4 = Array.from({ length: 96 }, (_, i) => i)
-  const TURNS = movesOf(PUZZLE_4X4).filter(
-    (move) => !/^[xyz]/.test(move) && !move.endsWith('2'),
-  )
-  const surface = (cell: number) =>
-    new Vector3(...stickers[cell].position).addScaledVector(
-      new Vector3(...stickers[cell].normal),
-      0.5,
+describe.each([PUZZLE_4X4, PUZZLE_5X5])(
+  'arrowPlacements on a $name',
+  (puzzle) => {
+    const stickers = stickersOf(puzzle)
+    const NUMBERED = Array.from({ length: puzzle.cellCount }, (_, i) => i)
+    /** How far each face is from the cube's middle: 2 on a 4x4, 2.5 on a 5x5. */
+    const out = puzzle.size / 2
+    const TURNS = movesOf(puzzle).filter(
+      (move) => !/^[xyz]/.test(move) && !move.endsWith('2'),
+    )
+    const surface = (cell: number) =>
+      new Vector3(...stickers[cell].position).addScaledVector(
+        new Vector3(...stickers[cell].normal),
+        0.5,
+      )
+
+    it.each(TURNS)(
+      '%s: one arrow along each line of moving stickers, just above it, pointing the way they move',
+      (move) => {
+        const guide = layerGuideOf(move, puzzle)
+        const placements = arrowPlacements(move, puzzle)
+        expect(placements).toHaveLength(guide.lines.length)
+        const face = new Vector3(...faceNormal(guide.face))
+        placements.forEach(({ position, quaternion }, i) => {
+          // The arrow floats just above the face.
+          expect(position.dot(face)).toBeGreaterThan(out)
+          expect(position.dot(face)).toBeLessThan(out + 0.1)
+          // Over the middle of its line.
+          const line = guide.lines[i]
+          const middle = new Vector3()
+          for (const cell of line) middle.add(surface(cell))
+          middle.multiplyScalar(1 / line.length)
+          const sideways = position.clone().sub(middle)
+          expect(
+            sideways
+              .sub(face.clone().multiplyScalar(sideways.dot(face)))
+              .length(),
+          ).toBeCloseTo(0)
+          const pointing = new Vector3(1, 0, 0).applyQuaternion(quaternion)
+          for (const cell of line) {
+            const landsAt = applyMove(NUMBERED, move).indexOf(cell)
+            expect(
+              surface(landsAt).sub(surface(cell)).dot(pointing),
+            ).toBeGreaterThan(0)
+          }
+        })
+      },
     )
 
-  it.each(TURNS)(
-    '%s: one arrow along each line of moving stickers, just above it, pointing the way they move',
-    (move) => {
-      const guide = layerGuideOf(move, PUZZLE_4X4)
-      const placements = arrowPlacements(move, PUZZLE_4X4)
-      expect(placements).toHaveLength(guide.lines.length)
-      const face = new Vector3(...faceNormal(guide.face))
-      placements.forEach(({ position, quaternion }, i) => {
-        // A 4x4's faces are 2 out from the middle; the arrow floats just above.
-        expect(position.dot(face)).toBeGreaterThan(2)
-        expect(position.dot(face)).toBeLessThan(2.1)
-        // Over the middle of its line.
-        const line = guide.lines[i]
-        const middle = new Vector3()
-        for (const cell of line) middle.add(surface(cell))
-        middle.multiplyScalar(1 / line.length)
-        const sideways = position.clone().sub(middle)
-        expect(
-          sideways
-            .sub(face.clone().multiplyScalar(sideways.dot(face)))
-            .length(),
-        ).toBeCloseTo(0)
-        const pointing = new Vector3(1, 0, 0).applyQuaternion(quaternion)
-        for (const cell of line) {
-          const landsAt = applyMove(NUMBERED_4X4, move).indexOf(cell)
-          expect(
-            surface(landsAt).sub(surface(cell)).dot(pointing),
-          ).toBeGreaterThan(0)
-        }
-      })
-    },
-  )
-
-  it('gives a wide turn two arrows side by side, and its half turn two two-headed ones', () => {
-    expect(arrowPlacements('Rw', PUZZLE_4X4)).toHaveLength(2)
-    expect(
-      arrowPlacements('Rw2', PUZZLE_4X4).map(
-        ({ doubleHeaded }) => doubleHeaded,
-      ),
-    ).toEqual([true, true])
-    expect(arrowPlacements('r', PUZZLE_4X4)).toHaveLength(1)
-  })
-})
+    it('gives a wide turn two arrows side by side, and its half turn two two-headed ones', () => {
+      expect(arrowPlacements('Rw', puzzle)).toHaveLength(2)
+      expect(
+        arrowPlacements('Rw2', puzzle).map(({ doubleHeaded }) => doubleHeaded),
+      ).toEqual([true, true])
+      expect(arrowPlacements('r', puzzle)).toHaveLength(1)
+    })
+  },
+)

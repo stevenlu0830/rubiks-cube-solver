@@ -18,9 +18,9 @@ export interface ArrowPlacement {
 /**
  * Where to draw the arrows for a turn: one along each row or column of
  * visible stickers that moves (see layerGuideOf), pointing the way they go.
- * A face turn or an inner-layer turn has one; a 4x4's wide turn has two
- * side by side, one for each layer. The arrow shape is drawn along +x,
- * lying flat facing +z; `quaternion` turns it onto the cube.
+ * A face turn or an inner-layer turn has one; a 4x4's or 5x5's wide turn
+ * has two side by side, one for each layer. The arrow shape is drawn along
+ * +x, lying flat facing +z; `quaternion` turns it onto the cube.
  */
 export function arrowPlacements(
   move: Move,

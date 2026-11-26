@@ -43,15 +43,13 @@ for (const colorScheme of ['light', 'dark'] as const) {
     test('the page for picking a cube, and its About window', async ({
       page,
     }) => {
-      // A saved cube of each, so every card that's ready shows "In
-      // progress" too; the 5x5's says "Coming soon".
+      // A saved cube of each, so every card shows "In progress" too.
       await page.addInitScript(savedCube, SCRAMBLED)
       await page.addInitScript(savedCube, SCRAMBLED_2X2)
       await page.addInitScript(savedCube, SCRAMBLED_4X4)
       await page.addInitScript(savedCube, SCRAMBLED_5X5)
       await page.goto('./')
-      await expect(page.getByText('In progress')).toHaveCount(3)
-      await expect(page.getByText('Coming soon')).toHaveCount(1)
+      await expect(page.getByText('In progress')).toHaveCount(4)
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'About this app' }).click()
       await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible()
@@ -109,7 +107,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
         page.getByRole('button', { name: 'white, 1/25' }),
       ).toBeVisible()
       await expectNoProblems(page)
-      await page.getByRole('button', { name: 'Check' }).click() // mostly blank
+      await page.getByRole('button', { name: 'Solve' }).click() // mostly blank
       await expect(page.getByRole('status')).toContainText('still blank')
       await expectNoProblems(page)
       await page.getByRole('button', { name: 'Settings' }).click()
@@ -120,11 +118,38 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expectNoProblems(page)
     })
 
-    test('the 5x5 "looks good" message', async ({ page }) => {
+    test('the 5x5 solve screen: holding the cube, a step, the checkpoint before a parity fix, and Solved', async ({
+      page,
+    }) => {
       await page.addInitScript(savedCube, SCRAMBLED_5X5)
       await page.goto('./#/5x5')
-      await page.getByRole('button', { name: 'Check' }).click()
-      await expect(page.getByRole('status')).toContainText('Looks good')
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByLabel('How to hold your cube')).toBeVisible({
+        timeout: 30_000,
+      })
+      await expectNoProblems(page)
+      await page.getByRole('button', { name: "I'm ready" }).click()
+      await expect(page.getByText(/^Step 1 of \d+ · Centres$/)).toBeVisible()
+      await expectNoProblems(page) // a step, with the 5x5's map
+
+      // The first step of the parity fix: the edges' checkpoint, which
+      // says which edge the fix is for.
+      await page
+        .getByRole('list', { name: 'Parity fix' })
+        .getByRole('button')
+        .first()
+        .click()
+      await expect(page.getByText(/All but the edge between/)).toBeVisible()
+      await expectNoProblems(page)
+
+      const steps = page
+        .getByRole('list', { name: 'Steps' })
+        .getByRole('button')
+      await steps.last().click()
+      await page.getByRole('button', { name: 'Next', exact: true }).click()
+      await expect(
+        page.getByRole('heading', { name: 'Solved 🎉' }),
+      ).toBeVisible()
       await expectNoProblems(page)
     })
 

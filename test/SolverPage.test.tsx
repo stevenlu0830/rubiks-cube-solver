@@ -1210,49 +1210,52 @@ describe('SolverPage', () => {
       expect(view.state).toEqual(emptyState(PUZZLE_5X5))
     })
 
-    it("can't be scanned or solved yet, and doesn't start a solver, but has Check", () => {
+    it("has Solve, which starts the 5x5's own solver, but no Scan yet", () => {
       fakeCamera()
       render(<SolverPage cube="5x5" />)
       expect(screen.queryByRole('button', { name: 'Scan' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Solve' })).toBeNull()
-      expect(screen.getByRole('button', { name: 'Check' })).toBeEnabled()
-      expect(solver.started).toEqual([])
+      expect(screen.queryByRole('button', { name: 'Check' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Solve' })).toBeEnabled()
+      expect(solver.started).toEqual(['5x5'])
     })
 
-    describe('Check', () => {
+    describe('Solve', () => {
       const SOLVED_5X5 = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
-
-      it('says a real 5x5 looks good, and that solving one is coming soon', () => {
-        saveCube(applyMoves(SOLVED_5X5, parseMoves("R u' Fw2 l D2 b'")))
+      const renderWith = (cube: CubeState) => {
+        saveCube(cube)
         render(<SolverPage cube="5x5" />)
-        click('Check')
+      }
+      /** The cube that `solution` solves. */
+      const solvedBy = (solution: string) =>
+        applyMoves(SOLVED_5X5, invertMoves(parseMoves(solution)))
+
+      it('asks for all 150 squares, pointing out the blank ones', () => {
+        render(<SolverPage cube="5x5" />)
+        click('Solve')
         expect(screen.getByRole('status')).toHaveTextContent(
-          'Looks good: this is a real, solvable cube. Solving a 5x5 is coming soon.',
+          '150 squares are still blank. Paint all 150 to match your cube.',
         )
-        expect(view.highlight).toBeUndefined()
-        expect(solver.started).toEqual([])
+        expect(view.highlight).toHaveLength(150)
       })
 
       it('says when the 5x5 is already solved', () => {
-        saveCube(SOLVED_5X5)
-        render(<SolverPage cube="5x5" />)
-        click('Check')
+        renderWith(SOLVED_5X5)
+        click('Solve')
         expect(screen.getByRole('status')).toHaveTextContent(
           'This cube is already solved!',
         )
-        expect(screen.getByRole('status')).not.toHaveTextContent('coming soon')
       })
 
-      it('says what is wrong with a painting mistake, and outlines the squares to check', () => {
+      it('says what is wrong with a painting mistake, and outlines the squares to check, without asking the solver', () => {
+        solver.solve = vi.fn(() => Promise.resolve([]))
         // An outer edge piece of the top-front edge painted the wrong way round.
         const UF = 2 * EDGES.indexOf('UF')
         const [first, second] = wingCellsOf(PUZZLE_5X5)[UF]
         const cube = [...SOLVED_5X5]
         cube[first] = SOLVED_5X5[second]
         cube[second] = SOLVED_5X5[first]
-        saveCube(cube)
-        render(<SolverPage cube="5x5" />)
-        click('Check')
+        renderWith(cube)
+        click('Solve')
         expect(screen.getByRole('status')).toHaveTextContent(
           "There are two of the same white–green outer edge piece. A 5x5's two white–green outer edge pieces are mirror images",
         )
@@ -1263,6 +1266,7 @@ describe('SolverPage', () => {
             ...wingCellsOf(PUZZLE_5X5)[UF + 1],
           ]),
         )
+        expect(solver.solve).not.toHaveBeenCalled()
 
         // Painting any square hides both: they were for the cube as it was.
         tap(first)
@@ -1270,12 +1274,132 @@ describe('SolverPage', () => {
         expect(view.highlight).toBeUndefined()
       })
 
-      it('asks for every square to be painted first', () => {
-        render(<SolverPage cube="5x5" />)
-        click('Check')
-        expect(screen.getByRole('status')).toHaveTextContent(
-          '150 squares are still blank. Paint all 150 to match your cube.',
+      it('sends the cube as seen to the solver, then says to hold it by its centres', async () => {
+        const cube = applyMoves(SOLVED_5X5, parseMoves("R u' Fw2 l D2 b'"))
+        const answer = deferred<Solution>()
+        solver.solve = vi.fn(() => answer.promise)
+        renderWith(cube)
+        const turned = turnBySwipe(new Quaternion(), 'left')
+        act(() => view.swipeTo(turned))
+
+        click('Solve')
+        const shown = cubeAsShown(cube, turned)
+        expect(solver.solve).toHaveBeenCalledWith(toFaceletString(shown))
+        expect(vi.mocked(solver.solve).mock.calls[0][0]).toHaveLength(150)
+
+        await act(async () =>
+          answer.resolve({
+            moves: parseMoves("b R u' Fw2 l D2"),
+            stages: [
+              { name: 'centres', start: 0 },
+              { name: 'finish', start: 4 },
+            ],
+          }),
         )
+        const hold = screen.getByLabelText('How to hold your cube')
+        expect(hold).toHaveTextContent(
+          'Hold your cube with red facing you and white on top. Keep it this way for every step.',
+        )
+        expect(hold).toHaveTextContent(
+          'The 6 moves come in 2 stages, and Play stops after each for you to check your cube.',
+        )
+        expect(view.held).toBe(true)
+        expect(view.state).toEqual(shown)
+      })
+
+      it('plays the solution stage by stage, with checkpoints that fit a 5x5, to Solved', async () => {
+        // Each stage does its job: u' solves the centres; D' leaves the
+        // edges joined but for the top-front one, which EDGE_FIX swaps
+        // back; F' solves the rest.
+        const fix = "r2 B2 U2 l U2 r' U2 r U2 F2 r F2 l' B2 r2"
+        solver.solve = () =>
+          Promise.resolve({
+            moves: parseMoves(`u' D' ${fix} F'`),
+            stages: [
+              { name: 'centres', start: 0 },
+              { name: 'edges', start: 1 },
+              { name: 'parity', start: 2 },
+              { name: 'finish', start: 17 },
+            ],
+          })
+        renderWith(solvedBy(`u' D' ${fix} F'`))
+        await act(async () => click('Solve'))
+        click("I'm ready")
+
+        expect(screen.getByText('Step 1 of 18 · Centres')).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Turn only the second layer from the top anticlockwise (front stickers move right)',
+            { selector: '.solve-card *' },
+          ),
+        ).toBeInTheDocument()
+        expect(view.hint).toBe("u'") // the arrow on the 3D cube
+        const map = screen.getByRole('img', { name: 'Map of all six faces' })
+        expect(map.querySelectorAll('span')).toHaveLength(150)
+
+        const checkpoint = () =>
+          screen.getByText(/ done\./, { selector: 'strong' }).closest('p')!
+        click('Play')
+        act(() => view.turnDone())
+        expect(checkpoint()).toHaveTextContent(
+          "Centres done. Each centre should now be one colour: white on top, green in front. They won't move from here.",
+        )
+
+        click('Play')
+        act(() => view.turnDone())
+        expect(checkpoint()).toHaveTextContent(
+          "Pair the edges done. Each edge's three pieces should now match, in a row, and the centres still be whole. All but the edge between the top and the front: its two outer pieces show their colours the other way round from its middle one. The parity fix, next, puts that right.",
+        )
+        expect(
+          screen.getByText('Step 3 of 18 · Parity fix'),
+        ).toBeInTheDocument()
+
+        // Skip to the parity fix's last move.
+        const steps = screen.getByRole('list', { name: 'Steps' })
+        fireEvent.click(
+          within(
+            within(steps).getByRole('list', { name: 'Parity fix' }),
+          ).getAllByRole('button')[14],
+        )
+        click('Play')
+        act(() => view.turnDone())
+        expect(checkpoint()).toHaveTextContent(
+          'Parity fix done. Every edge should now match all the way along, and the centres still be whole. The rest is solved like a 3x3.',
+        )
+
+        click('Play')
+        expect(view.turning).toBe("F'")
+        act(() => view.turnDone())
+        expect(
+          screen.getByRole('heading', { name: 'Solved 🎉' }),
+        ).toBeInTheDocument()
+        expect(isSolved(view.state)).toBe(true)
+      })
+
+      it('says every edge should match after the edges, when no parity fix follows', async () => {
+        solver.solve = () =>
+          Promise.resolve({
+            moves: parseMoves("u' D' F'"),
+            stages: [
+              { name: 'centres', start: 0 },
+              { name: 'edges', start: 1 },
+              { name: 'finish', start: 2 },
+            ],
+          })
+        renderWith(solvedBy("u' D' F'"))
+        await act(async () => click('Solve'))
+        click("I'm ready")
+        click('Play')
+        act(() => view.turnDone())
+        click('Play')
+        act(() => view.turnDone())
+        const checkpoint = screen
+          .getByText(/^Pair the edges done\./)
+          .closest('p')
+        expect(checkpoint).toHaveTextContent(
+          "Pair the edges done. Each edge's three pieces should now match, in a row, and the centres still be whole.",
+        )
+        expect(checkpoint).not.toHaveTextContent('All but')
       })
     })
 

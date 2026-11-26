@@ -19,8 +19,8 @@ export interface Playback {
   start: CubeState
   moves: Move[]
   /**
-   * A 4x4's solution comes in stages (centres, edges…), each with a
-   * checkpoint at its end where Play stops. A 2x2 or 3x3 has none.
+   * A 4x4's or 5x5's solution comes in stages (centres, edges…), each with
+   * a checkpoint at its end where Play stops. A 2x2 or 3x3 has none.
    */
   stages: readonly Stage[]
   /** How to hold the cube for every step, worked out from `start`. */

@@ -1,15 +1,10 @@
 import type { ReactNode } from 'react'
 import { puzzleOf } from '../cube/puzzle.ts'
-import {
-  cellIndex,
-  type Color,
-  type CubeState,
-  type Face,
-} from '../cube/state.ts'
+import type { Color, CubeState, Face } from '../cube/state.ts'
 import type { StageName } from '../solver/protocol.ts'
 import { STICKER_COLORS } from '../view/colors.ts'
 import type { Hold } from './hold.ts'
-import { describeMove } from './moveGuide.ts'
+import { describeMove, FACE_NAMES } from './moveGuide.ts'
 import {
   cubeAt,
   currentStep,
@@ -18,7 +13,7 @@ import {
   stageOf,
   type Playback,
 } from './playback.ts'
-import { STAGE_NAMES } from './stages.ts'
+import { centreColor, STAGE_NAMES, swappedEdge } from './stages.ts'
 
 interface SolveCardProps {
   playback: Playback
@@ -138,13 +133,21 @@ function HoldInstruction({ hold }: { hold: Hold }) {
 }
 
 /**
- * What the cube should look like at the end of a stage of a 4x4's
+ * What the cube should look like at the end of a stage of a 4x4's or 5x5's
  * solution, and what to do if it doesn't: a point to recover from, rather
- * than finding out at the end.
+ * than finding out at the end. A 5x5's edges have three pieces, the middle
+ * one never moving from its edge (see fiveByFive.ts), and about half the
+ * time one edge's outer pieces are still swapped when its edges are done.
  */
 function Checkpoint({ stage, cube }: { stage: StageName; cube: CubeState }) {
-  // Cell 5 is one of a 4x4 face's four centre squares (the only cube with stages).
-  const centre = (face: Face) => cube[cellIndex(face, 5, puzzleOf(cube))]!
+  const threePieces = puzzleOf(cube).size === 5
+  const swapped = stage === 'edges' ? swappedEdge(cube) : null
+  /** Where the swapped edge is, as held: "the bottom and the back". */
+  const between =
+    swapped &&
+    ([...swapped] as Face[])
+      .map((face) => `the ${FACE_NAMES[face]}`)
+      .join(' and ')
   return (
     <div className="solve-card-checkpoint">
       <p>
@@ -152,12 +155,23 @@ function Checkpoint({ stage, cube }: { stage: StageName; cube: CubeState }) {
         {stage === 'centres' ? (
           <>
             Each centre should now be one colour:{' '}
-            <ColorName color={centre('U')} /> on top,{' '}
-            <ColorName color={centre('F')} /> in front. They won't move from
-            here.
+            <ColorName color={centreColor(cube, 'U')} /> on top,{' '}
+            <ColorName color={centreColor(cube, 'F')} /> in front. They won't
+            move from here.
           </>
         ) : stage === 'edges' ? (
-          "Each edge's two pieces should now match, side by side, and the centres still be whole."
+          threePieces ? (
+            <>
+              Each edge's three pieces should now match, in a row, and the
+              centres still be whole.
+              {between &&
+                ` All but the edge between ${between}: its two outer pieces show their colours the other way round from its middle one. The parity fix, next, puts that right.`}
+            </>
+          ) : (
+            "Each edge's two pieces should now match, side by side, and the centres still be whole."
+          )
+        ) : threePieces ? (
+          'Every edge should now match all the way along, and the centres still be whole. The rest is solved like a 3x3.'
         ) : (
           'The centres and edge pairs should still be whole. The rest is solved like a 3x3.'
         )}

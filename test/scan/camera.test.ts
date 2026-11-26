@@ -3,6 +3,7 @@ import { fakeCamera, removeFakeCamera } from '../helpers/fakeCamera.ts'
 import {
   cameraErrorMessage,
   canOfferCamera,
+  SCANNABLE_CUBES,
   facesUser,
   hasTorch,
   openCamera,
@@ -109,6 +110,12 @@ describe('the torch', () => {
     expect(camera.opened[0].track.applyConstraints).toHaveBeenCalledWith({
       advanced: [{ torch: true }],
     })
+  })
+})
+
+describe('SCANNABLE_CUBES', () => {
+  it("is every cube but the 5x5, which can't be scanned yet", () => {
+    expect(SCANNABLE_CUBES).toEqual(['2x2', '3x3', '4x4'])
   })
 })
 
