@@ -263,11 +263,12 @@ describe('settleCloseCalls on a 4x4', () => {
   })
 
   it('is quick enough to run on every look through the camera', () => {
-    // The worst case: a twisted corner, which no switch can fix, so no bad
+    // A slow case: a twisted corner, which no switch can fix, so no bad
     // piece to rule anything out. A fix would have to switch a corner's
     // square, and one red on another corner is a close call, along with
     // 13 reds and oranges on edge pieces: with it, they keep "16 of each"
-    // in many ways.
+    // in many ways. Each of those leaves a piece that can't be right, or
+    // two the same, which the quick test of the pieces rules out.
     const [corner, other] = cornerCellsOf(PUZZLE_4X4)
     const wrong = Object.fromEntries(
       corner.map((cell, i) => [cell, SCRAMBLED_4X4[corner[(i + 1) % 3]]!]),
@@ -398,11 +399,15 @@ describe('settleCloseCalls on a 5x5', () => {
   })
 
   it('is quick enough to run on every look through the camera', () => {
-    // The worst case: two middle edge pieces swapped, which no switch can
-    // fix, so no bad piece to rule anything out. A fix would have to switch
-    // a square of a corner or middle edge piece, and one red on another
+    // A slow case: two middle edge pieces swapped, which no switch can fix,
+    // so no bad piece to rule anything out. A fix would have to switch a
+    // square of a corner or middle edge piece, and one red on another
     // middle edge piece is a close call, along with 13 reds and oranges on
-    // outer edge pieces: with it, they keep "25 of each" in many ways.
+    // outer edge pieces: with it, they keep "25 of each" in about 1,700
+    // ways. Each of those leaves a piece that can't be right, or two the
+    // same, which the quick test of the pieces rules out without the whole
+    // check. Before that test, this took 23 ms on a fast laptop, and over
+    // 100 on the slower computers that run the tests online.
     const [first, second, third] = edgeCellsOf(PUZZLE_5X5)
     const wrong = Object.fromEntries([
       ...first.map((cell, i) => [cell, SCRAMBLED_5X5[second[i]]!]),

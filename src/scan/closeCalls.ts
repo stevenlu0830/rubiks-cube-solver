@@ -25,12 +25,13 @@
  * in mirror-image order, or with red and orange both), or it's a copy of
  * another piece. So squares on those pieces are tried first, then the
  * closest calls of the rest, 14 in all (2¹⁴ = 16,384 ways, most ruled out
- * at once: a fix must switch a square of every bad piece, and leave the
- * same number of each colour). On a 2x2, too, squares on bad pieces go
- * first. With more squares on bad pieces than can be tried, too much is
- * wrong to settle by guessing. A twisted corner, a flipped edge or two
- * pieces swapped can only be fixed by switching a corner's or middle edge
- * piece's square, so without one to try, there's no need to try at all.
+ * at once: a fix must switch a square of every bad piece, leave the same
+ * number of each colour, and leave every piece real, with one of each).
+ * On a 2x2, too, squares on bad pieces go first. With more squares on bad
+ * pieces than can be tried, too much is wrong to settle by guessing. A
+ * twisted corner, a flipped edge or two pieces swapped can only be fixed
+ * by switching a corner's or middle edge piece's square, so without one
+ * to try, there's no need to try at all.
  *
  * The 24 centre squares of a 4x4 belong to no piece, so nothing shows
  * when one is wrong but "16 of each": a centre is only switched when that
@@ -68,12 +69,19 @@ import {
   centreRingsOf,
   cornerCellsOf,
   edgeCellsOf,
+  faceColorsOf,
   toCubies,
   wingCellsOf,
   wingsOf,
 } from '../cube/cubies.ts'
 import { perPuzzle, puzzleOf, type Puzzle } from '../cube/puzzle.ts'
-import { COLORS, type Cell, type Color, type CubeState } from '../cube/state.ts'
+import {
+  COLORS,
+  solvedState,
+  type Cell,
+  type Color,
+  type CubeState,
+} from '../cube/state.ts'
 import { validateCube, type Problem } from '../cube/validate.ts'
 import type { Classified } from './classify.ts'
 
@@ -173,6 +181,7 @@ export function settleCloseCalls(
       ),
   )
   if (onBadPiece.includes(0)) return named // one can't be fixed
+  const piecesReal = realPiecesTest(cube, choices)
 
   let best: { switched: number; cost: number } | null = null
   /** How well the next best way that passes fits. */
@@ -200,6 +209,8 @@ export function settleCloseCalls(
     ) {
       continue
     }
+    // Then that every piece is real, and there's one of each.
+    if (!piecesReal(switched)) continue
     const tried = [...cube]
     choices.forEach(({ cell, to }, k) => {
       if ((switched >> k) & 1) tried[cell] = to
@@ -226,6 +237,80 @@ export function settleCloseCalls(
     })
   })
   return settled
+}
+
+/**
+ * A quick test of a way of switching squares, before the whole check:
+ * whether every corner and edge piece is real (its colours belong together,
+ * in an order a real piece can sit in), and there's one of each, as the
+ * check needs. Only the pieces with a square that might be switched can
+ * change, so only those are looked at, and what each would be is worked
+ * out once, for each way of switching its squares. Most ways of switching
+ * fail it, so few need the whole check, which takes much longer on a 5x5.
+ * (A side held turned is looked for the same way: see turnedSides.ts.)
+ */
+function realPiecesTest(
+  cube: CubeState,
+  choices: readonly { cell: number; to: Color }[],
+): (switched: number) => boolean {
+  const puzzle = puzzleOf(cube)
+  // The problem isn't the centres, so they say which colour each side is.
+  const solved = solvedState(faceColorsOf(cube)!, puzzle)
+  const kinds: [readonly (readonly number[])[], number][] = [
+    // Each kind of piece, and how many ways round it can sit in a slot.
+    [cornerCellsOf(puzzle), 3],
+    [edgeCellsOf(puzzle), 2],
+    // An outer edge piece can't be flipped in place (see wingCellsOf).
+    [wingCellsOf(puzzle), 1],
+  ]
+  const tests = kinds.map(([slots, ways]) => {
+    // Each real piece's colours, read every way it can sit, to which it is.
+    const real = new Map<string, number>()
+    slots.forEach((cells, piece) => {
+      const colors = cells.map((cell) => solved[cell])
+      for (let turn = 0; turn < ways; turn++) {
+        const turned = [...colors.slice(turn), ...colors.slice(0, turn)]
+        real.set(turned.join(), piece)
+      }
+    })
+    const pieceOf = (colors: readonly Cell[]) => real.get(colors.join()) ?? -1
+    // How many of each piece are in the slots no switch can change.
+    const unchanged = Array<number>(slots.length).fill(0)
+    let possible = true
+    /** The slots that can change: the choices on each, and the piece it holds for each way of switching them. */
+    const changing = slots.flatMap((cells) => {
+      const on = choices.flatMap(({ cell }, k) =>
+        cells.includes(cell) ? [k] : [],
+      )
+      if (on.length === 0) {
+        const piece = pieceOf(cells.map((cell) => cube[cell]))
+        if (piece === -1 || ++unchanged[piece] > 1) possible = false
+        return []
+      }
+      const holds = Array.from({ length: 2 ** on.length }, (_, way) =>
+        pieceOf(
+          cells.map((cell) => {
+            const j = on.findIndex((k) => choices[k].cell === cell)
+            return j !== -1 && (way >> j) & 1 ? choices[on[j]].to : cube[cell]
+          }),
+        ),
+      )
+      return [{ on, holds }]
+    })
+    const count = Array<number>(slots.length)
+    return (switched: number) => {
+      if (!possible) return false
+      count.splice(0, count.length, ...unchanged)
+      for (const { on, holds } of changing) {
+        let way = 0
+        on.forEach((k, j) => (way |= ((switched >> k) & 1) << j))
+        const piece = holds[way]
+        if (piece === -1 || ++count[piece] > 1) return false
+      }
+      return true
+    }
+  })
+  return (switched) => tests.every((test) => test(switched))
 }
 
 /**
