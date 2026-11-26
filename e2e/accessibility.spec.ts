@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { EDGES, wingCellsOf } from '../src/cube/cubies.ts'
 import { applyMoves, parseMoves } from '../src/cube/moves.ts'
 import { Quaternion } from 'three'
 import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../src/cube/puzzle.ts'
@@ -150,6 +151,32 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(
         page.getByRole('heading', { name: 'Solved 🎉' }),
       ).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('the 5x5 "already solved" message', async ({ page }) => {
+      await page.addInitScript(
+        savedCube,
+        solvedState(STANDARD_SCHEME, PUZZLE_5X5),
+      )
+      await page.goto('./#/5x5')
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByRole('status')).toContainText('already solved')
+      await expectNoProblems(page)
+    })
+
+    test('a 5x5 painting mistake, with the squares to check outlined', async ({
+      page,
+    }) => {
+      // An outer edge piece painted the wrong way round.
+      const [first, second] = wingCellsOf(PUZZLE_5X5)[2 * EDGES.indexOf('UF')]
+      const mistake = [...SCRAMBLED_5X5]
+      mistake[first] = SCRAMBLED_5X5[second]
+      mistake[second] = SCRAMBLED_5X5[first]
+      await page.addInitScript(savedCube, mistake)
+      await page.goto('./#/5x5')
+      await page.getByRole('button', { name: 'Solve' }).click()
+      await expect(page.getByRole('status')).toContainText('outlined in pink')
       await expectNoProblems(page)
     })
 
@@ -358,6 +385,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(
         page.getByText('Pick the colour of the square in row 3, column 3:'),
       ).toBeVisible()
+      await expectNoProblems(page)
+    })
+
+    test('a 5x5 side held turned, and its Fix it button', async ({ page }) => {
+      await page.addInitScript(fakeCamera)
+      await page.goto('./#/5x5')
+      await page.getByRole('button', { name: 'Scan' }).click()
+      await scanEverySide(page, SCRAMBLED_5X5, { firstSideTurned: 1 })
+      await expect(page.locator('.scan-instruction')).toContainText(
+        /The green side looks turned\. Fix it\?/,
+      )
+      await expect(page.getByRole('button', { name: 'Fix it' })).toBeVisible()
       await expectNoProblems(page)
     })
 

@@ -149,19 +149,6 @@ const SET_NUMBERING = byteNumbering((byte, before, bits) => {
   return number
 })
 
-/** The set of k slots out of n with this number. */
-function setFromNumber(number: number, n: number, k: number): number {
-  let mask = 0
-  for (let slot = n - 1; slot >= 0 && k > 0; slot--) {
-    if (binomial[slot][k] <= number) {
-      number -= binomial[slot][k]
-      mask |= 1 << slot
-      k--
-    }
-  }
-  return mask
-}
-
 /**
  * One step of solving a ring. Its "pattern" is a bitmask saying where the
  * pieces it cares about are; `distance` says, for every pattern, the fewest
@@ -195,31 +182,34 @@ function maskOf(
  * move away needs 1 move, every new one a move from those needs 2, and so
  * on (a "breadth-first search"). The moves can all be undone by other moves
  * in the list, so the moves out from the goal are the moves back to it.
+ *
+ * The patterns waiting to be tried are kept as they are, not by number:
+ * working a pattern out from its number took a quarter of the time.
  */
 function distances(
   size: number,
   goal: number,
   turns: Int32Array,
   numbering: Numbering,
-  fromNumber: (number: number) => number,
 ): Uint8Array {
   const moveCount = turns.length / 768
   const distance = new Uint8Array(size).fill(255)
-  // Every pattern found so far, by number, in the order found: those the
-  // same number of moves from the goal are side by side.
+  // Every pattern found so far, in the order found: those the same number
+  // of moves from the goal are side by side.
   const found = new Int32Array(size)
-  found[0] = numberOf(numbering, goal)
-  distance[found[0]] = 0
+  found[0] = goal
+  distance[numberOf(numbering, goal)] = 0
   let start = 0
   let end = 1
   for (let depth = 1; start < end; depth++) {
     let next = end
     for (let i = start; i < end; i++) {
-      const pattern = fromNumber(found[i])
+      const pattern = found[i]
       for (let move = 0; move < moveCount; move++) {
-        const to = numberOf(numbering, turned(turns, move, pattern))
-        if (distance[to] === 255) {
-          distance[to] = depth
+        const to = turned(turns, move, pattern)
+        const number = numberOf(numbering, to)
+        if (distance[number] === 255) {
+          distance[number] = depth
           found[next++] = to
         }
       }
@@ -261,9 +251,7 @@ function topAndBottomStep(ring: RingMoves): CentreStep {
     numbering: SET_NUMBERING,
     read: (faces) =>
       maskOf(faces, ALL_SLOTS, (face) => face === 'U' || face === 'D'),
-    distance: distances(binomial[24][8], goal, turns, SET_NUMBERING, (number) =>
-      setFromNumber(number, 24, 8),
-    ),
+    distance: distances(binomial[24][8], goal, turns, SET_NUMBERING),
   }
 }
 
@@ -291,9 +279,7 @@ function sidesStep(ring: RingMoves): CentreStep {
     numbering: SET_NUMBERING,
     read: (faces) =>
       maskOf(faces, SIDE_SLOTS, (face) => face === 'R' || face === 'L'),
-    distance: distances(binomial[16][8], goal, turns, SET_NUMBERING, (number) =>
-      setFromNumber(number, 16, 8),
-    ),
+    distance: distances(binomial[16][8], goal, turns, SET_NUMBERING),
   }
 }
 
@@ -311,12 +297,8 @@ const AXIS_SLOTS = (
 
 /** The 70 ways to choose 4 of 8 slots, numbered (-1 for any other bitmask). */
 const FOUR_OF_EIGHT = new Int32Array(256).fill(-1)
-const FOUR_OF_EIGHT_MASKS: number[] = []
-for (let mask = 0; mask < 256; mask++) {
-  if (BITS_IN[mask] === 4) {
-    FOUR_OF_EIGHT[mask] = FOUR_OF_EIGHT_MASKS.length
-    FOUR_OF_EIGHT_MASKS.push(mask)
-  }
+for (let mask = 0, count = 0; mask < 256; mask++) {
+  if (BITS_IN[mask] === 4) FOUR_OF_EIGHT[mask] = count++
 }
 
 /**
@@ -334,10 +316,6 @@ function ownFacesStep(ring: RingMoves): CentreStep {
   const numbering = byteNumbering(
     (byte, _, bits) => FOUR_OF_EIGHT[bits] * [4900, 70, 1][byte],
   )
-  const fromNumber = (number: number) =>
-    FOUR_OF_EIGHT_MASKS[Math.floor(number / 4900)] |
-    (FOUR_OF_EIGHT_MASKS[Math.floor(number / 70) % 70] << 8) |
-    (FOUR_OF_EIGHT_MASKS[number % 70] << 16)
   // In each pair, the first face's 4 slots come first: 0b00001111.
   const goal = 15 | (15 << 8) | (15 << 16)
   return {
@@ -346,7 +324,7 @@ function ownFacesStep(ring: RingMoves): CentreStep {
     numbering,
     read: (faces) =>
       maskOf(faces, AXIS_SLOTS, (face, i) => face === 'URF'[i >> 3]),
-    distance: distances(343000, goal, turns, numbering, fromNumber),
+    distance: distances(343000, goal, turns, numbering),
   }
 }
 

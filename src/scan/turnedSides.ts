@@ -8,8 +8,8 @@
  * Turning a photo round doesn't change its colours, only which square each
  * one goes on. So with the colours named once, every way of turning the six
  * photos (4 ways each: 4⁶ = 4,096) is put through the same check, which
- * works for a 2x2, 3x3 or 4x4. If exactly one of them gives a cube a real cube
- * could be, that's almost certainly what happened. Now and then a
+ * works for any size of cube. If exactly one of them gives a cube a real
+ * cube could be, that's almost certainly what happened. Now and then a
  * far-fetched answer passes too, like turning all six sides; holding one
  * side wrong is a much likelier slip, so the answer turning the fewest
  * sides wins, unless another ties with it.
