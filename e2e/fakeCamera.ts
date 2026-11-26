@@ -26,7 +26,7 @@ export function fakeCamera({
   const context = canvas.getContext('2d')!
   /**
    * A side of a cube to show, if any: where in the picture, and its colours
-   * (9, 4 for a 2x2 or 16 for a 4x4).
+   * (9, 4 for a 2x2, 16 for a 4x4 or 25 for a 5x5).
    */
   let side: { area: Rect; colors: string[] } | null = null
   const draw = () => {
@@ -97,8 +97,8 @@ export function pictureWidth(page: Page) {
 
 /**
  * Holds a side of a cube in these colours (CSS colours, row by row from the
- * top left: 9 for a 3x3, 4 for a 2x2, 16 for a 4x4) up to the fake camera,
- * lined up with the guide on screen.
+ * top left: 9 for a 3x3, 4 for a 2x2, 16 for a 4x4, 25 for a 5x5) up to the
+ * fake camera, lined up with the guide on screen.
  */
 export async function showSide(page: Page, colors: string[]) {
   const [video, guide] = await Promise.all([

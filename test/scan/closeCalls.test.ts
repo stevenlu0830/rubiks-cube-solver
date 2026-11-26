@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   centreCellsOf,
+  centreRingsOf,
   cornerCellsOf,
+  edgeCellsOf,
   WING_CELLS,
+  wingCellsOf,
 } from '../../src/cube/cubies.ts'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
+  centerCell,
   solvedState,
   STANDARD_SCHEME,
   type Color,
@@ -14,7 +18,8 @@ import {
 } from '../../src/cube/state.ts'
 import { validateCube } from '../../src/cube/validate.ts'
 import type { Classified } from '../../src/scan/classify.ts'
-import { settleCloseCalls } from '../../src/scan/closeCalls.ts'
+import { mostTried, settleCloseCalls } from '../../src/scan/closeCalls.ts'
+import { SCRAMBLED_5X5 } from '../helpers/fiveByFive.ts'
 import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 
 const SCRAMBLED_2X2 = applyMoves(
@@ -259,25 +264,170 @@ describe('settleCloseCalls on a 4x4', () => {
 
   it('is quick enough to run on every look through the camera', () => {
     // The worst case: a twisted corner, which no switch can fix, so no bad
-    // piece to rule anything out; and 14 close calls, red and orange,
-    // which keep "16 of each" in many ways.
-    const [corner] = cornerCellsOf(PUZZLE_4X4)
+    // piece to rule anything out. A fix would have to switch a corner's
+    // square, and one red on another corner is a close call, along with
+    // 13 reds and oranges on edge pieces: with it, they keep "16 of each"
+    // in many ways.
+    const [corner, other] = cornerCellsOf(PUZZLE_4X4)
     const wrong = Object.fromEntries(
       corner.map((cell, i) => [cell, SCRAMBLED_4X4[corner[(i + 1) % 3]]!]),
     )
+    const choices: Record<number, { color: Color; cost: number }> = {
+      [other.find((cell) => SCRAMBLED_4X4[cell] === 'red')!]: {
+        color: 'orange',
+        cost: 1,
+      },
+    }
+    for (const [from, to, count] of [
+      ['red', 'orange', 6],
+      ['orange', 'red', 7],
+    ] as const) {
+      for (const cell of where(EDGE_PIECE_CELLS, from).slice(0, count)) {
+        choices[cell] = { color: to, cost: 1 }
+      }
+    }
+    expect(Object.keys(choices)).toHaveLength(14)
+    const scanned = named(SCRAMBLED_4X4, wrong, choices)
+    expect(validateCube(colorsOf(scanned))).toMatchObject({ problem: 'twist' })
+    const start = performance.now()
+    expect(settleCloseCalls(scanned, 96)).toBe(scanned)
+    expect(performance.now() - start).toBeLessThan(100)
+  })
+})
+
+describe('settleCloseCalls on a 5x5', () => {
+  const where = (cells: readonly number[], color: Color) =>
+    cells.filter((cell) => SCRAMBLED_5X5[cell] === color)
+  const CORNER_CELLS = cornerCellsOf(PUZZLE_5X5).flat()
+  const MIDDLE_EDGE_CELLS = edgeCellsOf(PUZZLE_5X5).flat()
+  const OUTER_EDGE_CELLS = wingCellsOf(PUZZLE_5X5).flat()
+  const [DIAGONAL_RING, BESIDE_RING] = centreRingsOf(PUZZLE_5X5).map(
+    (ring) => ring.cells,
+  )
+
+  /**
+   * A red square on one kind of square named orange, and an orange on
+   * another named red: each fits its photo nearly as well the other way.
+   */
+  function mixedUp(redOn: readonly number[], orangeOn: readonly number[]) {
+    const [red] = where(redOn, 'red')
+    const [orange] = where(orangeOn, 'orange')
+    const wrong: Record<number, Color> = { [red]: 'orange', [orange]: 'red' }
+    const choices: Record<number, { color: Color; cost: number }> = {
+      [red]: { color: 'red', cost: 2 },
+      [orange]: { color: 'orange', cost: 3 },
+    }
+    return { red, orange, wrong, choices }
+  }
+
+  it.each([
+    ['a corner', 'a middle edge piece', CORNER_CELLS, MIDDLE_EDGE_CELLS],
+    [
+      'a middle edge piece',
+      'an outer edge piece',
+      MIDDLE_EDGE_CELLS,
+      OUTER_EDGE_CELLS,
+    ],
+    ['an outer edge piece', 'a corner', OUTER_EDGE_CELLS, CORNER_CELLS],
+    [
+      'an outer edge piece',
+      'a square round a centre',
+      OUTER_EDGE_CELLS,
+      DIAGONAL_RING,
+    ],
+  ])(
+    'switches a red on %s and an orange on %s that were mixed up',
+    (_, __, redOn, orangeOn) => {
+      const { red, orange, wrong, choices } = mixedUp(redOn, orangeOn)
+      const scanned = named(SCRAMBLED_5X5, wrong, choices)
+      expect(validateCube(colorsOf(scanned)).valid).toBe(false)
+      const settled = settleCloseCalls(scanned, 150)
+      expect(colorsOf(settled)).toEqual(SCRAMBLED_5X5)
+      expect(settled.get(red)?.unsure).toBe(true)
+      expect(settled.get(orange)?.unsure).toBe(true)
+    },
+  )
+
+  it('switches two squares round the centres, one in each ring, that were mixed up', () => {
+    // Every piece is right, but each ring has a red too many or too few.
+    const { wrong, choices } = mixedUp(DIAGONAL_RING, BESIDE_RING)
+    const scanned = named(SCRAMBLED_5X5, wrong, choices)
+    expect(validateCube(colorsOf(scanned))).toMatchObject({
+      problem: 'center-pieces',
+    })
+    expect(colorsOf(settleCloseCalls(scanned, 150))).toEqual(SCRAMBLED_5X5)
+  })
+
+  it("can't tell two squares in the same ring mixed up: the cube passes the check", () => {
+    const { wrong, choices } = mixedUp(DIAGONAL_RING, DIAGONAL_RING)
+    const scanned = named(SCRAMBLED_5X5, wrong, choices)
+    expect(validateCube(colorsOf(scanned)).valid).toBe(true)
+    expect(settleCloseCalls(scanned, 150)).toBe(scanned)
+  })
+
+  it('leaves it to the user when two centres are picked the same colour by hand', () => {
+    // The white centre picked yellow, and a yellow square white, keeping
+    // "25 of each".
+    const [yellow] = where(OUTER_EDGE_CELLS, 'yellow')
+    const scanned = named(SCRAMBLED_5X5, {
+      [centerCell('U', PUZZLE_5X5)]: 'yellow',
+      [yellow]: 'white',
+    })
+    expect(validateCube(colorsOf(scanned))).toMatchObject({
+      problem: 'centers',
+    })
+    expect(settleCloseCalls(scanned, 150)).toBe(scanned)
+  })
+
+  it('leaves it to the user when too much is wrong to settle', () => {
+    // Five reds and five oranges on edge pieces named the wrong way round:
+    // more squares on bad pieces than can be tried.
+    const wrong: Record<number, Color> = {}
     const choices: Record<number, { color: Color; cost: number }> = {}
     for (const [from, to] of [
       ['red', 'orange'],
       ['orange', 'red'],
     ] as const) {
-      for (const cell of where(EDGE_PIECE_CELLS, from).slice(0, 7)) {
+      for (const cell of where(OUTER_EDGE_CELLS, from).slice(0, 5)) {
+        wrong[cell] = to
+        choices[cell] = { color: from, cost: 1 }
+      }
+    }
+    const scanned = named(SCRAMBLED_5X5, wrong, choices)
+    expect(settleCloseCalls(scanned, 150)).toBe(scanned)
+  })
+
+  it('is quick enough to run on every look through the camera', () => {
+    // The worst case: two middle edge pieces swapped, which no switch can
+    // fix, so no bad piece to rule anything out. A fix would have to switch
+    // a square of a corner or middle edge piece, and one red on another
+    // middle edge piece is a close call, along with 13 reds and oranges on
+    // outer edge pieces: with it, they keep "25 of each" in many ways.
+    const [first, second, third] = edgeCellsOf(PUZZLE_5X5)
+    const wrong = Object.fromEntries([
+      ...first.map((cell, i) => [cell, SCRAMBLED_5X5[second[i]]!]),
+      ...second.map((cell, i) => [cell, SCRAMBLED_5X5[first[i]]!]),
+    ])
+    const red = [...third, ...MIDDLE_EDGE_CELLS].find(
+      (cell) =>
+        SCRAMBLED_5X5[cell] === 'red' && !first.concat(second).includes(cell),
+    )!
+    const choices: Record<number, { color: Color; cost: number }> = {
+      [red]: { color: 'orange', cost: 1 },
+    }
+    for (const [from, to, count] of [
+      ['red', 'orange', 6],
+      ['orange', 'red', 7],
+    ] as const) {
+      for (const cell of where(OUTER_EDGE_CELLS, from).slice(0, count)) {
         choices[cell] = { color: to, cost: 1 }
       }
     }
-    const scanned = named(SCRAMBLED_4X4, wrong, choices)
-    expect(validateCube(colorsOf(scanned))).toMatchObject({ problem: 'twist' })
+    expect(Object.keys(choices)).toHaveLength(mostTried(PUZZLE_5X5))
+    const scanned = named(SCRAMBLED_5X5, wrong, choices)
+    expect(validateCube(colorsOf(scanned))).toMatchObject({ problem: 'swap' })
     const start = performance.now()
-    expect(settleCloseCalls(scanned, 96)).toBe(scanned)
+    expect(settleCloseCalls(scanned, 150)).toBe(scanned)
     expect(performance.now() - start).toBeLessThan(100)
   })
 })

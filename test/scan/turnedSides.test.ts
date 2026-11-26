@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { applyMoves, parseMoves } from '../../src/cube/moves.ts'
 import { cornerCellsOf } from '../../src/cube/cubies.ts'
-import { PUZZLE_2X2, PUZZLE_4X4, puzzleOf } from '../../src/cube/puzzle.ts'
+import {
+  PUZZLE_2X2,
+  PUZZLE_4X4,
+  PUZZLE_5X5,
+  puzzleOf,
+} from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   FACES,
@@ -19,6 +24,7 @@ import {
   turnSides,
   type SideTurns,
 } from '../../src/scan/turnedSides.ts'
+import { SCRAMBLED_5X5 } from '../helpers/fiveByFive.ts'
 import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 
 const SCRAMBLED = applyMoves(
@@ -250,6 +256,74 @@ describe('on a 4x4', () => {
     // the quick test of the corners, so few need the whole check.
     const { sides, named } = scan(SCRAMBLED_4X4)
     const [corner] = cornerCellsOf(PUZZLE_4X4)
+    const colors = corner.map((cell) => named.get(cell)!.color)
+    corner.forEach((cell, i) =>
+      named.set(cell, { color: colors[(i + 1) % 3], unsure: false }),
+    )
+    const start = performance.now()
+    expect(findTurnedSides(sides, named)).toBeNull()
+    expect(performance.now() - start).toBeLessThan(100)
+  })
+})
+
+describe('on a 5x5', () => {
+  it('turns a photo of 25 squares a quarter turn clockwise, round its centre', () => {
+    const squares = Array.from({ length: 25 }, (_, n) => n)
+    // The top row shows what was the left column, from the bottom up.
+    expect(turnCells(squares, 1).slice(0, 5)).toEqual([20, 15, 10, 5, 0])
+    expect(turnCells(squares, 1)[12]).toBe(12)
+    expect(turnCells(squares, 2)).toEqual(squares.toReversed())
+  })
+
+  it('finds nothing to fix in a 5x5 scanned right', () => {
+    const { sides, named } = scan(SCRAMBLED_5X5)
+    expect(findTurnedSides(sides, named)).toBeNull()
+  })
+
+  it.each(
+    FACES.flatMap((face) => [1, 2, 3].map((turns) => [face, turns] as const)),
+  )(
+    'finds side %s of a 5x5 photographed %i quarter turn(s) round, and turns it back',
+    (face, turns) => {
+      const { sides, named } = scan(SCRAMBLED_5X5, { [face]: turns })
+      const found = findTurnedSides(sides, named)
+      expect(found).toEqual({ [face]: turns })
+      const turned = turnSides(sides, {}, found!)
+      const renamed = new Map<number, Classified>()
+      for (const side of FACES) {
+        sides[side]!.cells.forEach((cell, n) =>
+          renamed.set(turned.sides[side]!.cells[n], named.get(cell)!),
+        )
+      }
+      expect(painted(turned.sides, renamed)).toEqual(SCRAMBLED_5X5)
+    },
+  )
+
+  it('finds two sides turned at once', () => {
+    const { sides, named } = scan(SCRAMBLED_5X5, { U: 1, B: 2 })
+    expect(findTurnedSides(sides, named)).toEqual({ U: 1, B: 2 })
+  })
+
+  it("leaves alone a 5x5 whose rings round the centres are wrong: turning can't fix that", () => {
+    // A square next to a centre and one diagonal to it, swapped: each ring
+    // now has a colour too many, however the sides are turned.
+    const { sides, named } = scan(SCRAMBLED_5X5, { R: 1 })
+    const onFront = (n: number) => cellIndex('F', n, PUZZLE_5X5)
+    const color = (cell: number) => named.get(cell)!.color
+    const [beside, diagonal] = [7, 11, 13, 17]
+      .flatMap((b) => [6, 8, 16, 18].map((d) => [onFront(b), onFront(d)]))
+      .find(([b, d]) => color(b) !== color(d))!
+    const [a, b] = [named.get(beside)!, named.get(diagonal)!]
+    named.set(beside, b)
+    named.set(diagonal, a)
+    expect(findTurnedSides(sides, named)).toBeNull()
+  })
+
+  it('is quick enough to run after every photo', () => {
+    // The worst case: a twisted corner, so all 4,096 ways fail. Most fail
+    // the quick test of the corners, so few need the whole check.
+    const { sides, named } = scan(SCRAMBLED_5X5)
+    const [corner] = cornerCellsOf(PUZZLE_5X5)
     const colors = corner.map((cell) => named.get(cell)!.color)
     corner.forEach((cell, i) =>
       named.set(cell, { color: colors[(i + 1) % 3], unsure: false }),

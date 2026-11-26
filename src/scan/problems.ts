@@ -60,8 +60,8 @@ const FRAMED = 0.35
 
 /**
  * At least this share of the squares must look like stickers: 7 of a 3x3's
- * 9, 3 of a 2x2's 4, 12 of a 4x4's 16. A cube not quite lined up can miss
- * a few.
+ * 9, 3 of a 2x2's 4, 12 of a 4x4's 16, 19 of a 5x5's 25. A cube not quite
+ * lined up can miss a few.
  */
 const FRAMED_SHARE = 0.75
 

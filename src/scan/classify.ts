@@ -5,11 +5,11 @@
  * colour looks like in a photo), and takes the name of the nearest one. The
  * references start as typical photo colours, then are learned from the
  * photos: each side's centre square on a 3x3, the squares themselves on a
- * 2x2 or 4x4. Your own cube, in your own light, is the best guide to what its
- * colours look like.
+ * 2x2, 4x4 or 5x5. Your own cube, in your own light, is the best guide to
+ * what its colours look like.
  */
 
-import { puzzleOfSide } from '../cube/puzzle.ts'
+import { puzzleOfSide, type Puzzle } from '../cube/puzzle.ts'
 import { centerOf, COLORS, type Color } from '../cube/state.ts'
 import { cheapestAssignment } from './assign.ts'
 import { chroma, rgbToLab, type Lab } from './colorSpace.ts'
@@ -117,8 +117,9 @@ export interface Classified {
   color: Color
   /**
    * True when it might well be another colour: another one was nearly as
-   * close, or the "9 of each" rule (4 on a 2x2, 16 on a 4x4) moved it off the colour it
-   * looked most like. The app outlines these for the user to check.
+   * close, or the "9 of each" rule (4 on a 2x2, 16 on a 4x4, 25 on a 5x5)
+   * moved it off the colour it looked most like. The app outlines these for
+   * the user to check.
    */
   unsure: boolean
   /**
@@ -139,22 +140,22 @@ const SURE_RATIO = 0.7
 /**
  * Names the colours of every side scanned so far. Each side is the readings
  * from one photo, row by row from the top left: 9 for a 3x3 (the centre is
- * reading 4), 4 for a 2x2, 16 for a 4x4. `fixed` gives the colours the user
- * picked by hand for some squares (null for the rest); those always stay as
- * picked.
+ * reading 4), 4 for a 2x2, 16 for a 4x4, 25 for a 5x5 (the centre is
+ * reading 12). `fixed` gives the colours the user picked by hand for some
+ * squares (null for the rest); those always stay as picked.
  *
  * Every square is shared out among the colours so that no colour gets more
- * squares than a real cube has (9 on a 3x3, 4 on a 2x2, 16 on a 4x4), while
- * each square stays as close to its colour as possible overall. Squares
- * that look like nothing else keep their nearest colour; when, say, 11
- * squares look red on a 3x3, the 2 least red of them go to the colour
- * that's short, often orange. With all six sides in, every colour ends up
- * with exactly its share.
+ * squares than a real cube has (9 on a 3x3, 4 on a 2x2, 16 on a 4x4, 25 on
+ * a 5x5), while each square stays as close to its colour as possible
+ * overall. Squares that look like nothing else keep their nearest colour;
+ * when, say, 11 squares look red on a 3x3, the 2 least red of them go to
+ * the colour that's short, often orange. With all six sides in, every
+ * colour ends up with exactly its share.
  *
  * What each colour looks like (the references squares are compared with)
  * starts as typical photo colours, `start`, and is then learned from the
- * photos: on a 3x3 from the centres (see classifyByCenters), on a 2x2 or
- * 4x4 from the squares themselves (see classifyWithoutCenters).
+ * photos: on a 3x3 from the centres (see classifyByCenters), on a 2x2,
+ * 4x4 or 5x5 from the squares themselves (see classifyBySquares).
  */
 export function classifySides(
   sides: readonly (readonly Lab[])[],
@@ -170,10 +171,27 @@ export function classifySides(
   const picked = sides.map((side, i) =>
     side.map((_, n) => fixed[i]?.[n] ?? null),
   )
-  const { hasCenters, cellsPerColor } = puzzleOfSide(sides[0])
-  return hasCenters
-    ? classifyByCenters(sides, picked, start, cellsPerColor)
-    : classifyWithoutCenters(sides, picked, start, cellsPerColor)
+  const puzzle = puzzleOfSide(sides[0])
+  return puzzle.name === '3x3'
+    ? classifyByCenters(sides, picked, start, puzzle)
+    : classifyBySquares(sides, picked, start, puzzle)
+}
+
+/**
+ * The colour of each side's centre, on a cube with centres that stay put
+ * (see matchCenters): `picked` by hand, or else the best fit.
+ */
+function centerColorsOf(
+  sides: readonly (readonly Lab[])[],
+  picked: readonly (readonly (Color | null)[])[],
+  start: References,
+  middle: number,
+): Color[] {
+  return matchCenters(
+    sides.map((side) => side[middle]),
+    start,
+    picked.map((side) => side[middle]),
+  )
 }
 
 /**
@@ -187,24 +205,19 @@ function classifyByCenters(
   sides: readonly (readonly Lab[])[],
   picked: readonly (readonly (Color | null)[])[],
   start: References,
-  perColor: number,
+  puzzle: Puzzle,
 ): Classified[][] {
-  const middle = centerOf(puzzleOfSide(sides[0]))
-  const centers = sides.map((side) => side[middle])
-  const centerColors = matchCenters(
-    centers,
-    start,
-    picked.map((side) => side[middle]),
-  )
+  const middle = centerOf(puzzle)
+  const centerColors = centerColorsOf(sides, picked, start, middle)
   const references: Record<Color, Lab> = { ...start }
-  centers.forEach((center, i) => {
+  sides.forEach((side, i) => {
     const color = centerColors[i]
     // Light can make a colour look like its neighbour (warm light makes
     // white look yellow, say), so a centre still counts if its colour is the
     // nearest or the next nearest. But a logo can look like anything, and
     // mustn't become what white looks like.
-    if (byDistance(center, start).indexOf(color) < 2) {
-      references[color] = center
+    if (byDistance(side[middle], start).indexOf(color) < 2) {
+      references[color] = side[middle]
     }
   })
   const given = sides.map((side, i) =>
@@ -216,17 +229,17 @@ function classifyByCenters(
       return { color, unsure }
     }),
   )
-  return shareOut(sides, given, references, perColor)
+  return shareOut(sides, given, references, puzzle.cellsPerColor)
 }
 
 /**
- * From this many squares on, a 2x2's or 4x4's colours are learned from its
- * photos: with fewer, most colours have only a square or two to learn from.
- * That's 3 sides of a 2x2, but the first side of a 4x4: its 16 squares
- * give about 2 or 3 of each colour. Tried on made-up photos of 4x4s in
- * warm, dim and cool light, learning from the first side names the squares
- * of the first few sides as well as waiting for a third, or better, and
- * makes no difference once all six are in.
+ * From this many squares on, a 2x2's, 4x4's or 5x5's colours are learned
+ * from its photos: with fewer, most colours have only a square or two to
+ * learn from. That's 3 sides of a 2x2, but the first side of a 4x4 or 5x5:
+ * its 16 or 25 squares give 2 to 4 of each colour. Tried on made-up photos
+ * of 4x4s in warm, dim and cool light, learning from the first side names
+ * the squares of the first few sides as well as waiting for a third, or
+ * better, and makes no difference once all six are in.
  */
 const LEARN_FROM_SQUARES = 12
 
@@ -234,26 +247,64 @@ const LEARN_FROM_SQUARES = 12
 const LEARNING_ROUNDS = 2
 
 /**
- * A 2x2's or 4x4's sides. With no fixed centres to learn from, the squares
- * are first shared out by typical photo colours. Once enough are in, each
- * colour's reference becomes the middle of the squares it got, and the
- * squares are shared out again by those: a better guide to your own cube in
- * your own light. Two rounds of that settle it.
+ * A 2x2's, 4x4's or 5x5's sides. With no squares that stay put to learn
+ * from (a 5x5 has six, but see below), the squares are first shared out by
+ * typical photo colours. Once enough are in, each colour's reference
+ * becomes the middle of the squares it got, and the squares are shared
+ * out again by those: a better guide to your own cube in your own light.
+ * Two rounds of that settle it.
+ *
+ * A 5x5's centres are named as a 3x3's are (see matchCenters), so each
+ * side gets a different one: by typical photo colours to start with, then
+ * again by what it learns each round. Warm light can make a white centre
+ * in full light and a yellow one in shadow look like each other's typical
+ * colours; its 24 other white squares and 24 yellow ones put that right.
+ *
+ * A 5x5 could learn from its six centres as a 3x3 does, but one square of
+ * each colour, perhaps in shadow, is a poor guide next to 25. Tried on 200
+ * made-up scans each in warm, dim and cool light, learning from every
+ * square named the first side's squares better in dim light (7% wrong,
+ * rather than 17%), and every square of every cube right in warm light
+ * once all six sides were in (rather than 1 in 35 wrong). Both named every
+ * square right in cool light.
  */
-function classifyWithoutCenters(
+function classifyBySquares(
   sides: readonly (readonly Lab[])[],
   picked: readonly (readonly (Color | null)[])[],
   start: References,
-  perColor: number,
+  puzzle: Puzzle,
 ): Classified[][] {
-  const given = picked.map((side) =>
+  const given: (Classified | null)[][] = picked.map((side) =>
     side.map((color) => color && { color, unsure: false }),
   )
-  let named = shareOut(sides, given, start, perColor)
+  const middle = puzzle.hasCenters ? centerOf(puzzle) : -1
+  /** Names a 5x5's centres by these references. */
+  const nameCenters = (references: References) => {
+    if (!puzzle.hasCenters) return
+    const centerColors = centerColorsOf(sides, picked, references, middle)
+    centerColors.forEach((color, i) => {
+      given[i][middle] = { color, unsure: false }
+    })
+  }
+  const { cellsPerColor } = puzzle
+  let references = start
+  nameCenters(references)
+  let named = shareOut(sides, given, references, cellsPerColor)
   if (sides.length * sides[0].length >= LEARN_FROM_SQUARES) {
     for (let round = 0; round < LEARNING_ROUNDS; round++) {
-      named = shareOut(sides, given, learnedFrom(sides, named, start), perColor)
+      references = learnedFrom(sides, named, start)
+      nameCenters(references)
+      named = shareOut(sides, given, references, cellsPerColor)
     }
+  }
+  if (puzzle.hasCenters) {
+    // A centre is a close call if it doesn't look most like its colour.
+    named.forEach((side, i) => {
+      if (picked[i][middle] !== null) return
+      const unsure =
+        nearestColor(sides[i][middle], references) !== side[middle].color
+      side[middle] = { color: side[middle].color, unsure }
+    })
   }
   return named
 }

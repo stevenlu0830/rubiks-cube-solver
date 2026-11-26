@@ -20,7 +20,7 @@ import { loadCube, saveCube } from './editor/storage.ts'
 import { InfoButton } from './info/InfoButton.tsx'
 import { PuzzleContext } from './puzzleContext.ts'
 import { hashFor } from './routes.ts'
-import { canOfferCamera, SCANNABLE_CUBES } from './scan/camera.ts'
+import { canOfferCamera } from './scan/camera.ts'
 import { CameraIcon, Scanner } from './scan/Scanner.tsx'
 import {
   loadSettings,
@@ -56,8 +56,7 @@ type Solve = SolveStage | { stage: 'playing'; playback: Playback }
 
 /**
  * The page for one cube: paint or scan it, check it, and step through the
- * solution. The page for picking a cube links here. A 5x5 can't be scanned
- * yet, so its page has no Scan button (see SCANNABLE_CUBES).
+ * solution. The page for picking a cube links here.
  */
 export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
   const puzzle = PUZZLES[cubeType]
@@ -338,7 +337,7 @@ export function SolverPage({ cube: cubeType = '3x3' }: { cube?: CubeType }) {
               </button>
             </nav>
             <div className="main-actions">
-              {SCANNABLE_CUBES.includes(cubeType) && canOfferCamera() && (
+              {canOfferCamera() && (
                 <button
                   type="button"
                   className="scan-button"

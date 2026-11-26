@@ -97,7 +97,7 @@ test('fills the six fixed centres, and has Undo and Reset', async ({
   await expect(page.getByRole('button', { name: 'Fill centres' })).toBeEnabled()
 })
 
-test('has Solve but no Scan yet, and outlines a mistake until it is put right', async ({
+test('has Scan and Solve, and outlines a mistake until it is put right', async ({
   page,
 }) => {
   // One of the top-front edge's outer pieces painted the wrong way round.
@@ -106,13 +106,13 @@ test('has Solve but no Scan yet, and outlines a mistake until it is put right', 
   mistake[first] = SCRAMBLED_5X5[second]
   mistake[second] = SCRAMBLED_5X5[first]
   await page.addInitScript(savedCube, mistake)
-  // A camera, so the only reason for no Scan button is that it's a 5x5.
+  // A camera, so there's a Scan button.
   await page.addInitScript(fakeCamera)
   await page.goto('./#/5x5')
   await expect(
     page.getByRole('button', { name: count('white', '25/25') }),
   ).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Scan' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Scan' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check' })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Solve' }).click()

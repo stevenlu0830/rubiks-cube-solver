@@ -5,7 +5,12 @@ import { STICKER_COLORS } from '../src/view/colors.ts'
 import type { SwipeDirection } from '../src/view/gestures.ts'
 import { frontCells, turnBySwipe } from '../src/view/orientation.ts'
 import { CubePainter } from './cubePainter.ts'
-import { SCRAMBLED, SCRAMBLED_2X2, SCRAMBLED_4X4 } from './cubes.ts'
+import {
+  SCRAMBLED,
+  SCRAMBLED_2X2,
+  SCRAMBLED_4X4,
+  SCRAMBLED_5X5,
+} from './cubes.ts'
 import {
   cameraIsOff,
   fakeCamera,
@@ -172,6 +177,42 @@ test('scans all six sides of a scrambled 4x4, fixes a side held turned, then sol
   await page.getByRole('button', { name: 'Solve' }).click()
   await expect(page.getByLabel('How to hold your cube')).toContainText(
     'top, front and right look just like the one on screen',
+    { timeout: 30_000 }, // the solver's one-off setup can take a while
+  )
+})
+
+test('scans all six sides of a scrambled 5x5, fixes a side held turned, then solves it', async ({
+  page,
+}) => {
+  await page.addInitScript(fakeCamera)
+  await page.goto('./')
+  await page.getByRole('link', { name: /^5x5/ }).click()
+  await page.getByRole('button', { name: 'Scan' }).click()
+  await expect.poll(() => pictureWidth(page)).toBe(640)
+  await expect(page.locator('.scan-guide > span')).toHaveCount(25)
+  // The first side held a quarter turn round from the 3D one, by mistake.
+  // A 5x5's centres stay put, so it's named by its centre: green.
+  await scanEverySide(page, SCRAMBLED_5X5, { firstSideTurned: 1 })
+  await expect(page.locator('.scan-instruction')).toContainText(
+    /The green side looks turned\. Fix it\?$/,
+  )
+  await page.getByRole('button', { name: 'Fix it' }).click()
+
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  for (const color of COLORS) {
+    await expect(
+      page.getByRole('button', { name: `${color}, 25/25` }),
+    ).toBeVisible()
+  }
+  const saved = await page.evaluate(() =>
+    localStorage.getItem('rubiks-cube-solver/cube-5x5'),
+  )
+  expect(JSON.parse(saved!)).toEqual(SCRAMBLED_5X5)
+
+  await page.getByRole('button', { name: 'Solve' }).click()
+  // Held by its centres, the way round the 3D cube was left.
+  await expect(page.getByLabel('How to hold your cube')).toContainText(
+    /^Hold your cube with \w+ facing you and \w+ on top\./,
     { timeout: 30_000 }, // the solver's one-off setup can take a while
   )
 })

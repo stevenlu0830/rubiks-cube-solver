@@ -31,7 +31,7 @@
   width: 78cqmin;
   height: 78cqmin;
   display: grid;
-  /* --grid: squares along each edge, set on .viewfinder (3, or 2 for a 2x2). */
+  /* --grid: squares along each edge, set on .viewfinder (2 to 5). */
   grid-template: repeat(var(--grid), 1fr) / repeat(var(--grid), 1fr);
   border: 2px solid #fff;
   border-radius: 12px;
@@ -129,8 +129,11 @@
   border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
-  /* The colour's letter, when Letters on stickers is on. */
-  font-size: 5.5cqmin;
+  /*
+   * The colour's letter, when Letters on stickers is on: smaller on a 5x5,
+   * to leave as much room round it in its smaller dot as on a 4x4.
+   */
+  font-size: min(5.5cqmin, 22cqmin / var(--grid));
   font-style: normal;
   font-weight: 700;
   line-height: 1;
@@ -139,7 +142,7 @@
 /* Live dots are smaller: a guide to what a photo would read, not the photo. */
 .scan-dots-live .scan-dot {
   width: 30%;
-  font-size: 4cqmin;
+  font-size: min(4cqmin, 16cqmin / var(--grid));
 }
 
 /* Each square of a photo is a button covering the whole square, easy to hit. */

@@ -47,11 +47,12 @@ export type Fixes = Readonly<Partial<Record<number, Color>>>
 
 /**
  * Names every scanned square at once, by cell: all the sides, and the "9
- * of each colour" rule (4 on a 2x2, 16 on a 4x4), help with each (see
- * classifySides). So a new photo can change squares on earlier sides too,
- * but never the ones in `fixes`. Once a 2x2's or 4x4's six sides are in,
- * its close calls are settled by the check before solving (see
- * closeCalls.ts).
+ * of each colour" rule (4 on a 2x2, 16 on a 4x4, 25 on a 5x5), help with
+ * each (see classifySides). So a new photo can change squares on earlier
+ * sides too, but never the ones in `fixes`. Once a 2x2's, 4x4's or 5x5's
+ * six sides are in, its close calls are settled by the check before
+ * solving (see closeCalls.ts). (A 3x3's aren't: its colours are learned
+ * from its centres, and that step came later, for cubes without them.)
  */
 export function readScannedCube(
   sides: ScannedSides,
@@ -73,7 +74,7 @@ export function readScannedCube(
     sides[face]!.cells.forEach((cell, n) => cube.set(cell, named[i][n])),
   )
   // A side photographed turned is fixed differently (see turnedSides.ts).
-  if (puzzle.hasCenters || findTurnedSides(sides, cube)) return cube
+  if (puzzle.name === '3x3' || findTurnedSides(sides, cube)) return cube
   return settleCloseCalls(cube, puzzle.cellCount)
 }
 

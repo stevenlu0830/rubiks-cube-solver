@@ -7,6 +7,7 @@ import {
   PUZZLE_2X2,
   PUZZLE_3X3,
   PUZZLE_4X4,
+  PUZZLE_5X5,
   type Puzzle,
 } from '../../src/cube/puzzle.ts'
 import {
@@ -19,6 +20,7 @@ import {
 } from '../../src/cube/state.ts'
 import { PuzzleContext } from '../../src/puzzleContext.ts'
 import { fakeCamera, removeFakeCamera } from '../helpers/fakeCamera.ts'
+import { SCRAMBLED_5X5 } from '../helpers/fiveByFive.ts'
 import { SCRAMBLED_4X4 } from '../helpers/fourByFour.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
 import type { SwipeDirection } from '../../src/view/gestures.ts'
@@ -1013,6 +1015,100 @@ describe('Scanner', () => {
         camera.show(sideColors(), { plastic: false })
         for (let i = 0; i < 5; i++) lookThrough()
         expect(screen.getByText('0 of 6 sides')).toBeInTheDocument()
+      })
+    })
+
+    describe('a 5x5', () => {
+      const fiveByFiveCells = () => frontCells(app.orientation, PUZZLE_5X5)
+      /** The colours of whichever side of the scrambled 5x5 faces the camera. */
+      const sideColors = () =>
+        fiveByFiveCells().map((cell) => SCRAMBLED_5X5[cell]!)
+
+      it('shows a 5×5 guide, and live dots for its 25 squares', async () => {
+        render(<Harness puzzle={PUZZLE_5X5} />)
+        await cameraAnswers()
+        expect(guide()!.children).toHaveLength(25)
+        const side = sideColors()
+        camera.show(side)
+        lookThrough()
+        expect(dots('.scan-dots-live')).toEqual(asCss(side))
+      })
+
+      it('scans all six sides of a scrambled 5x5 in five quarter turns, then is done', async () => {
+        render(<Harness puzzle={PUZZLE_5X5} />)
+        await cameraAnswers()
+        for (let side = 1; side <= 6; side++) {
+          camera.show(sideColors())
+          click('Take photo')
+          expect(dots()).toHaveLength(25)
+          expect(screen.getByText(`${side} of 6 sides`)).toBeInTheDocument()
+          if (side < 6) click('Next side ›')
+        }
+        expect(app.turns).toHaveLength(5)
+        expect(app.cube).toEqual(SCRAMBLED_5X5)
+        expect(instruction()).toMatch(/^All six sides are in/)
+      })
+
+      it('names its squares by row and column', async () => {
+        render(<Harness puzzle={PUZZLE_5X5} />)
+        await cameraAnswers()
+        const side = sideColors()
+        camera.show(side)
+        click('Take photo')
+        const squares = within(
+          screen.getByRole('group', {
+            name: 'Colours read: tap a square to change it',
+          }),
+        ).getAllByRole('button')
+        expect(squares).toHaveLength(25)
+        expect(squares[12]).toHaveAccessibleName(`row 3, column 3: ${side[12]}`)
+        expect(squares[24]).toHaveAccessibleName(`row 5, column 5: ${side[24]}`)
+      })
+
+      it('says when a photo looks like a side already scanned, naming it by its centre', async () => {
+        render(<Harness puzzle={PUZZLE_5X5} />)
+        await cameraAnswers()
+        const first = sideColors()
+        camera.show(first)
+        click('Take photo')
+        click('Next side ›')
+        click('Take photo') // the real cube wasn't turned
+        expect(instruction()).toBe(
+          `You've already scanned the ${first[12]} side. Turn your cube to match the one below, then retake.`,
+        )
+      })
+
+      it('says which side looks turned by its centre, and turns it back', async () => {
+        render(<Harness puzzle={PUZZLE_5X5} />)
+        await cameraAnswers()
+        let turnedSide: Color | null = null
+        for (let side = 1; side <= 6; side++) {
+          let shows = fiveByFiveCells()
+          if (side === 4) {
+            // The real cube held a quarter turn round from the 3D one.
+            shows = turnCells(shows, 3)
+            turnedSide = SCRAMBLED_5X5[shows[12]]
+          }
+          camera.show(shows.map((cell) => SCRAMBLED_5X5[cell]!))
+          click('Take photo')
+          if (side < 6) click('Next side ›')
+        }
+        expect(app.cube).not.toEqual(SCRAMBLED_5X5)
+        expect(instruction()).toBe(
+          `The ${turnedSide} side looks turned. Fix it?`,
+        )
+        click('Fix it')
+        expect(app.cube).toEqual(SCRAMBLED_5X5)
+      })
+
+      it('takes a photo by itself, with Auto photo on', async () => {
+        render(<Harness puzzle={PUZZLE_5X5} autoPhoto />)
+        await cameraAnswers()
+        const side = sideColors()
+        camera.show(side)
+        for (let i = 0; i < 3; i++) lookThrough()
+        expect(screen.getByText('1 of 6 sides')).toBeInTheDocument()
+        expect(dots()).toEqual(asCss(side))
       })
     })
 

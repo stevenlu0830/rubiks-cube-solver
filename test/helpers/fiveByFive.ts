@@ -3,7 +3,12 @@ import {
   edgeCellsOf,
   wingCellsOf,
 } from '../../src/cube/cubies.ts'
-import { movesOf, type Move } from '../../src/cube/moves.ts'
+import {
+  applyMoves,
+  movesOf,
+  parseMoves,
+  type Move,
+} from '../../src/cube/moves.ts'
 import { PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
@@ -14,6 +19,12 @@ import {
 } from '../../src/cube/state.ts'
 
 export const SOLVED_5X5 = solvedState(STANDARD_SCHEME, PUZZLE_5X5)
+
+/** A 5x5 scrambled by turns of every kind: face, wide and inner-layer, as in the browser tests. */
+export const SCRAMBLED_5X5 = applyMoves(
+  SOLVED_5X5,
+  parseMoves("R U2 F' Rw u2 L D Fw' r B2 Dw b2 R' U f L2 d' Bw l2 F"),
+)
 
 /** Every turn a 5x5 can make but the whole-cube ones: face, wide and inner-layer turns. */
 export const FIVE_BY_FIVE_TURNS = movesOf(PUZZLE_5X5).filter(

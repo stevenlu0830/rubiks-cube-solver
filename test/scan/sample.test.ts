@@ -79,6 +79,44 @@ describe('readSquares', () => {
     for (const { edge } of squares) expect(edge).toBeGreaterThan(0.75)
   })
 
+  it("reads a 5x5's side as 25 squares of 24 pixels, and sees the plastic round each, even held a little crooked", () => {
+    const colors = Array.from({ length: 25 }, (_, n) => NINE[(n * 4) % 9])
+    // Drawn five times as big, then shrunk as a camera's picture would be:
+    // each pixel the average of 25. The side is turned 3° and sits 3% of
+    // the guide off-centre each way, with plastic round each sticker.
+    const [big, angle, shift, gap] = [
+      GRAB_SIZE * 5,
+      (3 * Math.PI) / 180,
+      0.03,
+      0.07,
+    ]
+    const sums = new Float64Array(GRAB_SIZE * GRAB_SIZE * 3)
+    for (let y = 0; y < big; y++) {
+      for (let x = 0; x < big; x++) {
+        const [dx, dy] = [x / big - 0.5 - shift, y / big - 0.5 - shift]
+        const u = (dx * Math.cos(angle) + dy * Math.sin(angle) + 0.5) * 5
+        const v = (dy * Math.cos(angle) - dx * Math.sin(angle) + 0.5) * 5
+        const [column, row] = [Math.floor(u), Math.floor(v)]
+        const [across, down] = [u - column, v - row]
+        const onPlastic =
+          Math.min(across, down, 1 - across, 1 - down) < gap ||
+          Math.min(column, row) < 0 ||
+          Math.max(column, row) > 4
+        const rgb = onPlastic ? [20, 20, 20] : colors[row * 5 + column]
+        const i = (Math.floor(y / 5) * GRAB_SIZE + Math.floor(x / 5)) * 3
+        rgb.forEach((value, c) => (sums[i + c] += value / 25))
+      }
+    }
+    const pixels = picture(GRAB_SIZE, GRAB_SIZE, (x, y) => {
+      const i = (y * GRAB_SIZE + x) * 3
+      const round = (c: number) => Math.round(sums[i + c])
+      return [round(0), round(1), round(2)]
+    })
+    const squares = inspectSquares(pixels, 5)
+    expect(squares.map(({ color }) => color)).toEqual(colors)
+    for (const { edge } of squares) expect(edge).toBeGreaterThan(0.6)
+  })
+
   it('works when the size is not a multiple of 3', () => {
     const pixels = picture(100, 100, (x, y) => NINE[whereIn(100, x, y).square])
     expect(readSquares(pixels)).toEqual(NINE)

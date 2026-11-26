@@ -142,9 +142,9 @@ interface Look {
 
 /**
  * The scan screen, above the 3D cube: what the camera sees, with a grid
- * (3×3, or 2×2 for a 2x2, 4×4 for a 4x4) to line one side up in, and the
- * buttons to photograph each side in turn. The camera is on only while this
- * is shown and the app is on screen.
+ * (3×3, or 2×2 for a 2x2, 4×4 for a 4x4, 5×5 for a 5x5) to line one side
+ * up in, and the buttons to photograph each side in turn. The camera is on
+ * only while this is shown and the app is on screen.
  */
 export function Scanner({
   cube,
@@ -204,9 +204,9 @@ export function Scanner({
   const turnedNames = FACES.filter((face) => turned?.[face]).map(sideName)
 
   /**
-   * A side, to name it to the user: a 3x3's by its centre's colour ("the
-   * green side"); a 2x2's or 4x4's, with no centre to say, by where it is on
-   * screen now ("the left side").
+   * A side, to name it to the user: a 3x3's or 5x5's by its centre's
+   * colour ("the green side"); a 2x2's or 4x4's, with no fixed centre to
+   * say, by where it is on screen now ("the left side").
    */
   function sideName(face: Face): string {
     return puzzle.hasCenters
@@ -613,7 +613,7 @@ interface CameraHandle {
 
 interface CameraViewProps {
   ref: Ref<CameraHandle>
-  /** Squares along each edge of the guide: 3 for a 3x3, 2 for a 2x2, 4 for a 4x4. */
+  /** Squares along each edge of the guide: 3 for a 3x3, 2 for a 2x2, 4 for a 4x4, 5 for a 5x5. */
   size: number
   /** Hold the picture still, for a photo. */
   frozen: boolean

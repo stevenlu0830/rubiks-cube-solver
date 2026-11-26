@@ -1,5 +1,3 @@
-import type { CubeType } from '../cube/puzzle.ts'
-
 /**
  * The phone's camera, for scanning the cube. The first time, the browser
  * asks the user whether the page may use it. Browsers only share the camera
@@ -45,12 +43,6 @@ export function cameraErrorMessage(error: unknown): string {
       return "The camera couldn't start. Please try again."
   }
 }
-
-/**
- * The cubes the camera can read, whose pages offer to scan. A 5x5 can't be
- * scanned yet: it's painted by hand.
- */
-export const SCANNABLE_CUBES: readonly CubeType[] = ['2x2', '3x3', '4x4']
 
 /**
  * True if the app should offer to scan. On a page that isn't secure the

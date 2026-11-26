@@ -1,12 +1,13 @@
 /**
- * Settling a 2x2's or 4x4's close calls with the check before solving.
+ * Settling a 2x2's, 4x4's or 5x5's close calls with the check before
+ * solving.
  *
- * Neither has a fixed centre to learn each colour from, so their photos
- * are named from typical photo colours and their own squares (see
- * classify.ts), and red and orange in particular can be hard to tell apart.
- * Once all six sides are in, the cube has to pass the same check as before
- * solving (validateCube). If it doesn't, a mix-up of two close colours is
- * the likeliest reason, and the squares it was unsure of say where to look.
+ * Their photos are named from typical photo colours and their own squares
+ * (see classify.ts), and red and orange in particular can be hard to tell
+ * apart. Once all six sides are in, the cube has to pass the same check as
+ * before solving (validateCube). If it doesn't, a mix-up of two close
+ * colours is the likeliest reason, and the squares it was unsure of say
+ * where to look.
  *
  * So, like the search for a side held turned, every combination of trying
  * the closest calls' second-choice colours is put through the check: on a
@@ -27,7 +28,9 @@
  * at once: a fix must switch a square of every bad piece, and leave the
  * same number of each colour). On a 2x2, too, squares on bad pieces go
  * first. With more squares on bad pieces than can be tried, too much is
- * wrong to settle by guessing.
+ * wrong to settle by guessing. A twisted corner, a flipped edge or two
+ * pieces swapped can only be fixed by switching a corner's or middle edge
+ * piece's square, so without one to try, there's no need to try at all.
  *
  * The 24 centre squares of a 4x4 belong to no piece, so nothing shows
  * when one is wrong but "16 of each": a centre is only switched when that
@@ -41,19 +44,42 @@
  * or 20 squares put right hardly any more, but made more wrong, and took
  * longer.
  *
+ * A 5x5 is settled the same way, trying squares on its corners, middle
+ * edge pieces and outer edge pieces first. Its 48 squares round the
+ * centres belong to no piece, like a 4x4's centres, but they're in two
+ * rings (see centreRingsOf), each needing 4 of each colour, so a switch
+ * there must also put its ring's count right. Its fixed centres are named
+ * along with the colours (see classifySides), so they're never switched.
+ *
+ * With 150 squares, a 5x5 more often has another way to pass the check
+ * that fits the photos nearly as well as the right one. So its best way
+ * must fit clearly better than any other (see clearBy). Tried on 4,500
+ * made-up scans of 5x5s in warm, dim and noisy light, of which 485 had
+ * a square named wrong: trying 14 squares, this put right 304 of those,
+ * and made a right square wrong on 8. Taking the best way however close
+ * the next: 358 and 33. Trying 12 or 16 squares, or the squares in a ring
+ * with too many of a colour first: no better, or slower.
+ *
  * A side photographed turned also fails the check, with every colour
  * right, so that's looked for first (see readScannedCube).
  */
 
-import { cornerCellsOf, toCubies, WING_CELLS, wingsOf } from '../cube/cubies.ts'
-import { puzzleOf, type Puzzle } from '../cube/puzzle.ts'
+import {
+  centreRingsOf,
+  cornerCellsOf,
+  edgeCellsOf,
+  toCubies,
+  wingCellsOf,
+  wingsOf,
+} from '../cube/cubies.ts'
+import { perPuzzle, puzzleOf, type Puzzle } from '../cube/puzzle.ts'
 import { COLORS, type Cell, type Color, type CubeState } from '../cube/state.ts'
-import { validateCube } from '../cube/validate.ts'
+import { validateCube, type Problem } from '../cube/validate.ts'
 import type { Classified } from './classify.ts'
 
-/** The most squares tried: 2 colours each, so 2¹² = 4,096 ways (2¹⁴ = 16,384 on a 4x4). */
+/** The most squares tried: 2 colours each, so 2¹² = 4,096 ways (2¹⁴ = 16,384 on a 4x4 or 5x5). */
 export function mostTried(puzzle: Puzzle): number {
-  return puzzle.name === '4x4' ? 14 : 12
+  return puzzle.size >= 4 ? 14 : 12
 }
 
 /**
@@ -67,6 +93,16 @@ const MOST_COST = 60
 
 /** Fits closer together than this count as equally good. */
 const TIE = 1e-9
+
+/**
+ * How much better the best way must fit the photos than the next best way
+ * that passes the check (see MOST_COST for what that's counted in), or
+ * there's no telling which is right: 6 on a 5x5, and on a smaller cube,
+ * any amount at all (see the top of this file).
+ */
+function clearBy(puzzle: Puzzle): number {
+  return puzzle.name === '5x5' ? 6 : TIE
+}
 
 /**
  * The cube's colours by cell, with close calls switched to their second
@@ -83,11 +119,18 @@ export function settleCloseCalls(
     (_, cell) => named.get(cell)?.color ?? null,
   )
   const check = validateCube(cube)
-  if (check.valid || check.problem === 'unpainted') return named
+  // Two of a 5x5's centres picked the same colour by hand: no switch can help.
+  if (
+    check.valid ||
+    check.problem === 'unpainted' ||
+    check.problem === 'centers'
+  ) {
+    return named
+  }
 
   const puzzle = puzzleOf(cube)
-  const badPieces = badPiecesOf(cube)
-  const suspect = new Set(badPieces.flat())
+  const badPieces = badPiecesOf(cube).map((cells) => new Set(cells))
+  const suspect = new Set(badPieces.flatMap((cells) => [...cells]))
   // More than can be tried: too much is wrong to settle by guessing.
   if (suspect.size > mostTried(puzzle)) return named
   const colorIndex = (color: Color) => COLORS.indexOf(color)
@@ -110,19 +153,31 @@ export function settleCloseCalls(
     .slice(0, mostTried(puzzle))
   const from = choices.map((choice) => colorIndex(choice.from))
   const to = choices.map((choice) => colorIndex(choice.to))
-  const counts = COLORS.map((color) => cube.filter((c) => c === color).length)
-  // For each bad piece, the choices on it, as bits: a fix must switch one.
-  const onBadPiece = badPieces.map((cells) =>
-    choices.reduce(
-      (bits, { cell }, k) => (cells.includes(cell) ? bits | (1 << k) : bits),
-      0,
-    ),
+  const tallies = talliesOf(puzzle)
+  // How many of each colour each tally has now, tally by tally.
+  const counts = tallies.flatMap(({ cells }) =>
+    COLORS.map((color) => cells.filter((cell) => cube[cell] === color).length),
+  )
+  // The tallies each choice's square is in.
+  const inTallies = choices.map(({ cell }) =>
+    tallies.flatMap(({ has }, t) => (has.has(cell) ? [t] : [])),
+  )
+  // Squares of which a fix must switch at least one, each group as bits
+  // of the choices on it: each bad piece's, and any needed for the
+  // problem the check found (see mustTouch).
+  const onBadPiece = [...badPieces, mustTouch(check.problem, puzzle)].map(
+    (cells) =>
+      choices.reduce(
+        (bits, { cell }, k) => (cells.has(cell) ? bits | (1 << k) : bits),
+        0,
+      ),
   )
   if (onBadPiece.includes(0)) return named // one can't be fixed
 
   let best: { switched: number; cost: number } | null = null
-  let tied = false
-  const change = Array<number>(COLORS.length)
+  /** How well the next best way that passes fits. */
+  let nextBest = Infinity
+  const change = Array<number>(counts.length)
   for (let switched = 1; switched < 2 ** choices.length; switched++) {
     if (onBadPiece.some((bits) => (switched & bits) === 0)) continue
     let cost = 0
@@ -130,25 +185,34 @@ export function settleCloseCalls(
     for (let k = 0; k < choices.length; k++) {
       if (!((switched >> k) & 1)) continue
       cost += choices[k].cost
-      change[from[k]]--
-      change[to[k]]++
+      for (const t of inTallies[k]) {
+        change[t * COLORS.length + from[k]]--
+        change[t * COLORS.length + to[k]]++
+      }
     }
     if (cost > MOST_COST) continue
-    // Quick to rule out first: a real cube has the same number of each colour.
-    if (change.some((n, i) => counts[i] + n !== puzzle.cellsPerColor)) continue
+    // Quick to rule out first: a real cube has the right number of each
+    // colour (see talliesOf).
+    if (
+      change.some(
+        (n, i) => counts[i] + n !== tallies[Math.floor(i / COLORS.length)].each,
+      )
+    ) {
+      continue
+    }
     const tried = [...cube]
     choices.forEach(({ cell, to }, k) => {
       if ((switched >> k) & 1) tried[cell] = to
     })
     if (!validateCube(tried).valid) continue
-    if (!best || cost < best.cost - TIE) {
+    if (!best || cost < best.cost) {
+      nextBest = best?.cost ?? Infinity
       best = { switched, cost }
-      tied = false
-    } else if (cost <= best.cost + TIE) {
-      tied = true
+    } else {
+      nextBest = Math.min(nextBest, cost)
     }
   }
-  if (!best || tied) return named
+  if (!best || nextBest <= best.cost + clearBy(puzzle)) return named
 
   const { switched } = best
   const settled = new Map(named)
@@ -165,11 +229,63 @@ export function settleCloseCalls(
 }
 
 /**
+ * The squares that must hold the right number of each colour, as the
+ * check before solving counts them: the whole cube (9 of each on a 3x3,
+ * 25 on a 5x5, and so on), and on a 5x5 each ring of squares round its
+ * centres, 4 of each (see centreRingsOf). Counting them first rules out
+ * most ways of switching at once, without the whole check.
+ */
+const talliesOf = perPuzzle((puzzle) => {
+  const tally = (cells: readonly number[], each: number) => ({
+    cells,
+    has: new Set(cells),
+    each,
+  })
+  const rings = centreRingsOf(puzzle)
+  return [
+    tally(
+      Array.from({ length: puzzle.cellCount }, (_, cell) => cell),
+      puzzle.cellsPerColor,
+    ),
+    // A 4x4's one ring always has 4 of each once its pieces are right.
+    ...(rings.length > 1 ? rings.map(({ cells }) => tally(cells, 4)) : []),
+  ]
+})
+
+/**
+ * The squares a fix must switch at least one of, for a twist, a flip or a
+ * swap. Those are found once every piece is real and there's one of each,
+ * so they're about how the corners and middle edge pieces sit: switching
+ * squares anywhere else can't help. For any other problem, every square.
+ */
+function mustTouch(problem: Problem, puzzle: Puzzle): ReadonlySet<number> {
+  const { corners, middleEdges, all } = pieceCellsOf(puzzle)
+  switch (problem) {
+    case 'twist':
+      return corners
+    case 'flip':
+      return middleEdges
+    case 'swap':
+      return new Set([...corners, ...middleEdges])
+    default:
+      return all
+  }
+}
+
+/** The squares of a cube's corners, of its middle edge pieces, and all its squares. */
+const pieceCellsOf = perPuzzle((puzzle) => ({
+  corners: new Set(cornerCellsOf(puzzle).flat()),
+  middleEdges: new Set(edgeCellsOf(puzzle).flat()),
+  all: new Set(Array.from({ length: puzzle.cellCount }, (_, cell) => cell)),
+}))
+
+/**
  * The corner and edge pieces that can't be right, as their squares: each
  * one that can't exist, and each piece that appears more than once (the
  * squares of every copy). A square named wrong on a piece makes it one or
  * the other, so these are the squares to try first; and a fix must switch
- * at least one square of each.
+ * at least one square of each. On a 5x5 that's its middle edge pieces and
+ * outer ones too.
  */
 function badPiecesOf(cube: CubeState): number[][] {
   const puzzle = puzzleOf(cube)
@@ -190,8 +306,10 @@ function badPiecesOf(cube: CubeState): number[][] {
       .filter((cells) => cells.length > cellsOf[0].length)
     return [...impossible, ...repeated]
   }
+  const { cp, ep } = toCubies(cube)!
   return [
-    ...badIn(toCubies(cube)!.cp, cornerCellsOf(puzzle)),
-    ...(puzzle.name === '4x4' ? badIn(wingsOf(cube), WING_CELLS) : []),
+    ...badIn(cp, cornerCellsOf(puzzle)),
+    ...badIn(ep, edgeCellsOf(puzzle)),
+    ...badIn(wingsOf(cube), wingCellsOf(puzzle)),
   ]
 }

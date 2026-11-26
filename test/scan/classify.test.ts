@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyMoves, randomScramble } from '../../src/cube/moves.ts'
-import { PUZZLE_2X2, PUZZLE_4X4 } from '../../src/cube/puzzle.ts'
+import { PUZZLE_2X2, PUZZLE_4X4, PUZZLE_5X5 } from '../../src/cube/puzzle.ts'
 import {
   cellIndex,
   COLORS,
@@ -11,6 +11,10 @@ import {
   type CubeState,
 } from '../../src/cube/state.ts'
 import { STICKER_COLORS } from '../../src/view/colors.ts'
+import {
+  randomTurns as randomFiveByFive,
+  SOLVED_5X5,
+} from '../helpers/fiveByFive.ts'
 import { randomTurns } from '../helpers/fourByFour.ts'
 import { seededRandom } from '../helpers/seededRandom.ts'
 import {
@@ -430,5 +434,141 @@ describe('classifySides on a 4x4', () => {
     expect(wrongAlone / (runs * 96)).toBeGreaterThan(0.25)
     expect(wrongNamed / (runs * 96)).toBeLessThan(0.03)
     expect(cubesRight).toBeGreaterThanOrEqual(0.75 * runs)
+  })
+})
+
+describe('classifySides on a 5x5', () => {
+  const random = seededRandom(55)
+  const scrambled = () => applyMoves(SOLVED_5X5, randomFiveByFive(60, random))
+
+  /** Dim light: everything much darker, blue a little less so. */
+  const dim = ([r, g, b]: Rgb): Rgb => [
+    Math.round(r * 0.45),
+    Math.round(g * 0.45),
+    Math.round(b * 0.5),
+  ]
+  /** Daylight from a window, or a cool white bulb: less red, more blue. */
+  const cool = ([r, g, b]: Rgb): Rgb => [
+    Math.round(r * 0.8),
+    Math.round(g * 0.95),
+    Math.min(255, Math.round(b * 1.2)),
+  ]
+
+  /**
+   * A 5x5's six sides photographed, 25 squares each, each square anywhere
+   * from in shadow to brightly lit, centres too.
+   */
+  function photographFiveByFive(
+    cube: CubeState,
+    light: (rgb: Rgb) => Rgb = (rgb) => rgb,
+  ) {
+    const colors = FACES.map((face) =>
+      Array.from(
+        { length: 25 },
+        (_, n) => cube[cellIndex(face, n, PUZZLE_5X5)]!,
+      ),
+    )
+    const readings = colors.map((side) =>
+      side.map((color) =>
+        lab(shade(light(BRAND[color]), 0.7 + 0.45 * random())),
+      ),
+    )
+    return { colors, readings }
+  }
+
+  /** How many squares are named wrong. */
+  const wrongIn = (named: Color[][], colors: Color[][]) =>
+    named.flat().filter((color, i) => color !== colors.flat()[i]).length
+
+  it.each([
+    ['ordinary', (rgb: Rgb) => rgb],
+    ['cool', cool],
+  ])(
+    'names every square in %s light, each centre a different colour',
+    (_, light) => {
+      for (let run = 0; run < 10; run++) {
+        const { colors, readings } = photographFiveByFive(scrambled(), light)
+        const named = classifySides(readings)
+        expect(named).toEqual(colors)
+        expect(new Set(named.map((side) => side[12])).size).toBe(6)
+      }
+    },
+  )
+
+  it('gives no colour more than 25 squares, and no two sides the same centre', () => {
+    const red = lab(BRAND.red)
+    const named = classifySides([Array(25).fill(red), Array(25).fill(red)])
+    expect(named.flat().filter((color) => color === 'red')).toHaveLength(25)
+    expect(named[0][12]).not.toBe(named[1][12])
+  })
+
+  it('keeps a centre picked by hand, and gives its colour to no other centre', () => {
+    const { colors, readings } = photographFiveByFive(SOLVED_5X5)
+    const fixed = colors.map(() => Array<Color | null>(25).fill(null))
+    fixed[0][12] = 'green' // the white side's centre
+    const named = classifySides(readings, { fixed })
+    expect(named[0][12]).toBe('green')
+    expect(named.filter((side) => side[12] === 'green')).toHaveLength(1)
+  })
+
+  it("outlines a centre that doesn't look like its colour, such as a logo", () => {
+    const { readings } = photographFiveByFive(SOLVED_5X5)
+    readings[0][12] = lab([90, 110, 140]) // a grey-blue logo on the white centre
+    const centre = classifyWithDoubts(readings)[0][12]
+    expect(centre).toEqual({ color: 'white', unsure: true })
+  })
+
+  it('names the centres by the colours it learns, which warm light can fool', () => {
+    // A white centre in full warm light and a yellow one in shadow look
+    // more like each other's typical photo colours. The other 24 white
+    // squares, and 24 yellow, show what each really looks like here.
+    const { colors, readings } = photographFiveByFive(scrambled(), warm)
+    readings[0][12] = lab(shade(warm(BRAND.white), 1))
+    readings[3][12] = lab(shade(warm(BRAND.yellow), 0.7))
+    const centres = matchCenters(readings.map((side) => side[12]))
+    expect([centres[0], centres[3]]).toEqual(['yellow', 'white'])
+    const named = classifySides(readings)
+    expect([named[0][12], named[3][12]]).toEqual(['white', 'yellow'])
+    expect(named).toEqual(colors)
+  })
+
+  it('learns what the colours look like from its very first side', () => {
+    // In dim light, typical photo colours alone get far more of the first
+    // side wrong: its 25 squares give 3 or 4 of each colour to learn from.
+    let wrongAlone = 0
+    let wrongLearned = 0
+    for (let run = 0; run < 20; run++) {
+      const { colors, readings } = photographFiveByFive(scrambled(), dim)
+      wrongAlone += readings[0].filter(
+        (square, n) => nearestColor(square) !== colors[0][n],
+      ).length
+      wrongLearned += wrongIn(classifySides([readings[0]]), [colors[0]])
+      // With all six in, every square is right.
+      expect(classifySides(readings)).toEqual(colors)
+    }
+    expect(wrongLearned).toBeLessThan(0.75 * wrongAlone)
+  })
+
+  it('names nearly every square right in warm light, once all six sides are in', () => {
+    // Warm light makes about a third of the squares look like another
+    // colour on their own, and one centre of each colour, perhaps in
+    // shadow, is a poor guide. Learning from all 150 squares puts nearly
+    // every one right.
+    let wrongAlone = 0
+    let wrongNamed = 0
+    let cubesRight = 0
+    const runs = 20
+    for (let run = 0; run < runs; run++) {
+      const { colors, readings } = photographFiveByFive(scrambled(), warm)
+      wrongAlone += readings
+        .flat()
+        .filter((square, i) => nearestColor(square) !== colors.flat()[i]).length
+      const wrong = wrongIn(classifySides(readings), colors)
+      wrongNamed += wrong
+      if (wrong === 0) cubesRight++
+    }
+    expect(wrongAlone / (runs * 150)).toBeGreaterThan(0.25)
+    expect(wrongNamed / (runs * 150)).toBeLessThan(0.01)
+    expect(cubesRight).toBeGreaterThanOrEqual(0.8 * runs)
   })
 })
